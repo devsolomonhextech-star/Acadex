@@ -1,0 +1,132 @@
+"""School-scoped staff invitations with one-time, hashed invitation tokens."""
+import hashlib
+import secrets
+from datetime import UTC, datetime, timedelta
+from typing import Annotated
+from uuid import UUID, uuid4
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, EmailStr, Field, field_validator
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.auth import TenantContext, require_roles
+from app.db import get_session
+from app.models import AuditEvent, MembershipRole, School, SchoolInvitation, SchoolMembership, User
+from app.rate_limit import limit_signup
+from app.security import hash_password
+
+router = APIRouter(prefix="/api/v1/staff", tags=["staff"])
+
+
+class TeacherInvitationCreate(BaseModel):
+    email: EmailStr
+    display_name: str = Field(min_length=2, max_length=160)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: EmailStr) -> str:
+        return str(value).strip().casefold()
+
+
+class TeacherInvitationResponse(BaseModel):
+    id: UUID
+    email: str
+    role: str
+    expires_at: datetime
+    invite_token: str
+
+
+class InvitationAccept(BaseModel):
+    token: str = Field(min_length=32, max_length=128)
+    password: str | None = Field(default=None, min_length=12, max_length=128)
+
+
+class InvitationAccepted(BaseModel):
+    email: str
+    school_name: str
+    school_slug: str
+    message: str
+
+
+@router.post("/invitations/teachers", response_model=TeacherInvitationResponse, status_code=status.HTTP_201_CREATED)
+async def invite_teacher(
+    payload: TeacherInvitationCreate,
+    context: Annotated[TenantContext, Depends(require_roles(MembershipRole.SCHOOL_ADMIN))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    existing_user = await session.scalar(select(User.id).where(User.email == str(payload.email)))
+    if existing_user:
+        member = await session.scalar(select(SchoolMembership.id).where(
+            SchoolMembership.school_id == context.school_id,
+            SchoolMembership.user_id == existing_user,
+        ))
+        if member:
+            raise HTTPException(status_code=409, detail="This person already has an account at your school")
+    pending = await session.scalar(select(SchoolInvitation.id).where(
+        SchoolInvitation.school_id == context.school_id,
+        SchoolInvitation.email == str(payload.email),
+        SchoolInvitation.status == "pending",
+        SchoolInvitation.expires_at > datetime.now(UTC),
+    ))
+    if pending:
+        raise HTTPException(status_code=409, detail="An unexpired invitation already exists for this email")
+    raw_token = secrets.token_urlsafe(36)
+    expires = datetime.now(UTC) + timedelta(days=7)
+    invitation = SchoolInvitation(
+        id=uuid4(), school_id=context.school_id, email=str(payload.email), display_name=payload.display_name.strip(),
+        role=MembershipRole.TEACHER, token_hash=hashlib.sha256(raw_token.encode()).hexdigest(),
+        expires_at=expires, created_by_user_id=context.user_id,
+    )
+    session.add(invitation)
+    session.add(AuditEvent(school_id=context.school_id, actor_user_id=context.user_id,
+                           action="staff.teacher_invited", resource_type="school_invitation", resource_id=invitation.id))
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="Could not create this invitation") from None
+    return TeacherInvitationResponse(id=invitation.id, email=invitation.email, role="teacher", expires_at=expires, invite_token=raw_token)
+
+
+@router.post("/invitations/accept", response_model=InvitationAccepted, dependencies=[Depends(limit_signup)])
+async def accept_invitation(payload: InvitationAccept, session: Annotated[AsyncSession, Depends(get_session)]):
+    token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
+    invitation = await session.scalar(select(SchoolInvitation).where(
+        SchoolInvitation.token_hash == token_hash,
+    ).with_for_update())
+    now = datetime.now(UTC)
+    if invitation is None or invitation.status != "pending" or invitation.expires_at <= now:
+        raise HTTPException(status_code=400, detail="This invitation is invalid, expired, or already used")
+    school = await session.scalar(select(School).where(School.id == invitation.school_id, School.status == "active"))
+    if school is None:
+        raise HTTPException(status_code=400, detail="This invitation is no longer available")
+    user = await session.scalar(select(User).where(User.email == invitation.email).with_for_update())
+    if user is None:
+        if payload.password is None:
+            raise HTTPException(status_code=422, detail="Choose a password to finish creating your account")
+        user = User(email=invitation.email, display_name=invitation.display_name, password_hash=hash_password(payload.password))
+        session.add(user)
+        await session.flush()
+    member = await session.scalar(select(SchoolMembership.id).where(
+        SchoolMembership.school_id == invitation.school_id, SchoolMembership.user_id == user.id,
+    ))
+    if member:
+        invitation.status = "accepted"
+        invitation.accepted_at = now
+        await session.commit()
+        raise HTTPException(status_code=409, detail="This account already belongs to the school")
+    membership = SchoolMembership(id=uuid4(), school_id=invitation.school_id, user_id=user.id, role=invitation.role)
+    session.add(membership)
+    invitation.status = "accepted"
+    invitation.accepted_at = now
+    session.add(AuditEvent(school_id=invitation.school_id, actor_user_id=user.id,
+                           action="staff.teacher_joined", resource_type="school_membership", resource_id=membership.id))
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="This invitation has already been used") from None
+    return InvitationAccepted(email=user.email, school_name=school.name, school_slug=school.slug,
+                              message="Your teacher account is ready. Sign in with your email and password.")

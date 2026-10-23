@@ -1,0 +1,351 @@
+from datetime import date
+from typing import Annotated
+from uuid import UUID, uuid4
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.auth import TenantContext, require_roles
+from app.db import get_session
+from app.models import (
+    AcademicTerm,
+    AcademicYear,
+    AuditEvent,
+    ClassGroup,
+    ClassSubjectAssignment,
+    MembershipRole,
+    SchoolMembership,
+    Student,
+    StudentEnrollment,
+    Subject,
+    User,
+)
+
+router = APIRouter(prefix="/api/v1/academic", tags=["academic setup"])
+roles = (MembershipRole.SCHOOL_ADMIN, MembershipRole.PRINCIPAL, MembershipRole.REGISTRAR)
+writers = (MembershipRole.SCHOOL_ADMIN, MembershipRole.REGISTRAR)
+
+
+class DateRange(BaseModel):
+    starts_on: date
+    ends_on: date
+
+    @model_validator(mode="after")
+    def valid_dates(self):
+        if self.starts_on > self.ends_on:
+            raise ValueError("Start date must be on or before end date")
+        return self
+
+
+class YearCreate(DateRange):
+    name: str = Field(min_length=2, max_length=80)
+
+
+class TermCreate(DateRange):
+    academic_year_id: UUID
+    name: str = Field(min_length=1, max_length=80)
+    ordinal: int = Field(ge=1, le=20)
+
+
+class ClassCreate(BaseModel):
+    academic_year_id: UUID
+    name: str = Field(min_length=1, max_length=80)
+    grade_level: str = Field(min_length=1, max_length=40)
+    stream: str = Field(default="", max_length=40)
+
+
+class EnrollmentCreate(BaseModel):
+    student_id: UUID
+    academic_year_id: UUID
+    class_group_id: UUID
+    enrolled_on: date
+
+
+class YearResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    name: str
+    starts_on: date
+    ends_on: date
+    status: str
+
+
+class TermResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    academic_year_id: UUID
+    name: str
+    ordinal: int
+    starts_on: date
+    ends_on: date
+
+
+class ClassResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    academic_year_id: UUID
+    name: str
+    grade_level: str
+    stream: str
+
+
+class EnrollmentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    student_id: UUID
+    academic_year_id: UUID
+    class_group_id: UUID
+    enrolled_on: date
+    status: str
+
+
+class SubjectCreate(BaseModel):
+    code: str = Field(min_length=2, max_length=24)
+    name: str = Field(min_length=2, max_length=100)
+
+    @model_validator(mode="after")
+    def normalize(self):
+        self.code = self.code.strip().upper()
+        self.name = self.name.strip()
+        return self
+
+
+class SubjectResponse(BaseModel):
+    id: UUID
+    code: str
+    name: str
+    status: str
+
+
+class AssignmentCreate(BaseModel):
+    class_group_id: UUID
+    subject_id: UUID
+    teacher_membership_id: UUID
+
+
+class AssignmentResponse(BaseModel):
+    id: UUID
+    class_group_id: UUID
+    class_name: str
+    academic_year_id: UUID
+    subject_id: UUID
+    subject_name: str
+    subject_code: str
+    teacher_membership_id: UUID
+    teacher_name: str
+    teacher_email: str
+
+
+class TeacherResponse(BaseModel):
+    membership_id: UUID
+    user_id: UUID
+    display_name: str
+    email: str
+
+
+async def _audit(session: AsyncSession, context: TenantContext, action: str, kind: str, resource_id: UUID) -> None:
+    session.add(AuditEvent(school_id=context.school_id, actor_user_id=context.user_id,
+                           action=action, resource_type=kind, resource_id=resource_id))
+
+
+async def _commit_or_conflict(session: AsyncSession, message: str) -> None:
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail=message) from None
+
+
+@router.get("/years", response_model=list[YearResponse])
+async def list_years(context: Annotated[TenantContext, Depends(require_roles(*roles, MembershipRole.TEACHER))], session: Annotated[AsyncSession, Depends(get_session)]):
+    result = await session.scalars(select(AcademicYear).where(AcademicYear.school_id == context.school_id).order_by(AcademicYear.starts_on.desc()))
+    return list(result)
+
+
+@router.post("/years", response_model=YearResponse, status_code=status.HTTP_201_CREATED)
+async def create_year(payload: YearCreate, context: Annotated[TenantContext, Depends(require_roles(*writers))], session: Annotated[AsyncSession, Depends(get_session)]):
+    row = AcademicYear(id=uuid4(), school_id=context.school_id, **payload.model_dump())
+    session.add(row)
+    await _audit(session, context, "academic_year.created", "academic_year", row.id)
+    await _commit_or_conflict(session, "An academic year with that name already exists")
+    return row
+
+
+@router.get("/terms", response_model=list[TermResponse])
+async def list_terms(context: Annotated[TenantContext, Depends(require_roles(*roles, MembershipRole.TEACHER))], session: Annotated[AsyncSession, Depends(get_session)], academic_year_id: UUID | None = None):
+    query = select(AcademicTerm).where(AcademicTerm.school_id == context.school_id)
+    if academic_year_id:
+        query = query.where(AcademicTerm.academic_year_id == academic_year_id)
+    return list((await session.scalars(query.order_by(AcademicTerm.ordinal))).all())
+
+
+@router.post("/terms", response_model=TermResponse, status_code=status.HTTP_201_CREATED)
+async def create_term(payload: TermCreate, context: Annotated[TenantContext, Depends(require_roles(*writers))], session: Annotated[AsyncSession, Depends(get_session)]):
+    year = await session.scalar(select(AcademicYear).where(AcademicYear.id == payload.academic_year_id, AcademicYear.school_id == context.school_id))
+    if year is None:
+        raise HTTPException(status_code=404, detail="Academic year not found")
+    if payload.starts_on < year.starts_on or payload.ends_on > year.ends_on:
+        raise HTTPException(status_code=422, detail="Term dates must fall within its academic year")
+    row = AcademicTerm(id=uuid4(), school_id=context.school_id, **payload.model_dump())
+    session.add(row)
+    await _audit(session, context, "academic_term.created", "academic_term", row.id)
+    await _commit_or_conflict(session, "A term with that name or order already exists for this year")
+    return row
+
+
+@router.get("/classes", response_model=list[ClassResponse])
+async def list_classes(context: Annotated[TenantContext, Depends(require_roles(*roles, MembershipRole.TEACHER))], session: Annotated[AsyncSession, Depends(get_session)], academic_year_id: UUID | None = None):
+    query = select(ClassGroup).where(ClassGroup.school_id == context.school_id)
+    if context.role == MembershipRole.TEACHER:
+        membership_id = await session.scalar(select(SchoolMembership.id).where(
+            SchoolMembership.school_id == context.school_id, SchoolMembership.user_id == context.user_id,
+            SchoolMembership.status == "active", SchoolMembership.role == MembershipRole.TEACHER,
+        ))
+        query = query.join(ClassSubjectAssignment, (
+            (ClassSubjectAssignment.school_id == ClassGroup.school_id)
+            & (ClassSubjectAssignment.class_group_id == ClassGroup.id)
+        )).where(ClassSubjectAssignment.teacher_membership_id == membership_id).distinct()
+    if academic_year_id:
+        query = query.where(ClassGroup.academic_year_id == academic_year_id)
+    return list((await session.scalars(query.order_by(ClassGroup.grade_level, ClassGroup.name, ClassGroup.stream))).all())
+
+
+@router.post("/classes", response_model=ClassResponse, status_code=status.HTTP_201_CREATED)
+async def create_class(payload: ClassCreate, context: Annotated[TenantContext, Depends(require_roles(*writers))], session: Annotated[AsyncSession, Depends(get_session)]):
+    year = await session.scalar(select(AcademicYear.id).where(AcademicYear.id == payload.academic_year_id, AcademicYear.school_id == context.school_id))
+    if year is None:
+        raise HTTPException(status_code=404, detail="Academic year not found")
+    data = payload.model_dump()
+    data["name"] = data["name"].strip()
+    data["grade_level"] = data["grade_level"].strip()
+    data["stream"] = data["stream"].strip()
+    row = ClassGroup(id=uuid4(), school_id=context.school_id, **data)
+    session.add(row)
+    await _audit(session, context, "class_group.created", "class_group", row.id)
+    await _commit_or_conflict(session, "That class group already exists for this year")
+    return row
+
+
+@router.get("/classes/{class_group_id}/enrollments", response_model=list[EnrollmentResponse])
+async def list_enrollments(class_group_id: UUID, context: Annotated[TenantContext, Depends(require_roles(*roles))], session: Annotated[AsyncSession, Depends(get_session)]):
+    group = await session.scalar(select(ClassGroup.id).where(ClassGroup.id == class_group_id, ClassGroup.school_id == context.school_id))
+    if group is None:
+        raise HTTPException(status_code=404, detail="Class group not found")
+    query = select(StudentEnrollment).where(StudentEnrollment.school_id == context.school_id, StudentEnrollment.class_group_id == class_group_id).order_by(StudentEnrollment.enrolled_on)
+    return list((await session.scalars(query)).all())
+
+
+@router.post("/enrollments", response_model=EnrollmentResponse, status_code=status.HTTP_201_CREATED)
+async def create_enrollment(payload: EnrollmentCreate, context: Annotated[TenantContext, Depends(require_roles(*writers))], session: Annotated[AsyncSession, Depends(get_session)]):
+    student = await session.scalar(select(Student.id).where(Student.id == payload.student_id, Student.school_id == context.school_id))
+    if student is None:
+        raise HTTPException(status_code=404, detail="Student not found")
+    group = await session.scalar(select(ClassGroup).where(
+        ClassGroup.id == payload.class_group_id, ClassGroup.school_id == context.school_id,
+        ClassGroup.academic_year_id == payload.academic_year_id,
+    ))
+    if group is None:
+        raise HTTPException(status_code=404, detail="Class group not found for this academic year")
+    year = await session.scalar(select(AcademicYear).where(AcademicYear.id == payload.academic_year_id, AcademicYear.school_id == context.school_id))
+    if year is None:
+        raise HTTPException(status_code=404, detail="Academic year not found")
+    if not year.starts_on <= payload.enrolled_on <= year.ends_on:
+        raise HTTPException(status_code=422, detail="Enrollment date must fall within the academic year")
+    row = StudentEnrollment(id=uuid4(), school_id=context.school_id, **payload.model_dump())
+    session.add(row)
+    await _audit(session, context, "student.enrolled", "student_enrollment", row.id)
+    await _commit_or_conflict(session, "Student already has an enrollment for this academic year")
+    return row
+
+
+@router.get("/subjects", response_model=list[SubjectResponse])
+async def list_subjects(context: Annotated[TenantContext, Depends(require_roles(*roles, MembershipRole.TEACHER))], session: Annotated[AsyncSession, Depends(get_session)]):
+    result = await session.scalars(select(Subject).where(Subject.school_id == context.school_id, Subject.status == "active").order_by(Subject.name))
+    return list(result)
+
+
+@router.post("/subjects", response_model=SubjectResponse, status_code=status.HTTP_201_CREATED)
+async def create_subject(payload: SubjectCreate, context: Annotated[TenantContext, Depends(require_roles(*writers))], session: Annotated[AsyncSession, Depends(get_session)]):
+    row = Subject(id=uuid4(), school_id=context.school_id, code=payload.code, name=payload.name)
+    session.add(row)
+    await _audit(session, context, "subject.created", "subject", row.id)
+    await _commit_or_conflict(session, "A subject with that code already exists")
+    return row
+
+
+@router.get("/teachers", response_model=list[TeacherResponse])
+async def list_teachers(context: Annotated[TenantContext, Depends(require_roles(*roles))], session: Annotated[AsyncSession, Depends(get_session)]):
+    result = await session.execute(
+        select(SchoolMembership.id, User.id, User.display_name, User.email)
+        .join(User, SchoolMembership.user_id == User.id)
+        .where(SchoolMembership.school_id == context.school_id, SchoolMembership.role == MembershipRole.TEACHER,
+               SchoolMembership.status == "active", User.status == "active")
+        .order_by(User.display_name)
+    )
+    return [TeacherResponse(membership_id=row[0], user_id=row[1], display_name=row[2], email=row[3]) for row in result.all()]
+
+
+@router.get("/teaching-assignments", response_model=list[AssignmentResponse])
+async def list_teaching_assignments(
+    context: Annotated[TenantContext, Depends(require_roles(*roles, MembershipRole.TEACHER))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    academic_year_id: UUID | None = None,
+):
+    query = (
+        select(ClassSubjectAssignment, ClassGroup, Subject, User)
+        .join(ClassGroup, (ClassGroup.id == ClassSubjectAssignment.class_group_id) & (ClassGroup.school_id == ClassSubjectAssignment.school_id))
+        .join(Subject, (Subject.id == ClassSubjectAssignment.subject_id) & (Subject.school_id == ClassSubjectAssignment.school_id))
+        .join(SchoolMembership, (SchoolMembership.id == ClassSubjectAssignment.teacher_membership_id) & (SchoolMembership.school_id == ClassSubjectAssignment.school_id))
+        .join(User, SchoolMembership.user_id == User.id)
+        .where(ClassSubjectAssignment.school_id == context.school_id, SchoolMembership.status == "active", User.status == "active")
+    )
+    if context.role == MembershipRole.TEACHER:
+        membership = await session.scalar(select(SchoolMembership.id).where(
+            SchoolMembership.school_id == context.school_id, SchoolMembership.user_id == context.user_id,
+            SchoolMembership.status == "active", SchoolMembership.role == MembershipRole.TEACHER,
+        ))
+        query = query.where(ClassSubjectAssignment.teacher_membership_id == membership)
+    if academic_year_id:
+        query = query.where(ClassGroup.academic_year_id == academic_year_id)
+    result = await session.execute(query.order_by(ClassGroup.name, Subject.name, User.display_name))
+    return [AssignmentResponse(
+        id=assignment.id, class_group_id=group.id, class_name=group.name, academic_year_id=group.academic_year_id,
+        subject_id=subject.id, subject_name=subject.name, subject_code=subject.code,
+        teacher_membership_id=assignment.teacher_membership_id, teacher_name=user.display_name, teacher_email=user.email,
+    ) for assignment, group, subject, user in result.all()]
+
+
+@router.post("/teaching-assignments", response_model=AssignmentResponse, status_code=status.HTTP_201_CREATED)
+async def create_teaching_assignment(
+    payload: AssignmentCreate,
+    context: Annotated[TenantContext, Depends(require_roles(*writers))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    group = await session.scalar(select(ClassGroup).where(
+        ClassGroup.id == payload.class_group_id, ClassGroup.school_id == context.school_id,
+    ))
+    subject = await session.scalar(select(Subject).where(
+        Subject.id == payload.subject_id, Subject.school_id == context.school_id, Subject.status == "active",
+    ))
+    teacher = await session.execute(
+        select(SchoolMembership, User).join(User, SchoolMembership.user_id == User.id).where(
+            SchoolMembership.id == payload.teacher_membership_id, SchoolMembership.school_id == context.school_id,
+            SchoolMembership.role == MembershipRole.TEACHER, SchoolMembership.status == "active", User.status == "active",
+        )
+    )
+    teacher_row = teacher.one_or_none()
+    if group is None or subject is None or teacher_row is None:
+        raise HTTPException(status_code=404, detail="Class, subject, or active teacher not found")
+    assignment = ClassSubjectAssignment(id=uuid4(), school_id=context.school_id, **payload.model_dump())
+    session.add(assignment)
+    await _audit(session, context, "teacher.assigned_to_subject", "class_subject_assignment", assignment.id)
+    await _commit_or_conflict(session, "This teacher is already assigned to that subject and class")
+    membership, user = teacher_row
+    return AssignmentResponse(
+        id=assignment.id, class_group_id=group.id, class_name=group.name, academic_year_id=group.academic_year_id,
+        subject_id=subject.id, subject_name=subject.name, subject_code=subject.code,
+        teacher_membership_id=membership.id, teacher_name=user.display_name, teacher_email=user.email,
+    )
