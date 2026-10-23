@@ -28,7 +28,8 @@ function initials(name: string) {
 export function SchoolLayout({ children, user, onLogout }: { children: ReactNode; user: SchoolUser; onLogout: () => void }) {
   const [open, setOpen] = useState(false)
   const location = useLocation()
-  const currentPage = navigation.find(item => item.to === location.pathname)?.label ?? 'Overview'
+  const currentPage = navigation.find(item => item.to === location.pathname)?.label
+    ?? (location.pathname === '/report-card' ? 'Report card' : 'Overview')
   const canManageAcademics = ['school_admin', 'principal', 'registrar'].includes(user.role)
   const canTakeAttendance = ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role)
   const canViewAssessments = ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role)

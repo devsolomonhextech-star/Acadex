@@ -84,3 +84,18 @@ export type ClassResults = {
   academic_year_id: string; publication: PublicationState
   grading_scale_name: string | null; students: StudentResult[]
 }
+export type ReportCardSubject = {
+  subject_id: string; subject_name: string; subject_code: string
+  weighted_total: string; grade: string | null; points: string | null
+  assessment_count: number; total_weight: string
+}
+export type ReportCard = {
+  school_name: string; academic_year_id: string; academic_year_name: string
+  term_id: string; term_name: string; term_starts_on: string; term_ends_on: string
+  class_group_id: string; class_name: string; class_stream: string
+  student_id: string; admission_number: string; first_name: string; last_name: string
+  subjects: ReportCardSubject[]; aggregate_percent: string
+  aggregate_grade: string | null; aggregate_points: string | null
+  position: number | null; class_size: number
+  grading_scale_name: string | null; published_at: string | null; published_by: string | null
+}

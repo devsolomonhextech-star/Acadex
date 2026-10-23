@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Alert, Button, Empty, Input, InputNumber, Modal, Select, Space, Spin, Table, Tag, message,
 } from 'antd'
 import type { TableColumnsType } from 'antd'
-import { CheckCircleOutlined, EyeInvisibleOutlined, LockOutlined, PlusOutlined, SaveOutlined, TrophyOutlined } from '@ant-design/icons'
+import { CheckCircleOutlined, EyeInvisibleOutlined, LockOutlined, PlusOutlined, PrinterOutlined, SaveOutlined, TrophyOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/authHooks'
 import { fetchAcademicTerms, fetchAcademicYears, fetchClassGroups } from '../academic/academicApi'
@@ -60,6 +61,7 @@ function validateBands(bands: BandDraft[]): string | null {
 
 export default function ResultsPage() {
   const { accessToken, user } = useAuth()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [toast, contextHolder] = message.useMessage()
   const [selectedYear, setSelectedYear] = useState('')
@@ -145,8 +147,19 @@ export default function ResultsPage() {
           ? <span className="results-missing">—</span>
           : <Tag className="results-position" color={row.position === 1 ? 'gold' : 'blue'}>#{row.position}</Tag>,
       },
+      {
+        title: '',
+        key: 'report-card',
+        align: 'right',
+        render: (_, row) => published
+          ? <Button size="small" icon={<PrinterOutlined/>}
+                   onClick={() => navigate(`/report-card?student_id=${row.student_id}&term_id=${termId}`)}>
+              Report card
+            </Button>
+          : null,
+      },
     ]
-  }, [results])
+  }, [results, published, termId, navigate])
 
   const refreshAll = async () => Promise.all([
     queryClient.invalidateQueries({ queryKey: ['class-results', user?.school_id] }),

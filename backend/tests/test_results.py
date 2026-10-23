@@ -1,4 +1,5 @@
 """Grading scales, weighted term aggregation, and result publication behaviour."""
+from uuid import uuid4
 
 
 async def _admin_session(client, slug="results-school"):
@@ -350,3 +351,98 @@ async def test_results_isolation_and_permissions(client):
     })
     assert teacher_read.status_code == 200, teacher_read.text
     assert len(teacher_read.json()["students"]) == 2
+
+
+async def test_report_card_requires_published_results_and_scopes_access(client):
+    admin_headers = await _admin_session(client)
+    teacher_headers = await _invite_teacher(client, admin_headers)
+    ctx = await _setup_context(client, admin_headers, teacher_headers)
+    scale = await client.post("/api/v1/grading/scales", headers=admin_headers, json={
+        "name": "Primary scale", "is_default": True, "bands": BANDS,
+    })
+    assert scale.status_code == 201, scale.text
+    await _create_approved_assessment(client, teacher_headers, ctx, "Final quiz", "quiz", 100, 100, [80, 70],
+                                      reviewer_headers=admin_headers)
+    compute = await client.post("/api/v1/results/compute", headers=admin_headers, json={
+        "class_group_id": ctx["group"]["id"], "term_id": ctx["term"]["id"],
+    })
+    assert compute.status_code == 200, compute.text
+
+    student_id = ctx["students"][0]["id"]
+    params = {"student_id": student_id, "term_id": ctx["term"]["id"]}
+    # Computed but unpublished: report cards are refused.
+    unpublished = await client.get("/api/v1/results/report-card", headers=admin_headers, params=params)
+    assert unpublished.status_code == 409, unpublished.text
+    assert "published" in unpublished.json()["detail"]
+
+    published = await client.post("/api/v1/results/publish", headers=admin_headers, json={
+        "class_group_id": ctx["group"]["id"], "term_id": ctx["term"]["id"],
+        "confirm_class_name": ctx["group"]["name"],
+    })
+    assert published.status_code == 200, published.text
+
+    card = await client.get("/api/v1/results/report-card", headers=admin_headers, params=params)
+    assert card.status_code == 200, card.text
+    body = card.json()
+    assert body["school_name"] == "Results School"
+    assert body["academic_year_name"] == "2026/2027"
+    assert body["term_name"] == "Term 1"
+    assert body["term_starts_on"] == "2026-09-01" and body["term_ends_on"] == "2026-12-15"
+    assert body["class_name"] == "Primary 4" and body["class_stream"] == "A"
+    assert body["admission_number"] == "P4-001"
+    assert body["first_name"] == "Adwoa" and body["last_name"] == "Mensah"
+    assert len(body["subjects"]) == 1
+    subject_row = body["subjects"][0]
+    assert subject_row["subject_name"] == "Integrated Science"
+    assert subject_row["weighted_total"] == "80.00"
+    assert subject_row["grade"] == "A"
+    assert subject_row["assessment_count"] == 1 and subject_row["total_weight"] == "100.00"
+    assert body["aggregate_percent"] == "80.00" and body["aggregate_grade"] == "A"
+    assert body["position"] == 1 and body["class_size"] == 2
+    assert body["grading_scale_name"] == "Primary scale"
+    assert body["published_at"] is not None and body["published_by"] == "Results Admin"
+
+    # The second student sees their own position.
+    second = await client.get("/api/v1/results/report-card", headers=admin_headers, params={
+        "student_id": ctx["students"][1]["id"], "term_id": ctx["term"]["id"],
+    })
+    assert second.status_code == 200, second.text
+    assert second.json()["aggregate_percent"] == "70.00"
+    assert second.json()["position"] == 2
+
+    # An enrolled student without computed results is refused, not fabricated.
+    unenrolled = await client.post("/api/v1/students", headers=admin_headers, json={
+        "admission_number": "P4-999", "first_name": "Late", "last_name": "Joiner",
+    })
+    assert unenrolled.status_code == 201, unenrolled.text
+    missing = await client.get("/api/v1/results/report-card", headers=admin_headers, params={
+        "student_id": unenrolled.json()["id"], "term_id": ctx["term"]["id"],
+    })
+    assert missing.status_code == 404, missing.text
+
+    # The assigned teacher can print their class's cards.
+    teacher_card = await client.get("/api/v1/results/report-card", headers=teacher_headers, params=params)
+    assert teacher_card.status_code == 200, teacher_card.text
+
+    # A teacher with no assignment to this class is refused.
+    other_teacher = await _invite_teacher(client, admin_headers, "results-school",
+                                          "unassigned-teacher@example.com")
+    forbidden = await client.get("/api/v1/results/report-card", headers=other_teacher, params=params)
+    assert forbidden.status_code == 403, forbidden.text
+
+    # Unknown student and foreign-tenant reads are 404s.
+    unknown = await client.get("/api/v1/results/report-card", headers=admin_headers, params={
+        "student_id": str(uuid4()), "term_id": ctx["term"]["id"],
+    })
+    assert unknown.status_code == 404
+    foreign_admin = await _admin_session(client, "reportcard-other")
+    foreign = await client.get("/api/v1/results/report-card", headers=foreign_admin, params=params)
+    assert foreign.status_code == 404, foreign.text
+
+    # Withdrawing the publication revokes report cards until re-publish.
+    withdrawn = await client.post("/api/v1/results/withdraw", headers=admin_headers, json={
+        "class_group_id": ctx["group"]["id"], "term_id": ctx["term"]["id"],
+    })
+    assert withdrawn.status_code == 200, withdrawn.text
+    after_withdraw = await client.get("/api/v1/results/report-card", headers=admin_headers, params=params)
+    assert after_withdraw.status_code == 409, after_withdraw.text
