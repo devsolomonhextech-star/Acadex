@@ -11,6 +11,7 @@ from app.api.academic import router as academic_router
 from app.api.assessments import router as assessments_router
 from app.api.attendance import router as attendance_router
 from app.api.auth import router as identity_router
+from app.api.finance import router as finance_router
 from app.api.grading import router as grading_router
 from app.api.results import router as results_router
 from app.api.staff import router as staff_router
@@ -43,6 +44,7 @@ app.add_middleware(
 app.include_router(identity_router)
 app.include_router(students_router)
 app.include_router(student_imports_router)
+app.include_router(finance_router)
 app.include_router(academic_router)
 app.include_router(staff_router)
 app.include_router(attendance_router)

@@ -3,7 +3,6 @@ import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { Spin } from 'antd'
 import { AuthProvider, useAuth } from '../features/auth/authHooks'
 import { SchoolLayout } from '../shared/layout/SchoolLayout'
-import { ComingSoonPage } from '../shared/components/ComingSoonPage'
 
 const StudentsPage = lazy(() => import('../features/students/StudentsPage'))
 const AcademicPage = lazy(() => import('../features/academic/AcademicPage'))
@@ -11,6 +10,7 @@ const AttendancePage = lazy(() => import('../features/attendance/AttendancePage'
 const AssessmentsPage = lazy(() => import('../features/assessments/AssessmentsPage'))
 const ResultsPage = lazy(() => import('../features/results/ResultsPage'))
 const ReportCardPage = lazy(() => import('../features/results/ReportCardPage'))
+const FinancePage = lazy(() => import('../features/finance/FinancePage'))
 const OverviewPage = lazy(() => import('../features/overview/OverviewPage'))
 const AcceptInvitationPage = lazy(() => import('../features/staff/AcceptInvitationPage'))
 const LoginPage = lazy(() => import('../features/auth/AuthPages').then(module => ({ default: module.LoginPage })))
@@ -51,7 +51,7 @@ function AppRoutes() {
       <Route path="/results" element={user && ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><ResultsPage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/report-card" element={user && ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><ReportCardPage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/assessments" element={user && ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><AssessmentsPage /></Suspense> : <Navigate to="/" replace />} />
-      <Route path="/finance" element={<ComingSoonPage title="Finance" />} />
+      <Route path="/finance" element={user && ['school_admin', 'principal', 'finance'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><FinancePage /></Suspense> : <Navigate to="/" replace />} />
     </Route>
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>

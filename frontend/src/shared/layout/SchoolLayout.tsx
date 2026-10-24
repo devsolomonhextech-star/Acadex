@@ -33,11 +33,13 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
   const canManageAcademics = ['school_admin', 'principal', 'registrar'].includes(user.role)
   const canTakeAttendance = ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role)
   const canViewAssessments = ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role)
+  const canViewFinance = ['school_admin', 'principal', 'finance'].includes(user.role)
   const visibleNavigation = navigation.filter(item => {
     if (item.label === 'Students') return canManageAcademics
     if (item.label === 'Classes & academics') return canManageAcademics
     if (item.label === 'Attendance') return canTakeAttendance
     if (item.label === 'Assessment gradebook' || item.label === 'Term results') return canViewAssessments
+    if (item.label === 'Finance') return canViewFinance
     return true
   })
   return <div className="app-shell">

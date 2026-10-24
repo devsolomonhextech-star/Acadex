@@ -126,3 +126,39 @@ export type ReportCard = {
   position: number | null; class_size: number
   grading_scale_name: string | null; published_at: string | null; published_by: string | null
 }
+export type FeeCategory = { id: string; name: string; created_at: string }
+export type FeeStructure = {
+  id: string; fee_category_id: string; category_name: string
+  class_group_id: string; class_name: string; academic_year_id: string
+  term_id: string; term_name: string; amount: string; status: 'active' | 'archived'
+}
+export type InvoiceStatus = 'issued' | 'partially_paid' | 'paid' | 'void'
+export type InvoiceSummary = {
+  id: string; invoice_number: string; student_id: string; student_name: string
+  admission_number: string; class_name: string | null; term_id: string; term_name: string
+  total_amount: string; paid_amount: string; balance: string; status: InvoiceStatus; issued_on: string
+}
+export type InvoiceLine = { id: string; description: string; amount: string; fee_structure_id: string | null }
+export type InvoiceAllocation = {
+  id: string; payment_id: string; receipt_number: string
+  payment_date: string; method: string; amount: string
+}
+export type InvoiceDetail = InvoiceSummary & {
+  academic_year_id: string; lines: InvoiceLine[]; allocations: InvoiceAllocation[]
+}
+export type InvoicePage = { items: InvoiceSummary[]; page: number; page_size: number; total: number }
+export type PaymentMethod = 'cash' | 'mobile_money' | 'bank_transfer' | 'card' | 'cheque' | 'other'
+export type Payment = {
+  id: string; receipt_number: string; student_id: string; student_name: string
+  amount: string; method: PaymentMethod; reference: string | null; payment_date: string
+  status: string; note: string | null; allocated_amount: string; unallocated_amount: string; created_at: string
+}
+export type PaymentPage = { items: Payment[]; page: number; page_size: number; total: number }
+export type FinanceSummary = {
+  invoiced_total: string; paid_total: string; outstanding_total: string
+  open_invoice_count: number; payments_total: string; credit_total: string
+}
+export type GenerateInvoicesResult = {
+  created: number; skipped: number; students: number
+  fee_lines_per_invoice: number; total_billed: string
+}

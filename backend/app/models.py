@@ -17,6 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -521,4 +522,151 @@ class StudentImportJob(Base):
     skipped_rows: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class FeeCategory(Base):
+    """School-defined fee headings (e.g. Tuition, Feeding, Uniform)."""
+
+    __tablename__ = "fee_categories"
+    __table_args__ = (
+        UniqueConstraint("school_id", "id", name="uq_fee_categories_school_id"),
+        UniqueConstraint("school_id", "name", name="uq_fee_categories_school_name"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class FeeStructure(Base):
+    """Class-scoped fee definition for an academic year, optionally per term."""
+
+    __tablename__ = "fee_structures"
+    __table_args__ = (
+        UniqueConstraint("school_id", "id", name="uq_fee_structures_school_id"),
+        CheckConstraint("amount >= 0", name="ck_fee_structures_amount"),
+        CheckConstraint("status IN ('active', 'archived')", name="ck_fee_structures_status"),
+        UniqueConstraint(
+            "school_id", "fee_category_id", "class_group_id", "term_id",
+            name="uq_fee_structures_scope",
+        ),
+        Index("ix_fee_structures_school_class", "school_id", "class_group_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    fee_category_id: Mapped[UUID] = mapped_column(ForeignKey("fee_categories.id", ondelete="RESTRICT"), nullable=False)
+    class_group_id: Mapped[UUID] = mapped_column(ForeignKey("class_groups.id", ondelete="RESTRICT"), nullable=False)
+    academic_year_id: Mapped[UUID] = mapped_column(ForeignKey("academic_years.id", ondelete="RESTRICT"), nullable=False)
+    term_id: Mapped[UUID] = mapped_column(ForeignKey("academic_terms.id", ondelete="RESTRICT"), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active", server_default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class StudentInvoice(Base):
+    """A billed term/year obligation; totals are historical facts, never silently rewritten."""
+
+    __tablename__ = "student_invoices"
+    __table_args__ = (
+        UniqueConstraint("school_id", "id", name="uq_student_invoices_school_id"),
+        UniqueConstraint("school_id", "invoice_number", name="uq_student_invoices_school_number"),
+        CheckConstraint(
+            "status IN ('issued', 'partially_paid', 'paid', 'void')",
+            name="ck_student_invoices_status",
+        ),
+        CheckConstraint("total_amount >= 0 AND paid_amount >= 0", name="ck_student_invoices_amounts"),
+        Index("ix_student_invoices_school_student", "school_id", "student_id"),
+        Index("ix_student_invoices_school_term", "school_id", "term_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    student_id: Mapped[UUID] = mapped_column(ForeignKey("students.id", ondelete="RESTRICT"), nullable=False)
+    academic_year_id: Mapped[UUID] = mapped_column(ForeignKey("academic_years.id", ondelete="RESTRICT"), nullable=False)
+    term_id: Mapped[UUID] = mapped_column(ForeignKey("academic_terms.id", ondelete="RESTRICT"), nullable=False)
+    invoice_number: Mapped[str] = mapped_column(String(24), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="issued", server_default="issued")
+    total_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal(0), server_default="0")
+    paid_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal(0), server_default="0")
+    issued_on: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class InvoiceLineItem(Base):
+    """Snapshot of one fee on an invoice, independent of later fee-structure edits."""
+
+    __tablename__ = "invoice_line_items"
+    __table_args__ = (
+        UniqueConstraint("school_id", "id", name="uq_invoice_line_items_school_id"),
+        CheckConstraint("amount >= 0", name="ck_invoice_line_items_amount"),
+        Index("ix_invoice_line_items_invoice", "invoice_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    invoice_id: Mapped[UUID] = mapped_column(ForeignKey("student_invoices.id", ondelete="RESTRICT"), nullable=False)
+    fee_structure_id: Mapped[UUID | None] = mapped_column(ForeignKey("fee_structures.id", ondelete="RESTRICT"))
+    fee_category_id: Mapped[UUID] = mapped_column(ForeignKey("fee_categories.id", ondelete="RESTRICT"), nullable=False)
+    description: Mapped[str] = mapped_column(String(160), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Payment(Base):
+    """A recorded fee payment with a per-school receipt number."""
+
+    __tablename__ = "payments"
+    __table_args__ = (
+        UniqueConstraint("school_id", "id", name="uq_payments_school_id"),
+        UniqueConstraint("school_id", "receipt_number", name="uq_payments_school_receipt"),
+        CheckConstraint("amount > 0", name="ck_payments_amount"),
+        CheckConstraint("status IN ('recorded', 'voided')", name="ck_payments_status"),
+        CheckConstraint(
+            "method IN ('cash', 'mobile_money', 'bank_transfer', 'card', 'cheque', 'other')",
+            name="ck_payments_method",
+        ),
+        Index("ix_payments_school_student", "school_id", "student_id"),
+        Index("ix_payments_school_date", "school_id", "payment_date"),
+        Index(
+            "uq_payments_school_reference",
+            "school_id",
+            "reference",
+            unique=True,
+            postgresql_where=text("reference IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    student_id: Mapped[UUID] = mapped_column(ForeignKey("students.id", ondelete="RESTRICT"), nullable=False)
+    recorded_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    method: Mapped[str] = mapped_column(String(20), nullable=False)
+    reference: Mapped[str | None] = mapped_column(String(80))
+    receipt_number: Mapped[str] = mapped_column(String(24), nullable=False)
+    payment_date: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="recorded", server_default="recorded")
+    note: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PaymentAllocation(Base):
+    """Portion of a payment applied to one invoice."""
+
+    __tablename__ = "payment_allocations"
+    __table_args__ = (
+        UniqueConstraint("school_id", "id", name="uq_payment_allocations_school_id"),
+        CheckConstraint("amount > 0", name="ck_payment_allocations_amount"),
+        Index("ix_payment_allocations_payment", "payment_id"),
+        Index("ix_payment_allocations_invoice", "invoice_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    payment_id: Mapped[UUID] = mapped_column(ForeignKey("payments.id", ondelete="RESTRICT"), nullable=False)
+    invoice_id: Mapped[UUID] = mapped_column(ForeignKey("student_invoices.id", ondelete="RESTRICT"), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

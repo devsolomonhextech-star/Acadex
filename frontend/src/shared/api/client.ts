@@ -2,6 +2,14 @@ import type { SchoolUser, Session } from './types'
 
 const apiBase = import.meta.env.VITE_API_URL ?? ''
 
+type SessionRefresher = () => Promise<string | null>
+let sessionRefresher: SessionRefresher | null = null
+
+/** Registered by the auth provider so a 401 can mint a fresh access token once. */
+export function setSessionRefresher(refresher: SessionRefresher | null) {
+  sessionRefresher = refresher
+}
+
 export function readCsrfCookie(): string {
   return document.cookie.split('; ').find(part => part.startsWith('schoolos_csrf='))?.split('=').slice(1).join('=') ?? ''
 }
@@ -12,12 +20,25 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}, acc
   if (options.body && !isFormData && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
   const response = await fetch(`${apiBase}/api/v1${path}`, { ...options, headers, credentials: 'include' })
+  if (response.status === 401 && accessToken && !path.startsWith('/auth/')) {
+    const refreshed = await sessionRefresher?.()
+    if (refreshed) {
+      headers.set('Authorization', `Bearer ${refreshed}`)
+      const retried = await fetch(`${apiBase}/api/v1${path}`, { ...options, headers, credentials: 'include' })
+      return parseResponse<T>(retried, path)
+    }
+  }
+  return parseResponse<T>(response, path)
+}
+
+async function parseResponse<T>(response: Response, path: string): Promise<T> {
   if (!response.ok) {
     let message = `Request failed (${response.status})`
     try {
       const body = await response.json() as { detail?: string }
       if (body.detail) message = body.detail
     } catch { /* Preserve the status message for non-JSON responses. */ }
+    if (response.status === 401 && !path.startsWith('/auth/')) message = 'Your session has expired. Please sign in again.'
     throw new Error(message)
   }
   if (response.status === 204) return undefined as T
@@ -25,16 +46,22 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}, acc
 }
 
 export async function apiRequestBlob(path: string, accessToken: string): Promise<Blob> {
-  const response = await fetch(`${apiBase}/api/v1${path}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+  const doFetch = (token: string) => fetch(`${apiBase}/api/v1${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
     credentials: 'include',
   })
+  let response = await doFetch(accessToken)
+  if (response.status === 401 && !path.startsWith('/auth/')) {
+    const refreshed = await sessionRefresher?.()
+    if (refreshed) response = await doFetch(refreshed)
+  }
   if (!response.ok) {
     let message = `Download failed (${response.status})`
     try {
       const body = await response.json() as { detail?: string }
       if (body.detail) message = body.detail
     } catch { /* Preserve the status message for non-JSON responses. */ }
+    if (response.status === 401) message = 'Your session has expired. Please sign in again.'
     throw new Error(message)
   }
   return response.blob()

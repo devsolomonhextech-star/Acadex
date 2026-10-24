@@ -2,7 +2,7 @@ import { useCallback, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAppDispatch, useAppSelector } from '../../app/hooks'
-import { apiRequest, fetchCurrentUser, readCsrfCookie, registerSchool, rotateSession, signIn, signOutRequest } from '../../shared/api/client'
+import { apiRequest, fetchCurrentUser, readCsrfCookie, registerSchool, rotateSession, setSessionRefresher, signIn, signOutRequest } from '../../shared/api/client'
 import type { SchoolUser } from '../../shared/api/types'
 import { authInitialized, sessionCleared, sessionEstablished } from './authSlice'
 
@@ -36,6 +36,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     void restore()
     return () => { active = false }
+  }, [dispatch])
+
+  useEffect(() => {
+    // Single-flight: parallel 401s share one refresh so token rotation never races itself.
+    let inFlight: Promise<string | null> | null = null
+    const refresh = () => (inFlight ??= (async () => {
+      try {
+        const session = await rotateSession()
+        const user = await fetchCurrentUser(session.access_token)
+        dispatch(sessionEstablished({ user, accessToken: session.access_token }))
+        return session.access_token
+      } catch {
+        dispatch(sessionCleared())
+        return null
+      } finally {
+        inFlight = null
+      }
+    })())
+    setSessionRefresher(refresh)
+    return () => setSessionRefresher(null)
   }, [dispatch])
 
   return children
