@@ -13,6 +13,8 @@ import { fetchStudentOptions } from '../students/studentsApi'
 import type { AcademicTerm, AcademicYear, ClassGroup, Enrollment, Student } from '../../shared/api/types'
 import { formatApiError } from '../../shared/api/errors'
 import { TeachingAssignmentsPanel } from './TeachingAssignmentsPanel'
+import { TeachersPanel } from './TeachersPanel'
+import { TimetablePanel } from './TimetablePanel'
 
 type ModalKind = 'year' | 'term' | 'class' | 'enrollment' | null
 type AcademicFormValues = {
@@ -102,6 +104,8 @@ export default function AcademicPage() {
     </section>
     {yearId && <>
       <TeachingAssignmentsPanel yearId={yearId} classes={classGroups} />
+      <TimetablePanel yearId={yearId} classes={classGroups} />
+      <TeachersPanel />
       <div className="academic-overview-grid">
         <section className="academic-section panel"><div className="academic-card-heading"><div><span className="academic-card-icon"><CalendarOutlined /></span><h2>Terms</h2></div>{!readOnly && <Button type="text" size="small" icon={<PlusOutlined />} onClick={() => startCreate('term')}>Add term</Button>}</div>
           {terms.length ? <div className="term-list">{terms.map((term: AcademicTerm) => <div className="term-row" key={term.id}><span className="term-number">{String(term.ordinal).padStart(2, '0')}</span><span><strong>{term.name}</strong><small>{dayjs(term.starts_on).format('D MMM')} – {dayjs(term.ends_on).format('D MMM YYYY')}</small></span></div>)}</div> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No terms set up yet" />}

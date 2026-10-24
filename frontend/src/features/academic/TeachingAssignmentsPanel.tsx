@@ -1,14 +1,16 @@
 import { useState } from 'react'
-import { Alert, Button, Empty, Form, Input, Modal, Select, Table, Tag, message } from 'antd'
+import { Alert, Button, Dropdown, Empty, Form, Input, Modal, Select, Table, Tag, message } from 'antd'
 import type { TableColumnsType } from 'antd'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CopyOutlined, PlusOutlined, TeamOutlined } from '@ant-design/icons'
+import { CopyOutlined, DownOutlined, PlusOutlined, TeamOutlined, UsergroupAddOutlined } from '@ant-design/icons'
 import { useAuth } from '../auth/authHooks'
 import type { ClassGroup, TeachingAssignment } from '../../shared/api/types'
 import { formatApiError } from '../../shared/api/errors'
 import { createSubject, createTeachingAssignment, fetchSubjects, fetchTeachers, fetchTeachingAssignments, inviteTeacher } from './teachingApi'
+import { createTeacherAccount } from './staffAdminApi'
 
 type InviteFields = { display_name: string; email: string }
+type DirectFields = { display_name: string; email: string; password: string }
 type SubjectFields = { code: string; name: string }
 type AssignmentFields = { class_group_id: string; subject_id: string; teacher_membership_id: string }
 
@@ -17,10 +19,12 @@ export function TeachingAssignmentsPanel({ yearId, classes }: { yearId: string; 
   const queryClient = useQueryClient()
   const [toast, contextHolder] = message.useMessage()
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [directOpen, setDirectOpen] = useState(false)
   const [subjectOpen, setSubjectOpen] = useState(false)
   const [assignmentOpen, setAssignmentOpen] = useState(false)
   const [createdInviteUrl, setCreatedInviteUrl] = useState('')
   const [inviteForm] = Form.useForm<InviteFields>()
+  const [directForm] = Form.useForm<DirectFields>()
   const [subjectForm] = Form.useForm<SubjectFields>()
   const [assignmentForm] = Form.useForm<AssignmentFields>()
   const canManage = ['school_admin', 'registrar'].includes(user?.role ?? '')
@@ -57,6 +61,17 @@ export function TeachingAssignmentsPanel({ yearId, classes }: { yearId: string; 
     },
     onError: error => toast.error(formatApiError(error)),
   })
+  const directMutation = useMutation({
+    mutationFn: (values: DirectFields) => createTeacherAccount(accessToken!, values),
+    onSuccess: async () => {
+      await invalidate()
+      await queryClient.invalidateQueries({ queryKey: ['admin-teachers', user?.school_id] })
+      setDirectOpen(false)
+      directForm.resetFields()
+      toast.success('Teacher account created')
+    },
+    onError: error => toast.error(formatApiError(error)),
+  })
   const copyInvite = async () => {
     await navigator.clipboard.writeText(createdInviteUrl)
     toast.success('Invitation link copied')
@@ -72,7 +87,12 @@ export function TeachingAssignmentsPanel({ yearId, classes }: { yearId: string; 
     {contextHolder}
     <div className="academic-card-heading"><div><span className="academic-card-icon"><TeamOutlined /></span><div><h2>Subjects &amp; teaching assignments</h2><p>Connect teachers to the classes and subjects they are responsible for.</p></div></div>
       <div className="teaching-actions">
-        {canInvite && <Button size="small" onClick={() => { setCreatedInviteUrl(''); setInviteOpen(true) }}>Invite teacher</Button>}
+        {canInvite && <Dropdown menu={{ items: [
+          { key: 'invite', label: 'Invite by email link', icon: <CopyOutlined /> },
+          { key: 'create', label: 'Create account with password', icon: <UsergroupAddOutlined /> },
+        ], onClick: ({ key }) => { setCreatedInviteUrl(''); if (key === 'invite') setInviteOpen(true); else setDirectOpen(true) } }}>
+          <Button size="small">Invite teacher <DownOutlined /></Button>
+        </Dropdown>}
         {canManage && <Button size="small" onClick={() => setSubjectOpen(true)}>Add subject</Button>}
         {canManage && <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => setAssignmentOpen(true)} disabled={!classes.length || !subjectsQuery.data?.length || !teachersQuery.data?.length}>Assign teacher</Button>}
       </div>
@@ -89,6 +109,15 @@ export function TeachingAssignmentsPanel({ yearId, classes }: { yearId: string; 
           <Form.Item name="email" label="Email address" rules={[{ required: true, type: 'email' }]}><Input type="email" maxLength={254} placeholder="teacher@school.edu.gh"/></Form.Item>
           <div className="student-form-actions"><Button onClick={() => setInviteOpen(false)}>Cancel</Button><Button type="primary" htmlType="submit" loading={inviteMutation.isPending}>Create invitation</Button></div>
         </Form>}
+    </Modal>
+    <Modal title="Create a teacher account" open={directOpen} onCancel={() => setDirectOpen(false)} footer={null} destroyOnClose>
+      <Form form={directForm} layout="vertical" onFinish={values => directMutation.mutate(values)}>
+        <p className="form-hint">The teacher can sign in immediately with the password you set here, and change it later.</p>
+        <Form.Item name="display_name" label="Teacher name" rules={[{ required: true, min: 2 }]}><Input maxLength={160} placeholder="Full name"/></Form.Item>
+        <Form.Item name="email" label="Email address" rules={[{ required: true, type: 'email' }]}><Input type="email" maxLength={254} placeholder="teacher@school.edu.gh"/></Form.Item>
+        <Form.Item name="password" label="Temporary password" rules={[{ required: true, min: 12, message: 'Use at least 12 characters' }]}><Input.Password maxLength={128} placeholder="At least 12 characters"/></Form.Item>
+        <div className="student-form-actions"><Button onClick={() => setDirectOpen(false)}>Cancel</Button><Button type="primary" htmlType="submit" loading={directMutation.isPending}>Create account</Button></div>
+      </Form>
     </Modal>
     <Modal title="Add a subject" open={subjectOpen} onCancel={() => setSubjectOpen(false)} footer={null} destroyOnClose>
       <Form form={subjectForm} layout="vertical" onFinish={values => subjectMutation.mutate(values)}>

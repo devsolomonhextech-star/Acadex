@@ -13,10 +13,12 @@ from app.api.attendance import router as attendance_router
 from app.api.auth import router as identity_router
 from app.api.finance import router as finance_router
 from app.api.grading import router as grading_router
+from app.api.overview import router as overview_router
 from app.api.results import router as results_router
 from app.api.staff import router as staff_router
 from app.api.student_imports import router as student_imports_router
 from app.api.students import router as students_router
+from app.api.timetable import router as timetable_router
 from app.db import engine
 from app.settings import get_settings
 
@@ -51,6 +53,8 @@ app.include_router(attendance_router)
 app.include_router(assessments_router)
 app.include_router(grading_router)
 app.include_router(results_router)
+app.include_router(timetable_router)
+app.include_router(overview_router)
 
 
 @app.get("/api/v1/health/live", tags=["operations"])

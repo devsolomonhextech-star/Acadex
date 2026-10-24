@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { useLessonAlerts } from '../../features/academic/useLessonAlerts'
 import {
   AppstoreOutlined, BarChartOutlined, BellOutlined, BookOutlined, CalendarOutlined,
   CreditCardOutlined, DashboardOutlined, MenuOutlined,  SearchOutlined,
@@ -28,6 +29,7 @@ function initials(name: string) {
 export function SchoolLayout({ children, user, onLogout }: { children: ReactNode; user: SchoolUser; onLogout: () => void }) {
   const [open, setOpen] = useState(false)
   const location = useLocation()
+  const { alerts, dismiss, contextHolder } = useLessonAlerts()
   const currentPage = navigation.find(item => item.to === location.pathname)?.label
     ?? (location.pathname === '/report-card' ? 'Report card' : 'Overview')
   const canManageAcademics = ['school_admin', 'principal', 'registrar'].includes(user.role)
@@ -43,6 +45,14 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
     return true
   })
   return <div className="app-shell">
+    {contextHolder}
+    {alerts.length > 0 && <div className="lesson-alerts" role="status" aria-live="polite">
+      {alerts.map(alert => <div key={alert.key} className={`lesson-alert lesson-alert-${alert.kind}`}>
+        <span className="lesson-alert-dot" />
+        <div className="lesson-alert-text"><strong>{alert.title}</strong><span>{alert.detail}</span></div>
+        <button className="lesson-alert-close" onClick={() => dismiss(alert.key)} aria-label="Dismiss alert">×</button>
+      </div>)}
+    </div>}
     <aside className={`sidebar ${open ? 'sidebar-open' : ''}`}>
       <div className="brand"><div className="brand-mark"><AppstoreOutlined /></div><span>school<span className="brand-accent">OS</span></span><button className="mobile-close" onClick={() => setOpen(false)} aria-label="Close menu">×</button></div>
       <div className="school-switch"><div className="school-emblem">{user.school_name.slice(0, 1).toUpperCase()}</div><div className="school-name"><strong>{user.school_name}</strong><span>{user.school_slug}</span></div><span className="chevron">⌄</span></div>

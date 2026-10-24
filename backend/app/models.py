@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID, uuid4
@@ -9,6 +9,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     Enum,
+    Time,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -255,6 +256,36 @@ class ClassSubjectAssignment(Base):
     subject_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     teacher_membership_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TimetableSlot(Base):
+    """One recurring weekly lesson: a class learning a subject from a teacher."""
+
+    __tablename__ = "timetable_slots"
+    __table_args__ = (
+        ForeignKeyConstraint(["school_id", "academic_year_id"], ["academic_years.school_id", "academic_years.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["school_id", "class_group_id"], ["class_groups.school_id", "class_groups.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["school_id", "subject_id"], ["subjects.school_id", "subjects.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["school_id", "teacher_membership_id"], ["school_memberships.school_id", "school_memberships.id"], ondelete="RESTRICT"),
+        UniqueConstraint("school_id", "id", name="uq_timetable_slots_school_id"),
+        CheckConstraint("starts_at < ends_at", name="ck_timetable_slots_times"),
+        CheckConstraint("day_of_week BETWEEN 0 AND 6", name="ck_timetable_slots_day"),
+        Index("ix_timetable_school_year_day", "school_id", "academic_year_id", "day_of_week"),
+        Index("ix_timetable_school_class_day", "school_id", "class_group_id", "day_of_week"),
+        Index("ix_timetable_school_teacher_day", "school_id", "teacher_membership_id", "day_of_week"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    academic_year_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    class_group_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    subject_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    teacher_membership_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    day_of_week: Mapped[int] = mapped_column(nullable=False)  # 0 = Monday .. 6 = Sunday
+    starts_at: Mapped[time] = mapped_column(Time, nullable=False)
+    ends_at: Mapped[time] = mapped_column(Time, nullable=False)
+    room: Mapped[str | None] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 # Python-side onupdate keeps async attribute reads safe: a SQL-side onupdate() would

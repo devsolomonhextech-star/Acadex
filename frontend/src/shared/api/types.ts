@@ -31,6 +31,40 @@ export type ClassGroup = { id: string; academic_year_id: string; name: string; g
 export type Enrollment = { id: string; student_id: string; academic_year_id: string; class_group_id: string; enrolled_on: string; status: string }
 export type Subject = { id: string; code: string; name: string; status: string }
 export type Teacher = { membership_id: string; user_id: string; display_name: string; email: string }
+export type OverviewTerm = { name: string; academic_year: string; ordinal: number; starts_on: string; ends_on: string }
+export type OverviewAttendance = {
+  date: string; lessons_today: number; sessions_submitted: number; records_total: number
+  present: number; late: number; absent: number; excused: number; rate_percent: number | null
+}
+export type OverviewFinance = {
+  invoiced_total: string; paid_total: string; outstanding_total: string
+  open_invoice_count: number; overdue_invoice_count: number; overdue_balance: string
+}
+export type OverviewLesson = {
+  id: string; starts_at: string; ends_at: string; subject_code: string; subject_name: string
+  class_name: string; teacher_name: string; room: string | null
+}
+export type OverviewAttention = {
+  key: string; kind: 'finance' | 'attendance' | 'academics'; title: string; detail: string
+  meta: string; count: number; to: string
+}
+export type OverviewActivity = { week_start: string; students: number; attendance_rate: number | null; payments: string }
+export type Overview = {
+  generated_at: string; current_term: OverviewTerm | null
+  students_total: number; teachers_total: number; classes_total: number
+  attendance: OverviewAttendance | null; finance: OverviewFinance | null
+  lessons_today: OverviewLesson[]; attention: OverviewAttention[]; activity: OverviewActivity[]
+}
+export type AdminTeacher = {
+  membership_id: string; user_id: string; display_name: string; email: string
+  status: string; class_count: number; subject_count: number; created_at: string
+}
+export type TimetableSlot = {
+  id: string; academic_year_id: string; class_group_id: string; class_name: string
+  subject_id: string; subject_name: string; subject_code: string
+  teacher_membership_id: string; teacher_name: string
+  day_of_week: number; day_name: string; starts_at: string; ends_at: string; room: string | null
+}
 export type TeachingAssignment = {
   id: string; class_group_id: string; class_name: string; academic_year_id: string
   subject_id: string; subject_name: string; subject_code: string; teacher_membership_id: string
