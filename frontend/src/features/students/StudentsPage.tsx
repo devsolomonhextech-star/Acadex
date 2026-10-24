@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, DatePicker, Empty, Input, Modal, Select, Space, Table, Tag } from 'antd'
 import type { TableColumnsType } from 'antd'
-import { SearchOutlined, TeamOutlined, UserAddOutlined } from '@ant-design/icons'
+import { CloudUploadOutlined, SearchOutlined, TeamOutlined, UserAddOutlined } from '@ant-design/icons'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import dayjs from 'dayjs'
 import { createStudent, fetchStudents } from './studentsApi'
+import ImportStudentsModal from './ImportStudentsModal'
 import type { Student } from '../../shared/api/types'
 import { useAuth } from '../auth/authHooks'
 import { formatApiError } from '../../shared/api/errors'
@@ -32,6 +33,7 @@ export default function StudentsPage() {
   const [activeSearch, setActiveSearch] = useState('')
   const [status, setStatus] = useState('all')
   const [modalOpen, setModalOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [formError, setFormError] = useState('')
   const { control, handleSubmit, reset, formState: { errors } } = useForm<StudentValues>({
     resolver: zodResolver(studentSchema),
@@ -73,7 +75,7 @@ export default function StudentsPage() {
   const openCreate = () => { reset(); setFormError(''); setModalOpen(true) }
 
   return <div className="page-content students-page">
-    <div className="students-heading"><div><div className="eyebrow">PEOPLE <span className="live-dot"/> STUDENT INFORMATION</div><h1>Students</h1><p className="welcome-subtitle">Manage student records and admission details for {user?.school_name}.</p></div><Button type="primary" icon={<UserAddOutlined/>} onClick={openCreate}>Add student</Button></div>
+    <div className="students-heading"><div><div className="eyebrow">PEOPLE <span className="live-dot"/> STUDENT INFORMATION</div><h1>Students</h1><p className="welcome-subtitle">Manage student records and admission details for {user?.school_name}.</p></div><Space size={8}><Button icon={<CloudUploadOutlined/>} onClick={() => setImportOpen(true)}>Import</Button><Button type="primary" icon={<UserAddOutlined/>} onClick={openCreate}>Add student</Button></Space></div>
     <div className="student-summary"><div className="summary-icon"><TeamOutlined/></div><div><strong>{students.data?.total ?? '—'}</strong><span>Matching records</span></div><div className="summary-divider"/><div className="summary-context">Student records and class enrollment history are scoped to this school.</div></div>
     <section className="panel students-panel"><div className="students-toolbar"><div><h2>Student directory</h2><p>Search by student name or admission number</p></div><Space size={8}><Select aria-label="Student status filter" value={status} options={[{ value: 'all', label: 'All statuses' }, { value: 'active', label: 'Active' }, { value: 'transferred', label: 'Transferred' }, { value: 'graduated', label: 'Graduated' }, { value: 'withdrawn', label: 'Withdrawn' }]} onChange={value => { setStatus(value); setPage(1) }} className="student-filter"/><Input allowClear prefix={<SearchOutlined/>} placeholder="Search students" value={search} onChange={event => { setSearch(event.target.value); setPage(1) }} className="student-search"/></Space></div>
       {students.isError && <div className="student-error">{formatApiError(students.error)}</div>}
@@ -89,5 +91,6 @@ export default function StudentsPage() {
         <div className="student-form-actions"><Button onClick={() => setModalOpen(false)}>Cancel</Button><Button type="primary" htmlType="submit" loading={addStudent.isPending}>Save student</Button></div>
       </form>
     </Modal>
+    <ImportStudentsModal open={importOpen} onClose={() => setImportOpen(false)}/>
   </div>
 }

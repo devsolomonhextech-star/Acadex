@@ -4,6 +4,7 @@ from enum import StrEnum
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     Date,
     DateTime,
@@ -484,4 +485,40 @@ class AssessmentScore(Base):
     comment: Mapped[str | None] = mapped_column(String(240))
     updated_by_membership_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=utcnow)
-    
+
+
+class StudentImportJob(Base):
+    """A validated import preview; students are only created when it is confirmed."""
+
+    __tablename__ = "student_import_jobs"
+    __table_args__ = (
+        UniqueConstraint("school_id", "id", name="uq_student_import_jobs_school_id"),
+        CheckConstraint(
+            "status IN ('previewed', 'confirmed')", name="ck_student_import_jobs_status"
+        ),
+        CheckConstraint(
+            "total_rows >= 0 AND valid_rows >= 0 AND error_rows >= 0 AND duplicate_rows >= 0"
+            " AND created_rows >= 0 AND skipped_rows >= 0",
+            name="ck_student_import_jobs_counts",
+        ),
+        Index("ix_student_import_jobs_school_created", "school_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="previewed", server_default="previewed")
+    # Uploaded header -> canonical field, as used for this preview.
+    column_map: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
+    # Parsed rows with per-row status (valid/error/duplicate/created/skipped) and messages.
+    preview_rows: Mapped[list] = mapped_column(JSON, nullable=False, default=list, server_default="[]")
+    total_rows: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
+    valid_rows: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
+    error_rows: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
+    duplicate_rows: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
+    created_rows: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
+    skipped_rows: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+

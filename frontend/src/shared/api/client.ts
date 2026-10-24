@@ -8,7 +8,8 @@ export function readCsrfCookie(): string {
 
 export async function apiRequest<T>(path: string, options: RequestInit = {}, accessToken?: string): Promise<T> {
   const headers = new Headers(options.headers)
-  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  const isFormData = options.body instanceof FormData
+  if (options.body && !isFormData && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
   const response = await fetch(`${apiBase}/api/v1${path}`, { ...options, headers, credentials: 'include' })
   if (!response.ok) {
@@ -21,6 +22,22 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}, acc
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
+}
+
+export async function apiRequestBlob(path: string, accessToken: string): Promise<Blob> {
+  const response = await fetch(`${apiBase}/api/v1${path}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    credentials: 'include',
+  })
+  if (!response.ok) {
+    let message = `Download failed (${response.status})`
+    try {
+      const body = await response.json() as { detail?: string }
+      if (body.detail) message = body.detail
+    } catch { /* Preserve the status message for non-JSON responses. */ }
+    throw new Error(message)
+  }
+  return response.blob()
 }
 
 export function signIn(schoolSlug: string, email: string, password: string) {

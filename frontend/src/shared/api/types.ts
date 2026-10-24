@@ -89,6 +89,33 @@ export type ReportCardSubject = {
   weighted_total: string; grade: string | null; points: string | null
   assessment_count: number; total_weight: string
 }
+export type ImportRow = {
+  row_number: number
+  admission_number: string
+  first_name: string
+  last_name: string
+  date_of_birth: string | null
+  status: 'valid' | 'error' | 'duplicate' | 'created'
+  message: string | null
+}
+export type ImportJobSummary = {
+  id: string
+  filename: string
+  status: 'previewed' | 'confirmed'
+  total_rows: number
+  valid_rows: number
+  duplicate_rows: number
+  error_rows: number
+  created_rows: number
+  skipped_rows: number
+  created_at: string
+  confirmed_at: string | null
+}
+export type ImportJobDetail = ImportJobSummary & {
+  column_map: Record<string, string>
+  rows: ImportRow[]
+}
+export type ImportHistoryPage = { items: ImportJobSummary[]; page: number; page_size: number; total: number }
 export type ReportCard = {
   school_name: string; academic_year_id: string; academic_year_name: string
   term_id: string; term_name: string; term_starts_on: string; term_ends_on: string

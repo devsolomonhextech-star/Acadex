@@ -15,7 +15,7 @@ Redux Toolkit owns global client/session state. TanStack Query owns remote data,
 
 - **Identity/access:** users, sessions, invitations, school memberships, roles and permission grants.
 - **School setup:** school profile, campuses, academic years/terms, grading and reporting policies.
-- **People:** student/staff profiles, guardian links, documents, status transitions and dated enrollments.
+- **People:** student/staff profiles, guardian links, documents, status transitions, dated enrollments, and bulk student import (preview/confirm).
 - **Academics:** class/subject/teacher assignments, attendance, assessments, moderation and published results.
 - **Finance:** fee schedules, invoices, discounts, payments, allocations, receipts and reconciliation.
 - **Platform operations:** tenant lifecycle, plans/entitlements, audit and operational health.
@@ -40,6 +40,8 @@ The initial identity implementation enforces active membership on every access-t
 The assessment workflow scopes each assessment to one school, academic year, class, subject, and term. Teachers must hold the matching class/subject assignment to create assessments or enter scores. A submitted assessment is locked until an administrator or principal approves it or returns it with feedback; approved scores stay locked. Score and review actions create audit events.
 
 Grading scales are school-owned and must cover 0–100 with contiguous bands; one scale is the default used when computing results, and its `include_positions` flag controls ranking. Weighted term totals only include approved assessments and normalize over their configured weights, so schools are not forced to total exactly 100. Aggregates, grades, and positions are stored as `term_subject_results`/`term_results` rows and recomputed only while the class/term publication is not published. Publishing requires an exact class-name confirmation, records who and when, and blocks recomputation plus approved score edits until an audited withdrawal. Report cards are served only while the class/term publication is published, scoped to the student's active enrollment and the caller's tenant, with teachers limited to their assigned classes; withdrawing a publication revokes report cards along with recomputation. Post-approval assessment corrections remain separate follow-up work.
+
+Bulk student import runs in two phases. The preview phase parses and validates a CSV/Excel upload (canonical column headers, required fields, date formats, in-file and existing-student duplicate detection), persists a tenant-scoped `student_import_jobs` row with per-row outcomes and counts, and writes nothing to the `students` table. The confirm phase re-checks duplicates, creates every still-valid row in one transaction, and skips — rather than fails on — admission numbers created between preview and confirm; any residual unique-constraint race rolls the whole batch back so a retry is safe. Confirming an already-confirmed job returns 409. Every import route is limited to admin/principal/registrar roles, loads jobs through the caller's school scope (cross-tenant access returns 404), enforces upload size and row-count limits before parsing, and records an audit event on confirmation.
 
 ## API and operations
 
