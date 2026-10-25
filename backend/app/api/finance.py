@@ -32,6 +32,9 @@ from app.models import (
     MembershipRole,
     Payment,
     PaymentAllocation,
+    PaymentRefund,
+    PaymentRefundAllocation,
+    School,
     Student,
     StudentEnrollment,
     StudentInvoice,
@@ -134,12 +137,37 @@ class InvoiceAllocationResponse(BaseModel):
     payment_date: date
     method: str
     amount: Decimal
+    refunded_amount: Decimal = Decimal("0.00")
+    refundable_amount: Decimal = Decimal("0.00")
+
+
+class InvoiceRefundResponse(BaseModel):
+    id: UUID
+    refund_number: str
+    amount: Decimal
+    reason: str
+    refund_date: date
+    created_at: datetime
 
 
 class InvoiceDetail(InvoiceSummary):
     academic_year_id: UUID
     lines: list[InvoiceLineResponse]
     allocations: list[InvoiceAllocationResponse]
+    refunds: list[InvoiceRefundResponse]
+
+
+class InvoiceRefundCreate(BaseModel):
+    amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    reason: str = Field(min_length=3, max_length=255)
+    refund_date: date = Field(default_factory=date.today)
+
+
+class InvoiceRefundResult(InvoiceRefundResponse):
+    invoice_id: UUID
+    invoice_paid_amount: Decimal
+    invoice_balance: Decimal
+    invoice_status: str
 
 
 class PaymentCreate(BaseModel):
@@ -477,10 +505,25 @@ async def invoice_detail(
         await session.execute(
             select(PaymentAllocation, Payment.receipt_number, Payment.payment_date, Payment.method)
             .join(Payment, Payment.id == PaymentAllocation.payment_id)
-            .where(PaymentAllocation.invoice_id == invoice.id)
+            .where(PaymentAllocation.school_id == context.school_id, PaymentAllocation.invoice_id == invoice.id)
             .order_by(Payment.payment_date, Payment.created_at)
         )
     ).all()
+    refunded_rows = await session.execute(
+        select(
+            PaymentRefundAllocation.payment_allocation_id,
+            func.coalesce(func.sum(PaymentRefundAllocation.amount), Decimal("0.00")),
+        )
+        .join(PaymentRefund, PaymentRefund.id == PaymentRefundAllocation.refund_id)
+        .where(PaymentRefund.school_id == context.school_id, PaymentRefund.invoice_id == invoice.id)
+        .group_by(PaymentRefundAllocation.payment_allocation_id)
+    )
+    refunded_by_allocation = {allocation_id: amount for allocation_id, amount in refunded_rows.all()}
+    refund_rows = await session.scalars(
+        select(PaymentRefund)
+        .where(PaymentRefund.school_id == context.school_id, PaymentRefund.invoice_id == invoice.id)
+        .order_by(PaymentRefund.refund_date.desc(), PaymentRefund.created_at.desc())
+    )
     class_name = await session.scalar(
         select(ClassGroup.name)
         .join(StudentEnrollment, StudentEnrollment.class_group_id == ClassGroup.id)
@@ -521,9 +564,116 @@ async def invoice_detail(
                 payment_date=payment_date,
                 method=method,
                 amount=allocation.amount,
+                refunded_amount=refunded_by_allocation.get(allocation.id, Decimal("0.00")),
+                refundable_amount=quantize(allocation.amount - refunded_by_allocation.get(allocation.id, Decimal("0.00"))),
             )
             for allocation, receipt_number, payment_date, method in allocation_rows
         ],
+        refunds=[
+            InvoiceRefundResponse(
+                id=refund.id, refund_number=refund.refund_number, amount=refund.amount,
+                reason=refund.reason, refund_date=refund.refund_date, created_at=refund.created_at,
+            )
+            for refund in refund_rows
+        ],
+    )
+
+
+@router.post("/invoices/{invoice_id}/refunds", response_model=InvoiceRefundResult, status_code=status.HTTP_201_CREATED)
+async def refund_invoice_payment(
+    invoice_id: UUID,
+    payload: InvoiceRefundCreate,
+    context: Annotated[TenantContext, Depends(require_roles(*finance_roles))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    invoice = await session.scalar(
+        select(StudentInvoice)
+        .where(StudentInvoice.id == invoice_id, StudentInvoice.school_id == context.school_id)
+        .with_for_update()
+    )
+    if invoice is None:
+        raise _conflict("Invoice not found", 404)
+    if invoice.status == "void":
+        raise _conflict("A void invoice cannot be refunded", 422)
+    amount = quantize(payload.amount)
+    if amount <= 0 or amount > invoice.paid_amount:
+        raise _conflict("Refund amount must be greater than zero and no more than the amount paid", 422)
+
+    allocation_rows = (await session.execute(
+        select(PaymentAllocation, Payment.payment_date, Payment.created_at)
+        .join(Payment, Payment.id == PaymentAllocation.payment_id)
+        .where(
+            PaymentAllocation.school_id == context.school_id,
+            PaymentAllocation.invoice_id == invoice.id,
+            Payment.status == "recorded",
+        )
+        .order_by(Payment.payment_date.desc(), Payment.created_at.desc(), PaymentAllocation.id.desc())
+    )).all()
+    allocation_ids = [allocation.id for allocation, _, _ in allocation_rows]
+    refunded_rows = await session.execute(
+        select(
+            PaymentRefundAllocation.payment_allocation_id,
+            func.coalesce(func.sum(PaymentRefundAllocation.amount), Decimal("0.00")),
+        )
+        .where(
+            PaymentRefundAllocation.school_id == context.school_id,
+            PaymentRefundAllocation.payment_allocation_id.in_(allocation_ids),
+        )
+        .group_by(PaymentRefundAllocation.payment_allocation_id)
+    ) if allocation_ids else None
+    refunded_by_allocation = dict(refunded_rows.all()) if refunded_rows is not None else {}
+    remaining = amount
+    await session.scalar(select(School.id).where(School.id == context.school_id).with_for_update())
+    refund_sequence = (await session.scalar(
+        select(func.count()).select_from(PaymentRefund).where(PaymentRefund.school_id == context.school_id)
+    ) or 0) + 1
+    refund = PaymentRefund(
+        school_id=context.school_id,
+        invoice_id=invoice.id,
+        recorded_by_user_id=context.user_id,
+        refund_number=f"RFD-{refund_sequence:06d}",
+        amount=amount,
+        reason=payload.reason.strip(),
+        refund_date=payload.refund_date,
+    )
+    if not refund.reason:
+        raise _conflict("Refund reason is required", 422)
+    session.add(refund)
+    await session.flush()
+    for allocation, _, _ in allocation_rows:
+        available = quantize(allocation.amount - refunded_by_allocation.get(allocation.id, Decimal("0.00")))
+        portion = min(available, remaining)
+        if portion <= 0:
+            continue
+        session.add(PaymentRefundAllocation(
+            school_id=context.school_id,
+            refund_id=refund.id,
+            payment_allocation_id=allocation.id,
+            amount=portion,
+        ))
+        remaining = quantize(remaining - portion)
+        if remaining == 0:
+            break
+    if remaining > 0:
+        await session.rollback()
+        raise _conflict("The invoice’s payment history changed. Refresh and try the refund again.", 409)
+
+    invoice.paid_amount = quantize(invoice.paid_amount - amount)
+    invoice.status = "paid" if invoice.paid_amount >= invoice.total_amount else "partially_paid" if invoice.paid_amount > 0 else "issued"
+    await _audit(session, context, "finance.invoice_refunded", "payment_refund", refund.id)
+    await session.commit()
+    await session.refresh(refund)
+    return InvoiceRefundResult(
+        id=refund.id,
+        refund_number=refund.refund_number,
+        amount=refund.amount,
+        reason=refund.reason,
+        refund_date=refund.refund_date,
+        created_at=refund.created_at,
+        invoice_id=invoice.id,
+        invoice_paid_amount=invoice.paid_amount,
+        invoice_balance=quantize(invoice.total_amount - invoice.paid_amount),
+        invoice_status=invoice.status,
     )
 
 
