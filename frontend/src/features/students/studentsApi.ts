@@ -34,10 +34,11 @@ export type DocumentInput = {
   notes?: string | null
 }
 
-export function fetchStudents(token: string, page: number, search: string, status?: string) {
+export function fetchStudents(token: string, page: number, search: string, status?: string, academicYearId?: string) {
   const params = new URLSearchParams({ page: String(page), page_size: '10' })
   if (search.trim()) params.set('search', search.trim())
   if (status) params.set('status', status)
+  if (academicYearId) params.set('academic_year_id', academicYearId)
   return apiRequest<StudentPage>(`/students?${params}`, {}, token)
 }
 

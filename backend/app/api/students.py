@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import TenantContext, require_roles
@@ -16,7 +17,7 @@ from app.domain.students import (
     get_student,
     list_students,
 )
-from app.models import MembershipRole, Student
+from app.models import AcademicYear, ClassGroup, Guardian, MembershipRole, Student, StudentEnrollment, StudentGuardian
 
 router = APIRouter(prefix="/api/v1/students", tags=["students"])
 student_roles = (MembershipRole.SCHOOL_ADMIN, MembershipRole.PRINCIPAL, MembershipRole.REGISTRAR)
@@ -60,6 +61,9 @@ class StudentResponse(BaseModel):
     last_name: str
     date_of_birth: date | None
     status: str
+    class_name: str | None = None
+    guardian_name: str | None = None
+    guardian_contact: str | None = None
 
 
 class StudentPageResponse(BaseModel):
@@ -83,10 +87,48 @@ async def students_directory(
     status_filter: Literal["active", "transferred", "graduated", "withdrawn"] | None = Query(
         default=None, alias="status"
     ),
+    academic_year_id: UUID | None = None,
 ) -> StudentPageResponse:
     result = await list_students(session, context.school_id, page, page_size, search, status_filter)
+    year_classes: dict[UUID, str] = {}
+    if academic_year_id is not None:
+        year_exists = await session.scalar(select(AcademicYear.id).where(
+            AcademicYear.id == academic_year_id, AcademicYear.school_id == context.school_id,
+        ))
+        if year_exists is None:
+            raise HTTPException(status_code=404, detail="Academic year not found")
+        if result.items:
+            class_rows = (await session.execute(
+                select(StudentEnrollment.student_id, ClassGroup.name)
+                .join(ClassGroup, (ClassGroup.id == StudentEnrollment.class_group_id)
+                      & (ClassGroup.school_id == StudentEnrollment.school_id))
+                .where(StudentEnrollment.school_id == context.school_id,
+                       StudentEnrollment.academic_year_id == academic_year_id,
+                       StudentEnrollment.status == "active",
+                       StudentEnrollment.student_id.in_([student.id for student in result.items]))
+            )).all()
+            year_classes = {student_id: class_name for student_id, class_name in class_rows}
+    guardians: dict[UUID, tuple[str, str | None]] = {}
+    if result.items:
+        guardian_rows = (await session.execute(
+            select(StudentGuardian.student_id, Guardian.first_name, Guardian.last_name,
+                   Guardian.email, Guardian.phone)
+            .join(Guardian, (Guardian.id == StudentGuardian.guardian_id)
+                  & (Guardian.school_id == StudentGuardian.school_id))
+            .where(StudentGuardian.school_id == context.school_id,
+                   StudentGuardian.is_primary.is_(True),
+                   StudentGuardian.student_id.in_([student.id for student in result.items]))
+        )).all()
+        guardians = {
+            student_id: (f"{first_name} {last_name}", email or phone)
+            for student_id, first_name, last_name, email, phone in guardian_rows
+        }
     return StudentPageResponse(
-        items=[response_for(item) for item in result.items],
+        items=[StudentResponse.model_validate(item).model_copy(update={
+            "class_name": year_classes.get(item.id),
+            "guardian_name": guardians.get(item.id, (None, None))[0],
+            "guardian_contact": guardians.get(item.id, (None, None))[1],
+        }) for item in result.items],
         page=page,
         page_size=page_size,
         total=result.total,

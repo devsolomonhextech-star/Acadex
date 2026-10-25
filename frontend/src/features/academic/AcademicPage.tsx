@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, DatePicker, Empty, Form, Input, Modal, Select, Table, Tag, message } from 'antd'
+import { Alert, Button, DatePicker, Empty, Form, Input, Modal, Select, Table, Tabs, Tag, message } from 'antd'
 import type { TableColumnsType } from 'antd'
 import { BookOutlined, CalendarOutlined, PlusOutlined, TeamOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -34,6 +34,7 @@ export default function AcademicPage() {
   const queryClient = useQueryClient()
   const [selectedYear, setSelectedYear] = useState('')
   const [selectedClass, setSelectedClass] = useState('')
+  const [activeSection, setActiveSection] = useState('classes')
   const [modal, setModal] = useState<ModalKind>(null)
   const [form] = Form.useForm<AcademicFormValues>()
   const [toast, contextHolder] = message.useMessage()
@@ -104,11 +105,9 @@ export default function AcademicPage() {
       {years.length ? <div className="academic-year-selector"><Select value={yearId} onChange={value => { setSelectedYear(value); setPeriodYearId(value) }} options={years.map((year: AcademicYear) => ({ value: year.id, label: year.name }))} aria-label="Academic year"/><div className="academic-dates">{dayjs(years.find(year => year.id === yearId)?.starts_on).format('D MMM YYYY')} <span>to</span> {dayjs(years.find(year => year.id === yearId)?.ends_on).format('D MMM YYYY')}</div><Tag color="blue">{years.find(year => year.id === yearId)?.status}</Tag></div>
         : <div className="academic-empty-year"><div><strong>Start with an academic year</strong><p>Add a year to organize terms, classes and enrollment.</p></div>{!readOnly && <Button type="primary" icon={<PlusOutlined />} onClick={() => startCreate('year')}>Add academic year</Button>}</div>}
     </section>
-    {yearId && <>
-      <TeachingAssignmentsPanel yearId={yearId} classes={classGroups} />
-      <TimetablePanel yearId={yearId} classes={classGroups} />
-      <TeachersPanel />
-      <div className="academic-overview-grid">
+    {yearId && <Tabs className="academic-workspace-tabs" activeKey={activeSection} onChange={setActiveSection} items={[
+      { key: 'classes', label: 'Classes', children: <>
+        <div className="academic-overview-grid">
         <section className="academic-section panel"><div className="academic-card-heading"><div><span className="academic-card-icon"><CalendarOutlined /></span><h2>Terms</h2></div>{!readOnly && <Button type="text" size="small" icon={<PlusOutlined />} onClick={() => startCreate('term')}>Add term</Button>}</div>
           {terms.length ? <div className="term-list">{terms.map((term: AcademicTerm) => <div className="term-row" key={term.id}><span className="term-number">{String(term.ordinal).padStart(2, '0')}</span><span><strong>{term.name}</strong><small>{dayjs(term.starts_on).format('D MMM')} – {dayjs(term.ends_on).format('D MMM YYYY')}</small></span></div>)}</div> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No terms set up yet" />}
         </section>
@@ -119,7 +118,11 @@ export default function AcademicPage() {
       {classId && <section className="academic-section panel roster-panel"><div className="academic-card-heading"><div><span className="academic-card-icon"><TeamOutlined /></span><div><h2>Class roster</h2><p>{classGroups.find(group => group.id === classId)?.name} · {enrollmentsQuery.data?.length ?? 0} enrolled</p></div></div>{!readOnly && <Button type="primary" icon={<PlusOutlined />} onClick={() => startCreate('enrollment')} disabled={!students.length}>Enroll student</Button>}</div>
       <Table<Enrollment> rowKey="id" columns={enrollmentColumns} dataSource={enrollmentsQuery.data ?? []} loading={enrollmentsQuery.isLoading || studentQuery.isLoading} pagination={{ pageSize: 8, showSizeChanger: false }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No students in this class yet" /> }} />
       </section>}
-    </>}
+      </> },
+      { key: 'subjects', label: 'Subjects', children: <TeachingAssignmentsPanel yearId={yearId} classes={classGroups} /> },
+      { key: 'teachers', label: 'Teachers', children: <TeachersPanel /> },
+      { key: 'timetable', label: 'Timetable', children: <TimetablePanel yearId={yearId} classes={classGroups} /> },
+    ]} />}
     <Modal title={{ year: 'Add academic year', term: 'Add term', class: 'Add class group', enrollment: 'Enroll student' }[modal ?? 'year']} open={!!modal} onCancel={() => setModal(null)} footer={null} destroyOnClose>
       <Form form={form} layout="vertical" onFinish={submitAcademicForm} className="academic-form">
         {modal === 'year' && <><Form.Item name="name" label="Year name" rules={[{ required: true, message: 'Enter a year name' }]}><Input placeholder="2026 / 2027" maxLength={80}/></Form.Item><Form.Item name="dates" label="Academic year dates" rules={[{ required: true, message: 'Choose the start and end dates' }]}><DatePicker.RangePicker className="academic-range" format="D MMM YYYY"/></Form.Item></>}

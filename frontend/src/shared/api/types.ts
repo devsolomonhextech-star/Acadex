@@ -23,6 +23,9 @@ export type Student = {
   last_name: string
   date_of_birth: string | null
   status: 'active' | 'transferred' | 'graduated' | 'withdrawn'
+  class_name?: string | null
+  guardian_name?: string | null
+  guardian_contact?: string | null
 }
 
 export type StudentPage = { items: Student[]; page: number; page_size: number; total: number }
