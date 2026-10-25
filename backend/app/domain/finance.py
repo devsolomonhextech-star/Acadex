@@ -22,6 +22,8 @@ from app.models import (
     InvoiceLineItem,
     Payment,
     PaymentAllocation,
+    PaymentRefund,
+    PaymentRefundAllocation,
     Student,
     StudentEnrollment,
     StudentInvoice,
@@ -309,13 +311,24 @@ async def finance_summary(
             Payment.status == "recorded",
         )
     )
+    refund_total = await session.scalar(
+        select(func.coalesce(func.sum(PaymentRefund.amount), ZERO)).where(
+            PaymentRefund.school_id == school_id,
+        )
+    )
     allocated_total = await session.scalar(
         select(func.coalesce(func.sum(PaymentAllocation.amount), ZERO)).where(
             PaymentAllocation.school_id == school_id
         )
     )
+    refunded_allocations_total = await session.scalar(
+        select(func.coalesce(func.sum(PaymentRefundAllocation.amount), ZERO)).where(
+            PaymentRefundAllocation.school_id == school_id
+        )
+    )
     invoiced, paid = quantize(invoiced), quantize(paid)
-    payments_total, allocated_total = quantize(payments_total), quantize(allocated_total)
+    payments_total = quantize(payments_total - refund_total)
+    allocated_total = quantize(allocated_total - refunded_allocations_total)
     return {
         "invoiced_total": invoiced,
         "paid_total": paid,

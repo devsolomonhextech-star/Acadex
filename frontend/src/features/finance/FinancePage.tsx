@@ -1,19 +1,19 @@
 import { useEffect, useState } from 'react'
 import dayjs from 'dayjs'
 import {
-  Alert, AutoComplete, Button, DatePicker, Drawer, Empty, Input, Modal, Popconfirm, Select, Space, Table, Tabs, Tag,
+  Alert, AutoComplete, Button, DatePicker, Drawer, Empty, Input, Modal, Popconfirm, Select, Space, Table, Tabs, Tag, message,
 } from 'antd'
 import type { TableColumnsType } from 'antd'
 import {
   BarChartOutlined, CheckCircleOutlined, CreditCardOutlined, FileTextOutlined, PlusOutlined,
-  SearchOutlined, ThunderboltOutlined,
+  SearchOutlined, ThunderboltOutlined, PrinterOutlined, UndoOutlined, UserOutlined,
 } from '@ant-design/icons'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  archiveFeeStructure, createFeeCategory, createFeeStructure, createPayment, fetchFeeCategories,
+  archiveFeeStructure, createFeeCategory, createFeeStructure, createPayment, refundInvoice, fetchFeeCategories,
   fetchFeeStructures, fetchFinanceSummary, fetchInvoiceDetail, fetchInvoices, fetchPayments, generateInvoices,
 } from './financeApi'
 import { fetchClassGroups } from '../academic/academicApi'
@@ -47,6 +47,13 @@ const paymentSchema = z.object({
 })
 type PaymentValues = z.infer<typeof paymentSchema>
 
+const refundSchema = z.object({
+  amount: amountSchema,
+  reason: z.string().trim().min(3, 'Enter a refund reason').max(255, 'Maximum 255 characters'),
+  refund_date: z.string().min(1, 'Choose the refund date'),
+})
+type RefundValues = z.infer<typeof refundSchema>
+
 const invoiceStatusColors: Record<InvoiceStatus, string> = {
   issued: 'blue', partially_paid: 'orange', paid: 'green', void: 'default',
 }
@@ -78,10 +85,12 @@ export default function FinancePage() {
   const [structureOpen, setStructureOpen] = useState(false)
   const [generateOpen, setGenerateOpen] = useState(false)
   const [paymentOpen, setPaymentOpen] = useState(false)
+  const [refundOpen, setRefundOpen] = useState(false)
   const [pageError, setPageError] = useState('')
   const [structureError, setStructureError] = useState('')
   const [generateError, setGenerateError] = useState('')
   const [paymentError, setPaymentError] = useState('')
+  const [refundError, setRefundError] = useState('')
 
   useEffect(() => {
     const timer = window.setTimeout(() => setActiveSearch(invoiceSearch), 250)
@@ -216,6 +225,22 @@ export default function FinancePage() {
       await invalidateFinance()
     },
     onError: error => setPaymentError(formatApiError(error)),
+  })
+  const refundForm = useForm<RefundValues>({
+    resolver: zodResolver(refundSchema),
+    defaultValues: { amount: '', reason: '', refund_date: dayjs().format('YYYY-MM-DD') },
+  })
+  const saveRefund = useMutation({
+    mutationFn: (values: RefundValues) => refundInvoice(token, drawerInvoiceId!, values),
+    onSuccess: async result => {
+      setRefundError('')
+      setRefundOpen(false)
+      refundForm.reset({ amount: '', reason: '', refund_date: dayjs().format('YYYY-MM-DD') })
+      message.success(`Refund ${result.refund_number} recorded`)
+      await invalidateFinance()
+      await queryClient.invalidateQueries({ queryKey: ['finance', 'invoice', drawerInvoiceId] })
+    },
+    onError: error => setRefundError(formatApiError(error)),
   })
 
   const classOptions = (classes.data ?? []).map(group => ({ value: group.id, label: group.name }))
@@ -511,22 +536,38 @@ export default function FinancePage() {
       ]}/>
     </section>
 
-    <Drawer title={invoiceDetail.data ? `Invoice ${invoiceDetail.data.invoice_number}` : 'Invoice'} open={Boolean(drawerInvoiceId)}
-      onClose={() => setDrawerInvoiceId(null)} width={520} destroyOnHidden>
+    <Drawer title={<div className="finance-drawer-title"><span className="finance-drawer-title-icon"><FileTextOutlined/></span><span><small>INVOICE DETAILS</small><strong>{invoiceDetail.data?.invoice_number ?? 'Invoice'}</strong></span></div>} open={Boolean(drawerInvoiceId)}
+      onClose={() => setDrawerInvoiceId(null)} width={480} className="finance-invoice-drawer" destroyOnHidden>
       {!invoiceDetail.data
         ? <div className="finance-drawer-loading">Loading…</div>
-        : <>
-            <div className="drawer-student">
-              <strong>{invoiceDetail.data.student_name}</strong>
-              <span>{invoiceDetail.data.admission_number} · {invoiceDetail.data.class_name ?? 'No class'} · {invoiceDetail.data.term_name}</span>
+        : <div className="finance-invoice-print">
+            <div className="finance-invoice-print-brand"><strong>{user?.school_name}</strong><span>Student fee invoice</span></div>
+            <div className="drawer-student finance-drawer-student">
+              <span className="finance-drawer-avatar"><UserOutlined/></span>
+              <span className="finance-drawer-student-copy"><strong>{invoiceDetail.data.student_name}</strong><small>{invoiceDetail.data.admission_number} <i/> {invoiceDetail.data.class_name ?? 'No class'} <i/> {invoiceDetail.data.term_name}</small></span>
               <Tag color={invoiceStatusColors[invoiceDetail.data.status]} bordered={false} className="student-status">
                 {invoiceStatusLabels[invoiceDetail.data.status]}
               </Tag>
             </div>
-            <div className="drawer-totals">
-              <div><span>Total</span><strong>GH₵ {money(invoiceDetail.data.total_amount)}</strong></div>
+            <div className="finance-invoice-actions">
+              <Button icon={<PrinterOutlined/>} onClick={() => window.print()}>Print</Button>
+              {Number(invoiceDetail.data.paid_amount) > 0 && invoiceDetail.data.status !== 'void' && <Button icon={<UndoOutlined/>} onClick={() => {
+                setRefundError('')
+                refundForm.reset({ amount: invoiceDetail.data!.paid_amount, reason: '', refund_date: dayjs().format('YYYY-MM-DD') })
+                setRefundOpen(true)
+              }}>Refund</Button>}
+            </div>
+            <div className="finance-invoice-summary-box">
+              <div><span>Total amount</span><strong>GH₵ {money(invoiceDetail.data.total_amount)}</strong></div>
               <div><span>Paid</span><strong>GH₵ {money(invoiceDetail.data.paid_amount)}</strong></div>
-              <div><span>Balance</span><strong>GH₵ {money(invoiceDetail.data.balance)}</strong></div>
+              <div className="is-balance"><span>Outstanding</span><strong>GH₵ {money(invoiceDetail.data.balance)}</strong></div>
+            </div>
+            <h4 className="drawer-section-title">Invoice details</h4>
+            <div className="finance-invoice-meta">
+              <div><span>Invoice number</span><strong>{invoiceDetail.data.invoice_number}</strong></div>
+              <div><span>Issue date</span><strong>{dayjs(invoiceDetail.data.issued_on).format('D MMM YYYY')}</strong></div>
+              <div><span>Academic year</span><strong>{activeYear?.name ?? '—'}</strong></div>
+              <div><span>Status</span><Tag color={invoiceStatusColors[invoiceDetail.data.status]} bordered={false} className="student-status">{invoiceStatusLabels[invoiceDetail.data.status]}</Tag></div>
             </div>
             {Number(invoiceDetail.data.balance) > 0 && (
               <Button className="finance-drawer-pay" type="primary" icon={<PlusOutlined/>} block
@@ -547,7 +588,7 @@ export default function FinancePage() {
                 Record payment · GH₵ {money(invoiceDetail.data.balance)} due
               </Button>
             )}
-            <h4 className="drawer-section-title">Fee lines</h4>
+            <h4 className="drawer-section-title">Fee breakdown</h4>
             <Table rowKey="id" size="small" pagination={false}
               dataSource={invoiceDetail.data.lines}
               columns={[
@@ -555,17 +596,38 @@ export default function FinancePage() {
                 { title: 'AMOUNT', dataIndex: 'amount', key: 'amount', align: 'right', render: value => money(value) },
               ]}
               locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No lines"/> }}/>
-            <h4 className="drawer-section-title">Payments applied</h4>
+            <h4 className="drawer-section-title">Payment history</h4>
             <Table rowKey="id" size="small" pagination={false}
               dataSource={invoiceDetail.data.allocations}
               columns={[
                 { title: 'RECEIPT', dataIndex: 'receipt_number', key: 'receipt_number' },
                 { title: 'DATE', dataIndex: 'payment_date', key: 'payment_date', render: value => dayjs(value).format('D MMM YYYY') },
-                { title: 'AMOUNT', dataIndex: 'amount', key: 'amount', align: 'right', render: value => money(value) },
+                { title: 'APPLIED', dataIndex: 'amount', key: 'amount', align: 'right', render: value => money(value) },
               ]}
               locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No payments applied yet"/> }}/>
-        </>}
+            {invoiceDetail.data.refunds.length > 0 && <>
+              <h4 className="drawer-section-title">Refund history</h4>
+              <div className="finance-refund-history">{invoiceDetail.data.refunds.map(refund => <div key={refund.id}><span className="finance-refund-mark"><UndoOutlined/></span><span><strong>{refund.refund_number}</strong><small>{dayjs(refund.refund_date).format('D MMM YYYY')} · {refund.reason}</small></span><b>− GH₵ {money(refund.amount)}</b></div>)}</div>
+            </>}
+          </div>}
     </Drawer>
+
+    <Modal title="Record a refund" open={refundOpen} onCancel={() => setRefundOpen(false)} footer={null} destroyOnHidden>
+      <p className="modal-intro">Record money already returned to the student’s family. This updates the school ledger and invoice balance; it does not transfer funds through a payment provider.</p>
+      {refundError && <Alert className="import-alert" type="error" showIcon message={refundError}/>}
+      <form className="student-form" onSubmit={refundForm.handleSubmit(values => saveRefund.mutate(values))}>
+        <label>Refund amount (GH₵)</label>
+        <Controller control={refundForm.control} name="amount" render={({ field }) => <Input {...field} inputMode="decimal" placeholder="0.00" prefix="GH₵" maxLength={13}/>}/>
+        {refundForm.formState.errors.amount && <small>{refundForm.formState.errors.amount.message}</small>}
+        <label>Refund date</label>
+        <Controller control={refundForm.control} name="refund_date" render={({ field }) => <DatePicker value={field.value ? dayjs(field.value) : null} onChange={value => field.onChange(value?.format('YYYY-MM-DD') ?? '')} format="D MMM YYYY" className="student-form-control"/>}/>
+        {refundForm.formState.errors.refund_date && <small>{refundForm.formState.errors.refund_date.message}</small>}
+        <label>Reason</label>
+        <Controller control={refundForm.control} name="reason" render={({ field }) => <Input.TextArea {...field} rows={3} maxLength={255} showCount placeholder="e.g. Duplicate payment returned to guardian"/>}/>
+        {refundForm.formState.errors.reason && <small>{refundForm.formState.errors.reason.message}</small>}
+        <div className="student-form-actions"><Button onClick={() => setRefundOpen(false)}>Cancel</Button><Button type="primary" htmlType="submit" loading={saveRefund.isPending} icon={<UndoOutlined/>}>Confirm refund</Button></div>
+      </form>
+    </Modal>
 
     <Modal title="Add a fee structure" open={structureOpen} onCancel={() => setStructureOpen(false)} footer={null} destroyOnHidden>
       <p className="modal-intro">Define what students in a class pay for one term. You can then generate invoices for the whole class in one step.</p>

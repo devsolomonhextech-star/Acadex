@@ -266,9 +266,17 @@ export type InvoiceLine = { id: string; description: string; amount: string; fee
 export type InvoiceAllocation = {
   id: string; payment_id: string; receipt_number: string
   payment_date: string; method: string; amount: string
+  refunded_amount: string; refundable_amount: string
+}
+export type InvoiceRefund = {
+  id: string; refund_number: string; amount: string; reason: string
+  refund_date: string; created_at: string
+}
+export type InvoiceRefundResult = InvoiceRefund & {
+  invoice_id: string; invoice_paid_amount: string; invoice_balance: string; invoice_status: InvoiceStatus
 }
 export type InvoiceDetail = InvoiceSummary & {
-  academic_year_id: string; lines: InvoiceLine[]; allocations: InvoiceAllocation[]
+  academic_year_id: string; lines: InvoiceLine[]; allocations: InvoiceAllocation[]; refunds: InvoiceRefund[]
 }
 export type InvoicePage = { items: InvoiceSummary[]; page: number; page_size: number; total: number }
 export type PaymentMethod = 'cash' | 'mobile_money' | 'bank_transfer' | 'card' | 'cheque' | 'other'

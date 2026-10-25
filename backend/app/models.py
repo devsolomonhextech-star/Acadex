@@ -742,6 +742,46 @@ class PaymentAllocation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class PaymentRefund(Base):
+    """An audited partial or full refund recorded against an invoice."""
+
+    __tablename__ = "payment_refunds"
+    __table_args__ = (
+        UniqueConstraint("school_id", "id", name="uq_payment_refunds_school_id"),
+        UniqueConstraint("school_id", "refund_number", name="uq_payment_refunds_school_number"),
+        CheckConstraint("amount > 0", name="ck_payment_refunds_amount"),
+        Index("ix_payment_refunds_school_invoice", "school_id", "invoice_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    invoice_id: Mapped[UUID] = mapped_column(ForeignKey("student_invoices.id", ondelete="RESTRICT"), nullable=False)
+    recorded_by_user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    refund_number: Mapped[str] = mapped_column(String(24), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    reason: Mapped[str] = mapped_column(String(255), nullable=False)
+    refund_date: Mapped[date] = mapped_column(Date, nullable=False, default=date.today)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PaymentRefundAllocation(Base):
+    """Connect a refund to the original payment allocation it reverses."""
+
+    __tablename__ = "payment_refund_allocations"
+    __table_args__ = (
+        UniqueConstraint("school_id", "id", name="uq_payment_refund_allocations_school_id"),
+        CheckConstraint("amount > 0", name="ck_payment_refund_allocations_amount"),
+        Index("ix_payment_refund_allocations_refund", "refund_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    refund_id: Mapped[UUID] = mapped_column(ForeignKey("payment_refunds.id", ondelete="RESTRICT"), nullable=False)
+    payment_allocation_id: Mapped[UUID] = mapped_column(ForeignKey("payment_allocations.id", ondelete="RESTRICT"), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 
 class Guardian(Base):
     __tablename__ = "guardians"

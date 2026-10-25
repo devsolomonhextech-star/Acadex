@@ -1,6 +1,6 @@
 import { apiRequest } from '../../shared/api/client'
 import type {
-  FeeCategory, FeeStructure, FinanceSummary, GenerateInvoicesResult, InvoiceDetail, InvoicePage,
+  FeeCategory, FeeStructure, FinanceSummary, GenerateInvoicesResult, InvoiceDetail, InvoicePage, InvoiceRefundResult,
   InvoiceStatus, Payment, PaymentMethod, PaymentPage,
 } from '../../shared/api/types'
 
@@ -46,6 +46,12 @@ export function fetchInvoices(token: string, params: {
 
 export function fetchInvoiceDetail(token: string, invoiceId: string) {
   return apiRequest<InvoiceDetail>(`/finance/invoices/${invoiceId}`, {}, token)
+}
+
+export function refundInvoice(token: string, invoiceId: string, payload: { amount: string; reason: string; refund_date: string }) {
+  return apiRequest<InvoiceRefundResult>(`/finance/invoices/${invoiceId}/refunds`, {
+    method: 'POST', body: JSON.stringify(payload),
+  }, token)
 }
 
 export function fetchPayments(token: string, page: number, termId?: string) {
