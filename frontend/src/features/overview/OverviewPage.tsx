@@ -5,6 +5,7 @@ import { Alert, Button, Empty, Spin, Tag, message } from 'antd'
 import { CalendarOutlined, CreditCardOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons'
 import { useAuth } from '../auth/authHooks'
 import { formatApiError } from '../../shared/api/errors'
+import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 import type { Overview, SchoolUser } from '../../shared/api/types'
 import { fetchOverview, seedDemoFees } from './overviewApi'
 
@@ -56,6 +57,7 @@ function minutesOf(time: string) {
 
 export default function Overview({ user }: { user: SchoolUser }) {
   const { accessToken } = useAuth()
+  const { yearId, termId, loading: periodLoading } = useAcademicPeriod()
   const [now, setNow] = useState(() => new Date())
 
   // The page stays honest as the clock moves: lesson states tick with it.
@@ -65,9 +67,9 @@ export default function Overview({ user }: { user: SchoolUser }) {
   }, [])
 
   const query = useQuery({
-    queryKey: ['overview', user.school_id],
-    queryFn: () => fetchOverview(accessToken!),
-    enabled: !!accessToken,
+    queryKey: ['overview', user.school_id, yearId, termId],
+    queryFn: () => fetchOverview(accessToken!, yearId, termId),
+    enabled: !!accessToken && !periodLoading,
     refetchInterval: REFRESH_MS,
   })
   const data = query.data
@@ -80,6 +82,7 @@ export default function Overview({ user }: { user: SchoolUser }) {
       if (result.payments_created) parts.push(`${result.payments_created} payment${result.payments_created === 1 ? '' : 's'}`)
       if (result.attendance_records_created) parts.push(`${result.attendance_records_created} attendance records`)
       if (result.results_created) parts.push(`${result.results_created} term results`)
+      if (result.calendar_events_created) parts.push(`${result.calendar_events_created} academic calendar events`)
       if (parts.length) message.success(`Demo data created: ${parts.join(', ')}`)
       else message.info('Demo data is already generated')
       void query.refetch()
@@ -121,10 +124,12 @@ export default function Overview({ user }: { user: SchoolUser }) {
         icon: <TeamOutlined />, color: 'blue', bars: barHeights(studentSeries),
       },
       {
-        name: 'Attendance today',
+        name: termId ? `Attendance · ${data.current_term?.name ?? 'Term'}` : 'Attendance today',
         value: data.attendance?.rate_percent != null ? `${data.attendance.rate_percent}%` : '—',
         delta: data.attendance?.records_total ? `${data.attendance.present + data.attendance.late}/${data.attendance.records_total} marked` : 'Not marked yet',
-        note: data.attendance ? `${data.attendance.sessions_submitted} of ${data.attendance.lessons_today} lessons` : '',
+        note: data.attendance ? termId
+          ? `${data.attendance.sessions_submitted} class sessions recorded`
+          : `${data.attendance.sessions_submitted} of ${data.attendance.lessons_today} lessons` : '',
         icon: <CalendarOutlined />, color: 'green', bars: barHeights(attendanceSeries),
       },
     ]
@@ -139,7 +144,7 @@ export default function Overview({ user }: { user: SchoolUser }) {
     } else {
       items.push({
         name: 'Class groups', value: data.classes_total.toLocaleString(),
-        delta: 'Active', note: 'for the current year',
+        delta: 'Active', note: `for ${data.current_term?.academic_year ?? 'the selected year'}`,
         icon: <CalendarOutlined />, color: 'purple', bars: barHeights([]),
       })
     }
@@ -151,7 +156,7 @@ export default function Overview({ user }: { user: SchoolUser }) {
       icon: <UserOutlined />, color: 'orange', bars: barHeights([]),
     })
     return items
-  }, [data])
+  }, [data, termId])
 
   const chart = useMemo(() => {
     const activity = data?.activity ?? []

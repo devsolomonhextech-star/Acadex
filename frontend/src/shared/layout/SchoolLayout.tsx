@@ -7,9 +7,10 @@ import {
   MenuOutlined, MessageOutlined, ReadOutlined, SearchOutlined, SettingOutlined,
   TeamOutlined, TrophyOutlined, UserAddOutlined, UserOutlined,
 } from '@ant-design/icons'
-import { Avatar, Badge, Button, Input } from 'antd'
+import { Avatar, Badge, Button, Input, Select } from 'antd'
 import type { ReactNode } from 'react'
 import type { SchoolUser } from '../api/types'
+import { useAcademicPeriod } from '../academic/AcademicPeriodContext'
 
 type SidebarItem = { label: string; to?: string; icon: ReactNode }
 
@@ -25,9 +26,10 @@ const workspaceItems: SidebarItem[] = [
   { label: 'Parent Portal', to: '/parents', icon: <UserOutlined /> },
 ]
 
-// School tools: placeholders until their pages are built out.
+// School tools: the calendar is live; the remaining items are placeholders.
 const toolItems: SidebarItem[] = [
-  { label: 'Academic calendar', icon: <CalendarOutlined /> },
+  { label: 'Academic calendar', to: '/academic-calendar', icon: <CalendarOutlined /> },
+  { label: 'Settings', to: '/settings', icon: <SettingOutlined /> },
   { label: 'Admissions', icon: <UserAddOutlined /> },
   { label: 'Library', icon: <ReadOutlined /> },
   { label: 'Transport', icon: <CarOutlined /> },
@@ -48,6 +50,7 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
   const toggleSection = (key: string) =>
     setCollapsedSections(previous => ({ ...previous, [key]: !previous[key] }))
   const location = useLocation()
+  const { years, terms, yearId, termId, setYearId, setTermId, loading: periodLoading } = useAcademicPeriod()
   const { alerts, dismiss, contextHolder } = useLessonAlerts()
   const currentPage = navigation.find(item => item.to === location.pathname)?.label
     ?? (location.pathname.startsWith('/students/') ? 'Student profile'
@@ -87,10 +90,17 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
         aria-controls="sidebar-tools" onClick={() => toggleSection('tools')}>
         <span>SCHOOL TOOLS</span><span className="section-chevron" aria-hidden="true">⌄</span>
       </button>
-      {!collapsedSections.tools && <div id="sidebar-tools">{toolItems.map(item => <div key={item.label} className="nav-link nav-link-disabled" aria-disabled="true">{item.icon}<span>{item.label}</span><small>Planned</small></div>)}</div>}
-      <div className="sidebar-bottom"><div className="nav-link nav-link-disabled" aria-disabled="true"><SettingOutlined /><span>Settings</span><small>Planned</small></div><div className="help-card"><div className="help-icon">✳</div><strong>Need a hand?</strong><p>Visit the help center for tips and guides.</p><button disabled>Help center coming soon</button></div><div className="profile"><Avatar size={36} style={{ backgroundColor: '#e5e9ff', color: '#384ec2', fontWeight: 700 }}>{initials(user.display_name)}</Avatar><div><strong>{user.display_name}</strong><span>{user.role.replaceAll('_', ' ')}</span></div><button className="logout-button" onClick={onLogout} title="Sign out" aria-label="Sign out">↗</button></div></div>
+      {!collapsedSections.tools && <div id="sidebar-tools">{toolItems.filter(item => item.label !== 'Settings' || user.role === 'school_admin').map(item => item.to
+        ? <NavLink key={item.label} to={item.to} onClick={() => setOpen(false)} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>{item.icon}<span>{item.label}</span></NavLink>
+        : <div key={item.label} className="nav-link nav-link-disabled" aria-disabled="true">{item.icon}<span>{item.label}</span><small>Planned</small></div>)}</div>}
+      <div className="sidebar-bottom"><div className="help-card"><div className="help-icon">✳</div><strong>Need a hand?</strong><p>Visit the help center for tips and guides.</p><button disabled>Help center coming soon</button></div><div className="profile"><Avatar size={36} style={{ backgroundColor: '#e5e9ff', color: '#384ec2', fontWeight: 700 }}>{initials(user.display_name)}</Avatar><div><strong>{user.display_name}</strong><span>{user.role.replaceAll('_', ' ')}</span></div><button className="logout-button" onClick={onLogout} title="Sign out" aria-label="Sign out">↗</button></div></div>
     </aside>
     {open && <button className="scrim" onClick={() => setOpen(false)} aria-label="Close navigation" />}
-    <main className="main-area"><header className="topbar"><Button className="menu-button" type="text" icon={<MenuOutlined />} onClick={() => setOpen(true)} aria-label="Open menu"/><div className="breadcrumbs">School <span>/</span> <strong>{currentPage}</strong></div><div className="top-actions"><Input className="search-box" prefix={<SearchOutlined />} placeholder="Search anything..." aria-label="Search" disabled/><Button className="icon-button" type="text" icon={<Badge dot color="#ec6e53"><BellOutlined /></Badge>} aria-label="Notifications" disabled/><div className="top-divider"/><Avatar size={34} style={{ backgroundColor: '#e5e9ff', color: '#384ec2', fontWeight: 700 }}>{initials(user.display_name)}</Avatar></div></header>{children}</main>
+    <main className="main-area"><header className="topbar"><Button className="menu-button" type="text" icon={<MenuOutlined />} onClick={() => setOpen(true)} aria-label="Open menu"/><div className="breadcrumbs">School <span>/</span> <strong>{currentPage}</strong></div>{['school_admin', 'principal', 'registrar'].includes(user.role) && <div className="top-period-picker" aria-label="Academic period">
+      <Select aria-label="Academic year context" value={yearId || undefined} loading={periodLoading} placeholder="Academic year"
+        options={years.map(year => ({ value: year.id, label: year.name }))} onChange={setYearId} />
+      <Select aria-label="Term context" value={termId || undefined} loading={periodLoading} placeholder="Term"
+        options={terms.map(term => ({ value: term.id, label: term.name }))} onChange={setTermId} disabled={!terms.length} />
+    </div>}<div className="top-actions"><Input className="search-box" prefix={<SearchOutlined />} placeholder="Search anything..." aria-label="Search" disabled/><Button className="icon-button" type="text" icon={<Badge dot color="#ec6e53"><BellOutlined /></Badge>} aria-label="Notifications" disabled/><div className="top-divider"/><Avatar size={34} style={{ backgroundColor: '#e5e9ff', color: '#384ec2', fontWeight: 700 }}>{initials(user.display_name)}</Avatar></div></header>{children}</main>
   </div>
 }

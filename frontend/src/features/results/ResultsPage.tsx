@@ -10,6 +10,7 @@ import { useAuth } from '../auth/authHooks'
 import { fetchAcademicTerms, fetchAcademicYears, fetchClassGroups } from '../academic/academicApi'
 import type { AcademicTerm, AcademicYear, ClassResults, GradingScale, StudentResult } from '../../shared/api/types'
 import { formatApiError } from '../../shared/api/errors'
+import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 import {
   archiveGradingScale, computeClassResults, fetchClassResults, fetchGradingScales,
   publishClassResults, saveGradingScale, withdrawClassResults,
@@ -61,11 +62,10 @@ function validateBands(bands: BandDraft[]): string | null {
 
 export default function ResultsPage() {
   const { accessToken, user } = useAuth()
+  const { yearId: periodYearId, termId: periodTermId, setYearId: setPeriodYearId, setTermId: setPeriodTermId } = useAcademicPeriod()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [toast, contextHolder] = message.useMessage()
-  const [selectedYear, setSelectedYear] = useState('')
-  const [selectedTerm, setSelectedTerm] = useState('')
   const [selectedClass, setSelectedClass] = useState('')
   const [scalesOpen, setScalesOpen] = useState(false)
   const [editorOpen, setEditorOpen] = useState(false)
@@ -83,12 +83,12 @@ export default function ResultsPage() {
 
   const yearsQuery = useQuery({ queryKey: ['academic-years', user?.school_id], queryFn: () => fetchAcademicYears(accessToken!), enabled: !!accessToken })
   const years = yearsQuery.data ?? []
-  const yearId = years.some((year: AcademicYear) => year.id === selectedYear) ? selectedYear : years[0]?.id ?? ''
+  const yearId = years.some((year: AcademicYear) => year.id === periodYearId) ? periodYearId : years[0]?.id ?? ''
   const termsQuery = useQuery({ queryKey: ['academic-terms', user?.school_id, yearId], queryFn: () => fetchAcademicTerms(accessToken!, yearId), enabled: !!accessToken && !!yearId })
   const terms = (termsQuery.data ?? []) as AcademicTerm[]
   const classesQuery = useQuery({ queryKey: ['class-groups', user?.school_id, yearId], queryFn: () => fetchClassGroups(accessToken!, yearId), enabled: !!accessToken && !!yearId })
   const classes = classesQuery.data ?? []
-  const termId = terms.some(term => term.id === selectedTerm) ? selectedTerm : terms[0]?.id ?? ''
+  const termId = terms.some(term => term.id === periodTermId) ? periodTermId : terms[0]?.id ?? ''
   const classId = classes.some(group => group.id === selectedClass) ? selectedClass : classes[0]?.id ?? ''
 
   const scalesQuery = useQuery({ queryKey: ['grading-scales', user?.school_id], queryFn: () => fetchGradingScales(accessToken!), enabled: !!accessToken })
@@ -302,13 +302,13 @@ export default function ResultsPage() {
       <div className="results-filter">
         <span>Academic year</span>
         <Select value={yearId || undefined} placeholder="Choose year"
-                onChange={value => { setSelectedYear(value); setSelectedTerm(''); setSelectedClass('') }}
+                onChange={value => { setPeriodYearId(value); setSelectedClass('') }}
                 options={years.map((year: AcademicYear) => ({ value: year.id, label: year.name }))}/>
       </div>
       <div className="results-filter">
         <span>Term</span>
         <Select value={termId || undefined} placeholder="Choose term"
-                onChange={value => setSelectedTerm(value)}
+                onChange={setPeriodTermId}
                 options={terms.map((term: AcademicTerm) => ({ value: term.id, label: term.name }))} disabled={!terms.length}/>
       </div>
       <div className="results-filter">

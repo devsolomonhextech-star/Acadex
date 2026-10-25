@@ -1,4 +1,4 @@
-import type { SchoolUser, Session } from './types'
+import type { LoginResult, SchoolUser, Session } from './types'
 
 const apiBase = import.meta.env.VITE_API_URL ?? ''
 
@@ -68,7 +68,11 @@ export async function apiRequestBlob(path: string, accessToken: string): Promise
 }
 
 export function signIn(schoolSlug: string, email: string, password: string) {
-  return apiRequest<Session>('/auth/login', { method: 'POST', body: JSON.stringify({ school_slug: schoolSlug, email, password }) })
+  return apiRequest<LoginResult>('/auth/login', { method: 'POST', body: JSON.stringify({ school_slug: schoolSlug, email, password }) })
+}
+
+export function verifySignInTotp(challengeToken: string, code: string) {
+  return apiRequest<Session>('/auth/login/verify-totp', { method: 'POST', body: JSON.stringify({ challenge_token: challengeToken, code }) })
 }
 
 export function fetchCurrentUser(token: string) {

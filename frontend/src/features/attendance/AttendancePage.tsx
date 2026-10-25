@@ -8,6 +8,7 @@ import { fetchAcademicYears, fetchClassGroups } from '../academic/academicApi'
 import { fetchAttendanceSheet, saveAttendanceSheet } from './attendanceApi'
 import type { AttendanceStatus } from '../../shared/api/types'
 import { formatApiError } from '../../shared/api/errors'
+import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 
 type Draft = { status: AttendanceStatus; note: string }
 const statusOptions: { value: AttendanceStatus; label: string }[] = [
@@ -20,15 +21,15 @@ const statusOptions: { value: AttendanceStatus; label: string }[] = [
 
 export default function AttendancePage() {
   const { accessToken, user } = useAuth()
+  const { yearId: periodYearId, term: periodTerm, setYearId: setPeriodYearId } = useAcademicPeriod()
   const queryClient = useQueryClient()
   const [toast, contextHolder] = message.useMessage()
-  const [selectedYear, setSelectedYear] = useState('')
   const [selectedClass, setSelectedClass] = useState('')
   const [attendanceDay, setAttendanceDay] = useState<Dayjs>(dayjs())
   const [draft, setDraft] = useState<Record<string, Draft>>({})
   const yearsQuery = useQuery({ queryKey: ['academic-years', user?.school_id], queryFn: () => fetchAcademicYears(accessToken!), enabled: !!accessToken })
   const years = yearsQuery.data ?? []
-  const yearId = years.some(year => year.id === selectedYear) ? selectedYear : years[0]?.id ?? ''
+  const yearId = years.some(year => year.id === periodYearId) ? periodYearId : years[0]?.id ?? ''
   const classesQuery = useQuery({ queryKey: ['class-groups', user?.school_id, yearId], queryFn: () => fetchClassGroups(accessToken!, yearId), enabled: !!accessToken && !!yearId })
   const classes = classesQuery.data ?? []
   const classId = classes.some(group => group.id === selectedClass) ? selectedClass : classes[0]?.id ?? ''
@@ -69,6 +70,12 @@ export default function AttendancePage() {
     return counts
   }, { present: 0, absent: 0, late: 0, excused: 0, unmarked: 0 }), [draft, roster])
   const selectedYearRow = years.find(year => year.id === yearId)
+  useEffect(() => {
+    if (!periodTerm) return
+    if (attendanceDay.isBefore(dayjs(periodTerm.starts_on), 'day') || attendanceDay.isAfter(dayjs(periodTerm.ends_on), 'day')) {
+      setAttendanceDay(dayjs(periodTerm.starts_on))
+    }
+  }, [periodTerm?.id])
   const pageError = yearsQuery.error ?? classesQuery.error ?? sheetQuery.error
   const setStudent = (id: string, field: keyof Draft, value: string) => setDraft(current => ({
     ...current, [id]: { ...(current[id] ?? { status: 'unmarked', note: '' }), [field]: value },
@@ -84,13 +91,14 @@ export default function AttendancePage() {
     {pageError && <Alert type="error" showIcon message="Could not load the attendance sheet" description={formatApiError(pageError)} className="student-error"/>}
     <section className="attendance-controls panel">
       <div className="attendance-filter"><span>Academic year</span><Select value={yearId || undefined} placeholder="Choose academic year" onChange={value => {
-        setSelectedYear(value); setSelectedClass('')
+        setPeriodYearId(value); setSelectedClass('')
         const year = years.find(item => item.id === value)
         if (year && (attendanceDay.isBefore(dayjs(year.starts_on), 'day') || attendanceDay.isAfter(dayjs(year.ends_on), 'day'))) setAttendanceDay(dayjs(year.starts_on))
       }} options={years.map(year => ({ value: year.id, label: year.name }))} disabled={!years.length}/></div>
       <div className="attendance-filter"><span>Class group</span><Select value={classId || undefined} placeholder="Choose class" onChange={setSelectedClass} options={classes.map(group => ({ value: group.id, label: `${group.name}${group.stream ? ` · ${group.stream}` : ''}` }))} disabled={!classes.length}/></div>
       <div className="attendance-filter attendance-date"><span>Attendance date</span><DatePicker value={attendanceDay} format="D MMM YYYY" onChange={value => value && setAttendanceDay(value)} disabledDate={value => {
         if (value.isAfter(dayjs(), 'day')) return true
+        if (periodTerm && (value.isBefore(dayjs(periodTerm.starts_on), 'day') || value.isAfter(dayjs(periodTerm.ends_on), 'day'))) return true
         if (selectedYearRow && (value.isBefore(dayjs(selectedYearRow.starts_on), 'day') || value.isAfter(dayjs(selectedYearRow.ends_on), 'day'))) return true
         return false
       }}/></div>

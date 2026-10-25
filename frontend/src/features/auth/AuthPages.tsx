@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import type { ReactNode } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -17,23 +17,39 @@ function BrandPanel({ register = false }: { register?: boolean }) {
 }
 
 export function LoginPage() {
-  const { signInToSchool } = useAuth()
+  const { signInToSchool, completeTwoFactorSignIn } = useAuth()
   const navigate = useNavigate()
   const [search] = useSearchParams()
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [challengeToken, setChallengeToken] = useState('')
+  const [verificationCode, setVerificationCode] = useState('')
   const { control, handleSubmit, formState: { errors } } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema), defaultValues: { school: search.get('school') ?? '', email: search.get('email') ?? '', password: '' },
   })
   const submit = handleSubmit(async values => {
     setError('')
     setSubmitting(true)
-    try { await signInToSchool(values.school.trim().toLowerCase(), values.email.trim().toLowerCase(), values.password); navigate('/', { replace: true }) }
+    try {
+      const result = await signInToSchool(values.school.trim().toLowerCase(), values.email.trim().toLowerCase(), values.password)
+      if (result.requiresTwoFactor) setChallengeToken(result.challengeToken)
+      else navigate('/', { replace: true })
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to sign in. Try again.') }
     finally { setSubmitting(false) }
   })
 
-  return <div className="auth-layout"><BrandPanel/><main className="auth-main"><div className="auth-mobile-brand"><AppstoreOutlined/> school<span>OS</span></div><section className="auth-card"><div className="auth-card-kicker">WELCOME BACK</div><h2>Sign in to your school</h2><p className="auth-intro">Enter your school address and account details to continue.</p>{error && <Alert className="auth-alert" type="error" showIcon message={error}/>}<form onSubmit={submit} className="auth-form"><label>School address</label><Controller control={control} name="school" render={({ field }) => <Input {...field} prefix={<AppstoreOutlined/>} placeholder="e.g. aburi-academy" autoComplete="organization" status={errors.school ? 'error' : undefined}/>} />{errors.school && <small className="field-error">{errors.school.message}</small>}<label>Email address</label><Controller control={control} name="email" render={({ field }) => <Input {...field} prefix={<MailOutlined/>} placeholder="you@school.edu.gh" autoComplete="username" status={errors.email ? 'error' : undefined}/>} />{errors.email && <small className="field-error">{errors.email.message}</small>}<div className="password-label"><label>Password</label><button type="button" className="quiet-link" disabled>Forgot password?</button></div><Controller control={control} name="password" render={({ field }) => <Input.Password {...field} prefix={<LockOutlined/>} placeholder="Enter your password" autoComplete="current-password" status={errors.password ? 'error' : undefined}/>} />{errors.password && <small className="field-error">{errors.password.message}</small>}<Button htmlType="submit" type="primary" loading={submitting} className="auth-submit">Sign in <ArrowRightOutlined/></Button></form><div className="auth-divider"><span>NEW TO SCHOOLOS?</span></div><Link to="/register" className="create-account">Set up your school account <ArrowRightOutlined/></Link><div className="auth-security"><SafetyCertificateOutlined/> Your account is protected with secure sign-in</div></section><footer className="auth-footer">© 2026 SchoolOS <span>·</span> School operations, made clearer</footer></main></div>
+  const submitTotp = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!/^\d{6}$/.test(verificationCode)) { setError('Enter the six-digit code from your authenticator app.'); return }
+    setError('')
+    setSubmitting(true)
+    try { await completeTwoFactorSignIn(challengeToken, verificationCode); navigate('/', { replace: true }) }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'That code could not be verified. Try again.') }
+    finally { setSubmitting(false) }
+  }
+
+  return <div className="auth-layout"><BrandPanel/><main className="auth-main"><div className="auth-mobile-brand"><AppstoreOutlined/> school<span>OS</span></div><section className="auth-card"><div className="auth-card-kicker">{challengeToken ? 'TWO-STEP VERIFICATION' : 'WELCOME BACK'}</div><h2>{challengeToken ? 'Check your authenticator' : 'Sign in to your school'}</h2><p className="auth-intro">{challengeToken ? 'Enter the six-digit code shown in Google Authenticator to finish signing in.' : 'Enter your school address and account details to continue.'}</p>{error && <Alert className="auth-alert" type="error" showIcon message={error}/>} {challengeToken ? <form onSubmit={submitTotp} className="auth-form"><label>Authentication code</label><Input value={verificationCode} onChange={event => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="000000" maxLength={6} autoFocus/><Button htmlType="submit" type="primary" loading={submitting} className="auth-submit">Verify and sign in <ArrowRightOutlined/></Button><button type="button" className="quiet-link" onClick={() => { setChallengeToken(''); setVerificationCode(''); setError('') }}>Back to sign in</button></form> : <><form onSubmit={submit} className="auth-form"><label>School address</label><Controller control={control} name="school" render={({ field }) => <Input {...field} prefix={<AppstoreOutlined/>} placeholder="e.g. aburi-academy" autoComplete="organization" status={errors.school ? 'error' : undefined}/>} />{errors.school && <small className="field-error">{errors.school.message}</small>}<label>Email address</label><Controller control={control} name="email" render={({ field }) => <Input {...field} prefix={<MailOutlined/>} placeholder="you@school.edu.gh" autoComplete="username" status={errors.email ? 'error' : undefined}/>} />{errors.email && <small className="field-error">{errors.email.message}</small>}<div className="password-label"><label>Password</label><button type="button" className="quiet-link" disabled>Forgot password?</button></div><Controller control={control} name="password" render={({ field }) => <Input.Password {...field} prefix={<LockOutlined/>} placeholder="Enter your password" autoComplete="current-password" status={errors.password ? 'error' : undefined}/>} />{errors.password && <small className="field-error">{errors.password.message}</small>}<Button htmlType="submit" type="primary" loading={submitting} className="auth-submit">Sign in <ArrowRightOutlined/></Button></form><div className="auth-divider"><span>NEW TO SCHOOLOS?</span></div><Link to="/register" className="create-account">Set up your school account <ArrowRightOutlined/></Link></>}<div className="auth-security"><SafetyCertificateOutlined/> Your account is protected with secure sign-in</div></section><footer className="auth-footer">© 2026 SchoolOS <span>·</span> School operations, made clearer</footer></main></div>
 }
 
 const registerSchema = z.object({

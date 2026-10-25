@@ -15,6 +15,7 @@ import { formatApiError } from '../../shared/api/errors'
 import { TeachingAssignmentsPanel } from './TeachingAssignmentsPanel'
 import { TeachersPanel } from './TeachersPanel'
 import { TimetablePanel } from './TimetablePanel'
+import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 
 type ModalKind = 'year' | 'term' | 'class' | 'enrollment' | null
 type AcademicFormValues = {
@@ -29,6 +30,7 @@ type AcademicFormValues = {
 
 export default function AcademicPage() {
   const { accessToken, user } = useAuth()
+  const { yearId: periodYearId, setYearId: setPeriodYearId } = useAcademicPeriod()
   const queryClient = useQueryClient()
   const [selectedYear, setSelectedYear] = useState('')
   const [selectedClass, setSelectedClass] = useState('')
@@ -37,7 +39,7 @@ export default function AcademicPage() {
   const [toast, contextHolder] = message.useMessage()
   const yearsQuery = useQuery({ queryKey: ['academic-years', user?.school_id], queryFn: () => fetchAcademicYears(accessToken!), enabled: !!accessToken })
   const years = yearsQuery.data ?? []
-  const yearId = years.some(year => year.id === selectedYear) ? selectedYear : years[0]?.id ?? ''
+  const yearId = years.some(year => year.id === periodYearId) ? periodYearId : years.some(year => year.id === selectedYear) ? selectedYear : years[0]?.id ?? ''
   const termsQuery = useQuery({ queryKey: ['academic-terms', user?.school_id, yearId], queryFn: () => fetchAcademicTerms(accessToken!, yearId), enabled: !!accessToken && !!yearId })
   const classesQuery = useQuery({ queryKey: ['class-groups', user?.school_id, yearId], queryFn: () => fetchClassGroups(accessToken!, yearId), enabled: !!accessToken && !!yearId })
   const classGroups = classesQuery.data ?? []
@@ -99,7 +101,7 @@ export default function AcademicPage() {
     {pageError && <Alert type="error" showIcon message="Could not load academic setup" description={formatApiError(pageError)} className="student-error" />}
     <section className="academic-year-panel panel">
       <div className="academic-section-title"><div className="simple-icon"><CalendarOutlined /></div><div><h2>Academic year</h2><p>Each year keeps its own terms, class groups and enrollment history.</p></div></div>
-      {years.length ? <div className="academic-year-selector"><Select value={yearId} onChange={setSelectedYear} options={years.map((year: AcademicYear) => ({ value: year.id, label: year.name }))} aria-label="Academic year"/><div className="academic-dates">{dayjs(years.find(year => year.id === yearId)?.starts_on).format('D MMM YYYY')} <span>to</span> {dayjs(years.find(year => year.id === yearId)?.ends_on).format('D MMM YYYY')}</div><Tag color="blue">{years.find(year => year.id === yearId)?.status}</Tag></div>
+      {years.length ? <div className="academic-year-selector"><Select value={yearId} onChange={value => { setSelectedYear(value); setPeriodYearId(value) }} options={years.map((year: AcademicYear) => ({ value: year.id, label: year.name }))} aria-label="Academic year"/><div className="academic-dates">{dayjs(years.find(year => year.id === yearId)?.starts_on).format('D MMM YYYY')} <span>to</span> {dayjs(years.find(year => year.id === yearId)?.ends_on).format('D MMM YYYY')}</div><Tag color="blue">{years.find(year => year.id === yearId)?.status}</Tag></div>
         : <div className="academic-empty-year"><div><strong>Start with an academic year</strong><p>Add a year to organize terms, classes and enrollment.</p></div>{!readOnly && <Button type="primary" icon={<PlusOutlined />} onClick={() => startCreate('year')}>Add academic year</Button>}</div>}
     </section>
     {yearId && <>

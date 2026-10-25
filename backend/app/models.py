@@ -21,6 +21,7 @@ from sqlalchemy import (
     func,
     text,
     Text,
+    BigInteger,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -64,6 +65,10 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(254), nullable=False)
     display_name: Mapped[str] = mapped_column(String(160), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    totp_secret_encrypted: Mapped[str | None] = mapped_column(Text)
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    totp_last_counter: Mapped[int | None] = mapped_column(BigInteger)
+    totp_setup_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     memberships: Mapped[list["SchoolMembership"]] = relationship(back_populates="user")
@@ -131,6 +136,10 @@ class Student(Base):
     first_name: Mapped[str] = mapped_column(String(80), nullable=False)
     last_name: Mapped[str] = mapped_column(String(80), nullable=False)
     date_of_birth: Mapped[date | None] = mapped_column(Date)
+    gender: Mapped[str | None] = mapped_column(String(16))
+    phone: Mapped[str | None] = mapped_column(String(40))
+    email: Mapped[str | None] = mapped_column(String(254))
+    user_id: Mapped[UUID | None] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"))
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active", server_default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -168,6 +177,35 @@ class AcademicTerm(Base):
     ordinal: Mapped[int] = mapped_column(nullable=False)
     starts_on: Mapped[date] = mapped_column(Date, nullable=False)
     ends_on: Mapped[date] = mapped_column(Date, nullable=False)
+
+
+class AcademicCalendarEvent(Base):
+    __tablename__ = "academic_calendar_events"
+    __table_args__ = (
+        ForeignKeyConstraint(["school_id", "academic_year_id"], ["academic_years.school_id", "academic_years.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["school_id", "academic_year_id", "term_id"], ["academic_terms.school_id", "academic_terms.academic_year_id", "academic_terms.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["school_id", "academic_year_id", "class_group_id"], ["class_groups.school_id", "class_groups.academic_year_id", "class_groups.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["created_by_user_id"], ["users.id"], ondelete="RESTRICT"),
+        UniqueConstraint("school_id", "id", name="uq_calendar_events_school_id"),
+        CheckConstraint("starts_on <= ends_on", name="ck_calendar_events_dates"),
+        CheckConstraint("audience IN ('all', 'students', 'staff', 'parents', 'teachers', 'class')", name="ck_calendar_events_audience"),
+        CheckConstraint("category IN ('term', 'holiday', 'exam', 'meeting', 'event', 'assessment', 'other')", name="ck_calendar_events_category"),
+        Index("ix_calendar_events_school_year_dates", "school_id", "academic_year_id", "starts_on", "ends_on"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    academic_year_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    term_id: Mapped[UUID | None] = mapped_column(Uuid)
+    class_group_id: Mapped[UUID | None] = mapped_column(Uuid)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    category: Mapped[str] = mapped_column(String(24), nullable=False, default="event", server_default="event")
+    audience: Mapped[str] = mapped_column(String(20), nullable=False, default="all", server_default="all")
+    starts_on: Mapped[date] = mapped_column(Date, nullable=False)
+    ends_on: Mapped[date] = mapped_column(Date, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_by_user_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 class ClassGroup(Base):
@@ -741,6 +779,55 @@ class StudentGuardian(Base):
     student_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     guardian_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BehaviorRecord(Base):
+    """A positive or negative incident noted against one student."""
+
+    __tablename__ = "behavior_records"
+    __table_args__ = (
+        ForeignKeyConstraint(["school_id", "student_id"], ["students.school_id", "students.id"], ondelete="RESTRICT"),
+        UniqueConstraint("school_id", "id", name="uq_behavior_records_school_id"),
+        CheckConstraint("category IN ('merit', 'demerit', 'incident', 'note')", name="ck_behavior_records_category"),
+        CheckConstraint("severity IN ('low', 'medium', 'high')", name="ck_behavior_records_severity"),
+        Index("ix_behavior_records_school_student", "school_id", "student_id"),
+        Index("ix_behavior_records_school_date", "school_id", "occurred_on"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    student_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    occurred_on: Mapped[date] = mapped_column(Date, nullable=False)
+    category: Mapped[str] = mapped_column(String(24), nullable=False)
+    severity: Mapped[str] = mapped_column(String(16), nullable=False, default="low", server_default="low")
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    action_taken: Mapped[str | None] = mapped_column(String(240))
+    recorded_by_membership_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("school_memberships.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class StudentDocument(Base):
+    """A document on file for a student (metadata only; files stay external)."""
+
+    __tablename__ = "student_documents"
+    __table_args__ = (
+        ForeignKeyConstraint(["school_id", "student_id"], ["students.school_id", "students.id"], ondelete="RESTRICT"),
+        UniqueConstraint("school_id", "id", name="uq_student_documents_school_id"),
+        CheckConstraint("doc_type IN ('id_card', 'birth_certificate', 'previous_report', 'medical', 'consent', 'other')", name="ck_student_documents_type"),
+        Index("ix_student_documents_school_student", "school_id", "student_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    student_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    doc_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    reference: Mapped[str | None] = mapped_column(String(80))
+    issued_on: Mapped[date | None] = mapped_column(Date)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by_user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

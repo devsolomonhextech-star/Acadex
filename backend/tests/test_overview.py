@@ -153,6 +153,20 @@ async def test_demo_seed_creates_real_fees_attendance_and_results(client):
     # Every weekday in the term window gets a marked sheet for both students.
     assert result["attendance_records_created"] >= 20, result
     assert result["results_created"] == 2, result
+    # Profile depth: demographics, portal guardians, behaviour, documents.
+    assert result["profiles_filled"] == 2, result
+    assert result["guardians_created"] == 4, result
+    assert result["behavior_created"] == 8, result
+    assert result["documents_created"] == 10, result
+    assert result["teachers_created"] == 4, result
+    # This school has no subjects yet, so there is nothing to assign or schedule.
+    assert result["subject_assignments_created"] == 0, result
+    assert result["timetable_created"] == 0, result
+    # A finished prior year with published results and settled invoices.
+    assert result["history_year_created"] is True, result
+    assert result["history_results_created"] == 2, result
+    assert result["history_invoices_created"] == 2, result
+    assert result["history_payments_created"] == 2, result
     assert Decimal(result["invoiced_total"]) > 0
     assert Decimal(result["paid_total"]) > 0
 
@@ -166,7 +180,10 @@ async def test_demo_seed_creates_real_fees_attendance_and_results(client):
     # One full and one partial payment leave a genuine balance outstanding.
     assert Decimal(finance["outstanding_total"]) > 0, finance
     paid_weeks = sum(Decimal(point["payments"]) for point in body["activity"])
-    assert paid_weeks == Decimal(result["paid_total"]), (paid_weeks, result)
+    # The chart covers recent weeks only; the ledger total also includes the
+    # prior year's settled invoices.
+    assert paid_weeks > 0, (paid_weeks, result)
+    assert Decimal(result["paid_total"]) >= paid_weeks, (paid_weeks, result)
     # Seeded attendance feeds the weekly trend on the activity chart.
     assert any(point["attendance_rate"] is not None for point in body["activity"]), body["activity"]
     # Invoices were backdated, so partials read as overdue follow-ups.
@@ -184,11 +201,28 @@ async def test_demo_seed_creates_real_fees_attendance_and_results(client):
     assert profile_attendance["days_marked"] > 0, profile_attendance
     assert profile_attendance["rate_percent"] is not None
     assert len(profile_attendance["recent"]) > 0
-    assert len(profile_body["results"]) == 1, profile_body["results"]
+    # Current term (still draft) plus the prior year's published term.
+    assert len(profile_body["results"]) == 2, profile_body["results"]
     seeded_result = profile_body["results"][0]
     assert seeded_result["grade"] is not None, seeded_result
     assert seeded_result["position"] is not None
     assert seeded_result["published"] is False
+    assert profile_body["results"][1]["published"] is True, profile_body["results"][1]
+
+    # Both guardians have portal logins, so messaging them works end to end.
+    assert profile_body["guardians"][0]["has_portal_login"] is True, profile_body["guardians"]
+    message = await client.post(
+        f"/api/v1/students/{student_id}/message", headers=headers,
+        json={"title": "Half-term notice", "body": "School closes early on Friday."},
+    )
+    assert message.status_code == 200, message.text
+    assert message.json()["recipients"] == 2
+    parent_login = await client.post("/api/v1/auth/login", json={
+        "school_slug": "demo-seed",
+        "email": profile_body["guardians"][0]["email"],
+        "password": "Parent-demo-2026",
+    })
+    assert parent_login.status_code == 200, parent_login.text
 
     # A second click is a no-op across every section.
     again = await client.post("/api/v1/overview/demo/seed", headers=headers)
@@ -198,6 +232,17 @@ async def test_demo_seed_creates_real_fees_attendance_and_results(client):
     assert payload["payments_created"] == 0, payload
     assert payload["attendance_records_created"] == 0, payload
     assert payload["results_created"] == 0, payload
+    assert payload["profiles_filled"] == 0, payload
+    assert payload["guardians_created"] == 0, payload
+    assert payload["teachers_created"] == 0, payload
+    assert payload["subject_assignments_created"] == 0, payload
+    assert payload["timetable_created"] == 0, payload
+    assert payload["behavior_created"] == 0, payload
+    assert payload["documents_created"] == 0, payload
+    assert payload["history_year_created"] is False, payload
+    assert payload["history_results_created"] == 0, payload
+    assert payload["history_invoices_created"] == 0, payload
+    assert payload["history_payments_created"] == 0, payload
 
 
 async def test_demo_seed_is_admin_only(client):

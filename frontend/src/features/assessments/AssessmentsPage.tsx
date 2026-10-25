@@ -11,6 +11,7 @@ import { fetchAcademicTerms, fetchAcademicYears, fetchClassGroups } from '../aca
 import { fetchSubjects, fetchTeachingAssignments } from '../academic/teachingApi'
 import type { AcademicTerm, AcademicYear, AssessmentCategory, AssessmentSummary, GradebookStudent } from '../../shared/api/types'
 import { formatApiError } from '../../shared/api/errors'
+import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 import {
   createAssessment, fetchAssessments, fetchGradebook, reviewAssessment, saveGradebook, submitAssessment,
 } from './assessmentsApi'
@@ -35,12 +36,11 @@ function displayCategory(value: string) {
 
 export default function AssessmentsPage() {
   const { accessToken, user } = useAuth()
+  const { yearId: periodYearId, termId: periodTermId, setYearId: setPeriodYearId, setTermId: setPeriodTermId } = useAcademicPeriod()
   const queryClient = useQueryClient()
   const [toast, contextHolder] = message.useMessage()
-  const [selectedYear, setSelectedYear] = useState('')
   const [selectedClass, setSelectedClass] = useState('')
   const [selectedSubject, setSelectedSubject] = useState('')
-  const [selectedTerm, setSelectedTerm] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [gradebookId, setGradebookId] = useState('')
   const [draft, setDraft] = useState<Record<string, DraftMark>>({})
@@ -51,7 +51,14 @@ export default function AssessmentsPage() {
   const canReview = ['school_admin', 'principal'].includes(user?.role ?? '')
   const yearsQuery = useQuery({ queryKey: ['academic-years', user?.school_id], queryFn: () => fetchAcademicYears(accessToken!), enabled: !!accessToken })
   const years = yearsQuery.data ?? []
-  const yearId = years.some(year => year.id === selectedYear) ? selectedYear : years[0]?.id ?? ''
+  const yearId = years.some(year => year.id === periodYearId) ? periodYearId : years[0]?.id ?? ''
+  useEffect(() => {
+    setSelectedClass('')
+    setSelectedSubject('')
+  }, [yearId])
+  useEffect(() => {
+    setGradebookId('')
+  }, [yearId, periodTermId])
   const termsQuery = useQuery({ queryKey: ['academic-terms', user?.school_id, yearId], queryFn: () => fetchAcademicTerms(accessToken!, yearId), enabled: !!accessToken && !!yearId })
   const terms = termsQuery.data ?? []
   const classesQuery = useQuery({ queryKey: ['class-groups', user?.school_id, yearId], queryFn: () => fetchClassGroups(accessToken!, yearId), enabled: !!accessToken && !!yearId })
@@ -69,7 +76,7 @@ export default function AssessmentsPage() {
     ? subjects.filter(item => assignments.some(assignment => assignment.class_group_id === formClassId && assignment.subject_id === item.id))
     : subjects).map(item => ({ value: item.id, label: `${item.name} · ${item.code}` }))
   const yearTerms = terms.filter(term => term.academic_year_id === yearId)
-  const termId = yearTerms.some(term => term.id === selectedTerm) ? selectedTerm : ''
+  const termId = yearTerms.some(term => term.id === periodTermId) ? periodTermId : yearTerms[0]?.id ?? ''
   const listQuery = useQuery({ queryKey: ['assessments', user?.school_id, yearId], queryFn: () => fetchAssessments(accessToken!, yearId), enabled: !!accessToken && !!yearId })
   const gradebookQuery = useQuery({ queryKey: ['gradebook', user?.school_id, gradebookId], queryFn: () => fetchGradebook(accessToken!, gradebookId), enabled: !!accessToken && !!gradebookId })
   const gradebook = gradebookQuery.data
@@ -157,10 +164,10 @@ export default function AssessmentsPage() {
     <div className="students-heading"><div><h1>Assessment gradebook</h1><p>Set up class assessments, enter scores, and send results for review.</p></div>{canCreate && <Button type="primary" icon={<PlusOutlined/>} onClick={() => { createForm.resetFields(); createForm.setFieldsValue({ class_group_id: classId || undefined, subject_id: selectedSubject || undefined, term_id: termId || undefined, category: 'class_test', max_score: 100, weight_percent: 0 }); setCreateOpen(true) }} disabled={!yearId}>New assessment</Button>}</div>
     {pageError && <Alert type="error" showIcon message="Could not load assessments" description={formatApiError(pageError)} className="student-error"/>}
     <section className="assessment-context panel">
-      <div className="assessment-filter"><span>Academic year</span><Select value={yearId || undefined} placeholder="Choose year" onChange={value => { setSelectedYear(value); setSelectedClass(''); setSelectedSubject(''); setSelectedTerm('') }} options={years.map((year: AcademicYear) => ({ value: year.id, label: year.name }))}/></div>
+      <div className="assessment-filter"><span>Academic year</span><Select value={yearId || undefined} placeholder="Choose year" onChange={value => { setPeriodYearId(value); setSelectedClass(''); setSelectedSubject('') }} options={years.map((year: AcademicYear) => ({ value: year.id, label: year.name }))}/></div>
       <div className="assessment-filter"><span>Class group</span><Select value={classId || undefined} placeholder="Choose class" onChange={value => { setSelectedClass(value); setSelectedSubject('') }} options={classes.map(group => ({ value: group.id, label: group.name }))} disabled={!classes.length}/></div>
       <div className="assessment-filter"><span>Subject</span><Select value={selectedSubject || undefined} placeholder="All subjects" allowClear onChange={value => setSelectedSubject(value ?? '')} options={subjectOptions} disabled={!classId}/></div>
-      <div className="assessment-filter"><span>Term</span><Select value={termId || undefined} placeholder="All terms" allowClear onChange={value => setSelectedTerm(value ?? '')} options={yearTerms.map(term => ({ value: term.id, label: term.name }))}/></div>
+      <div className="assessment-filter"><span>Term</span><Select value={termId || undefined} placeholder="Choose term" onChange={setPeriodTermId} options={yearTerms.map(term => ({ value: term.id, label: term.name }))}/></div>
     </section>
     <section className="assessment-list panel">
       <div className="assessment-list-heading"><div className="assessment-title"><span className="academic-card-icon"><BookOutlined/></span><div><h2>Assessments</h2><p>{listQuery.data?.length ?? 0} assessments in {years.find(year => year.id === yearId)?.name ?? 'this academic year'}</p></div></div>
