@@ -37,16 +37,23 @@ async def test_overview_counts_reflect_created_records(client):
         "name": "2026/2027", "starts_on": "2026-09-01", "ends_on": "2027-07-15",
     })
     year_id = year.json()["id"]
+    class_ids = []
     for name, grade in (("Primary 4", "Primary 4"), ("Primary 5", "Primary 5")):
         created = await client.post("/api/v1/academic/classes", headers=headers, json={
             "academic_year_id": year_id, "name": name, "grade_level": grade, "stream": "A",
         })
         assert created.status_code == 201, created.text
+        class_ids.append(created.json()["id"])
     for index in range(3):
         student = await client.post("/api/v1/students", headers=headers, json={
             "admission_number": f"OV-{index:03d}", "first_name": "Esi", "last_name": f"Student{index}",
         })
         assert student.status_code == 201, student.text
+        enrolled = await client.post("/api/v1/academic/enrollments", headers=headers, json={
+            "academic_year_id": year_id, "class_group_id": class_ids[index % len(class_ids)],
+            "student_id": student.json()["id"], "enrolled_on": "2026-09-01",
+        })
+        assert enrolled.status_code == 201, enrolled.text
 
     invitation = await client.post("/api/v1/staff/invitations/teachers", headers=headers, json={
         "email": "ov-teacher@example.com", "display_name": "Teacher Overview",
