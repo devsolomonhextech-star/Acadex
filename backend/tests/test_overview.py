@@ -63,6 +63,17 @@ async def test_overview_counts_reflect_created_records(client):
         "token": invitation.json()["invite_token"], "password": "teacher-long-secure-password",
     })
     assert accepted.status_code == 200, accepted.text
+    subject = await client.post("/api/v1/academic/subjects", headers=headers, json={
+        "code": "OV-SCI", "name": "Integrated Science",
+    })
+    assert subject.status_code == 201, subject.text
+    teachers = await client.get("/api/v1/academic/teachers", headers=headers)
+    assert teachers.status_code == 200 and len(teachers.json()) == 1
+    assignment = await client.post("/api/v1/academic/teaching-assignments", headers=headers, json={
+        "class_group_id": class_ids[0], "subject_id": subject.json()["id"],
+        "teacher_membership_id": teachers.json()[0]["membership_id"],
+    })
+    assert assignment.status_code == 201, assignment.text
 
     after = await client.get("/api/v1/overview", headers=headers)
     assert after.status_code == 200, after.text
