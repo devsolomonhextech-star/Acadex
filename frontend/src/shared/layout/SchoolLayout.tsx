@@ -30,12 +30,12 @@ const workspaceItems: SidebarItem[] = [
 const toolItems: SidebarItem[] = [
   { label: 'Academic calendar', to: '/academic-calendar', icon: <CalendarOutlined /> },
   { label: 'Settings', to: '/settings', icon: <SettingOutlined /> },
-  { label: 'Admissions', icon: <UserAddOutlined /> },
+  { label: 'Admissions', to: '/admissions', icon: <UserAddOutlined /> },
   { label: 'Library', icon: <ReadOutlined /> },
   { label: 'Transport', icon: <CarOutlined /> },
   { label: 'Hostel', icon: <HomeOutlined /> },
   { label: 'Events', icon: <FlagOutlined /> },
-  { label: 'Reports', icon: <AppstoreOutlined /> },
+  { label: 'Reports', to: '/reports', icon: <AppstoreOutlined /> },
 ]
 
 const navigation = [...workspaceItems, ...toolItems]
@@ -90,7 +90,7 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
         aria-controls="sidebar-tools" onClick={() => toggleSection('tools')}>
         <span>SCHOOL TOOLS</span><span className="section-chevron" aria-hidden="true">⌄</span>
       </button>
-      {!collapsedSections.tools && <div id="sidebar-tools">{toolItems.filter(item => item.label !== 'Settings' || user.role === 'school_admin').map(item => item.to
+      {!collapsedSections.tools && <div id="sidebar-tools">{toolItems.filter(item => (item.label !== 'Settings' || user.role === 'school_admin') && (item.label !== 'Admissions' || canManageAcademics) && (item.label !== 'Reports' || ['school_admin', 'principal', 'registrar', 'teacher', 'finance'].includes(user.role))).map(item => item.to
         ? <NavLink key={item.label} to={item.to} onClick={() => setOpen(false)} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>{item.icon}<span>{item.label}</span></NavLink>
         : <div key={item.label} className="nav-link nav-link-disabled" aria-disabled="true">{item.icon}<span>{item.label}</span><small>Planned</small></div>)}</div>}
       <div className="sidebar-bottom"><div className="help-card"><div className="help-icon">✳</div><strong>Need a hand?</strong><p>Visit the help center for tips and guides.</p><button disabled>Help center coming soon</button></div><div className="profile"><Avatar size={36} style={{ backgroundColor: '#e5e9ff', color: '#384ec2', fontWeight: 700 }}>{initials(user.display_name)}</Avatar><div><strong>{user.display_name}</strong><span>{user.role.replaceAll('_', ' ')}</span></div><button className="logout-button" onClick={onLogout} title="Sign out" aria-label="Sign out">↗</button></div></div>
