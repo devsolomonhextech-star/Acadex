@@ -8,11 +8,13 @@ import { formatApiError } from '../../shared/api/errors'
 import { beginTotpSetup, disableTotp, enableTotp, fetchTotpStatus, type TotpSetup } from './settingsApi'
 
 type SettingsTab = 'school' | 'users' | 'academic' | 'notifications' | 'billing' | 'system'
+type ProfileSection = 'general' | 'contact' | 'branding' | 'social' | 'location' | 'hours'
 
 export default function SettingsPage() {
   const { accessToken, user } = useAuth()
   const { year, term } = useAcademicPeriod()
   const [activeTab, setActiveTab] = useState<SettingsTab>('school')
+  const [profileSection, setProfileSection] = useState<ProfileSection>('general')
   const [setup, setSetup] = useState<TotpSetup | null>(null)
   const [enrollmentCode, setEnrollmentCode] = useState('')
   const [disableCode, setDisableCode] = useState('')
@@ -37,7 +39,23 @@ export default function SettingsPage() {
 
   const content = () => {
     if (activeTab === 'billing') return <section className="settings-panel settings-placeholder"><span className="settings-icon amber"><CreditCardOutlined/></span><div><small>BILLING & SUBSCRIPTION</small><h2>Subscription management</h2><p>Subscription plans and billing tools are coming soon.</p><span className="settings-soon">Upcoming soon</span></div></section>
-    if (activeTab === 'school') return <section className="settings-panel settings-profile-panel"><div className="settings-section-title"><span className="settings-icon blue"><AppstoreOutlined/></span><div><h2>General information</h2><p>Your school workspace details and administrator contact.</p></div></div><div className="settings-info-grid"><div><small>School name</small><strong>{user?.school_name ?? '—'}</strong></div><div><small>School address</small><strong>{user?.school_slug ?? '—'}</strong></div><div><small>Administrator</small><strong>{user?.display_name ?? '—'}</strong></div><div><small>Contact email</small><strong>{user?.email ?? '—'}</strong></div><div><small>Workspace access</small><strong className="capitalize-text">{user?.role.replaceAll('_', ' ') ?? '—'}</strong></div></div><Alert type="info" showIcon message="School details are managed by your account administrator."/></section>
+    if (activeTab === 'school') {
+      const sections: { key: ProfileSection; label: string }[] = [
+        { key: 'general', label: 'General information' }, { key: 'contact', label: 'Contact information' },
+        { key: 'branding', label: 'Logo & branding' }, { key: 'social', label: 'Social links' },
+        { key: 'location', label: 'Location' }, { key: 'hours', label: 'School hours' },
+      ]
+      const profileDetails: Record<ProfileSection, { title: string; description: string; rows: [string, string][] }> = {
+        general: { title: 'General information', description: 'Your school’s basic information and details.', rows: [['School name', user?.school_name ?? '—'], ['School address', user?.school_slug ?? '—'], ['School code', 'Not configured'], ['School type', 'Not configured']] },
+        contact: { title: 'Contact information', description: 'The main account contact currently registered for this school.', rows: [['Administrator', user?.display_name ?? '—'], ['Email address', user?.email ?? '—'], ['Phone number', 'Not configured'], ['Website', 'Not configured']] },
+        branding: { title: 'Logo & branding', description: 'School logo and brand colors are not configured yet.', rows: [['School logo', 'Not configured'], ['Primary color', 'Default SchoolOS blue']] },
+        social: { title: 'Social links', description: 'Add school social profiles when those details are available.', rows: [['Facebook', 'Not configured'], ['Instagram', 'Not configured'], ['LinkedIn', 'Not configured']] },
+        location: { title: 'Location', description: 'Your school location has not been added yet.', rows: [['Country', 'Not configured'], ['Region / state', 'Not configured'], ['City', 'Not configured'], ['Address', 'Not configured']] },
+        hours: { title: 'School hours', description: 'School-wide operating hours have not been configured yet.', rows: [['School days', 'Not configured'], ['Opening time', 'Not configured'], ['Closing time', 'Not configured']] },
+      }
+      const detail = profileDetails[profileSection]
+      return <section className="settings-panel settings-profile-layout"><nav className="settings-profile-nav" aria-label="School profile sections">{sections.map(section => <button type="button" key={section.key} className={profileSection === section.key ? 'active' : ''} onClick={() => setProfileSection(section.key)}>{section.label}</button>)}</nav><div className="settings-profile-detail"><div className="settings-section-title"><div><h2>{detail.title}</h2><p>{detail.description}</p></div></div><div className="settings-form-grid">{detail.rows.map(([label, value]) => <label key={label}><span>{label}</span><Input value={value} readOnly aria-label={label}/></label>)}</div><Alert type="info" showIcon message="These school profile fields are read-only in this version."/></div></section>
+    }
     if (activeTab === 'academic') return <section className="settings-panel settings-profile-panel"><div className="settings-section-title"><span className="settings-icon blue"><BookOutlined/></span><div><h2>Academic settings</h2><p>Review the academic period currently selected in your workspace.</p></div></div><div className="settings-info-grid"><div><small>Academic year</small><strong>{year?.name ?? 'No academic year selected'}</strong></div><div><small>Year dates</small><strong>{year ? `${year.starts_on} – ${year.ends_on}` : '—'}</strong></div><div><small>Current term</small><strong>{term?.name ?? 'All terms'}</strong></div><div><small>Term dates</small><strong>{term ? `${term.starts_on} – ${term.ends_on}` : '—'}</strong></div></div><Alert type="info" showIcon message="Change the academic period from the top bar to view the matching school data."/></section>
     if (activeTab === 'users') return <section className="settings-panel settings-profile-panel"><div className="settings-section-title"><span className="settings-icon blue"><TeamOutlined/></span><div><h2>Users & roles</h2><p>School access is organized by role.</p></div></div><div className="settings-role-grid">{[['School administrator','Manage school setup, staff access, and security.'],['Principal','Oversee academics and school operations.'],['Registrar','Manage student records and academic structure.'],['Teacher','Work with assigned classes, attendance, and results.'],['Finance','Manage fees, payments, and financial reports.']].map(([name,description]) => <article key={name}><strong>{name}</strong><span>{description}</span></article>)}</div></section>
     if (activeTab === 'notifications') return <section className="settings-panel settings-placeholder"><span className="settings-icon blue"><BellOutlined/></span><div><small>NOTIFICATIONS</small><h2>School alerts</h2><p>Important attendance, finance, and school updates are available in the notification center.</p><span className="settings-soon">Notification preferences coming soon</span></div></section>

@@ -13,6 +13,7 @@ import ImportStudentsModal from './ImportStudentsModal'
 import type { Student } from '../../shared/api/types'
 import { useAuth } from '../auth/authHooks'
 import { formatApiError } from '../../shared/api/errors'
+import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 
 const studentSchema = z.object({
   admission_number: z.string().trim().min(1, 'Enter the admission number').max(40),
@@ -28,6 +29,7 @@ const statusColors: Record<Student['status'], string> = {
 
 export default function StudentsPage() {
   const { accessToken, user } = useAuth()
+  const { yearId } = useAcademicPeriod()
   const queryClient = useQueryClient()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -45,8 +47,8 @@ export default function StudentsPage() {
     return () => window.clearTimeout(timer)
   }, [search])
   const students = useQuery({
-    queryKey: ['students', user?.school_id, page, activeSearch, status],
-    queryFn: () => fetchStudents(accessToken!, page, activeSearch, status === 'all' ? undefined : status),
+    queryKey: ['students', user?.school_id, page, activeSearch, status, yearId],
+    queryFn: () => fetchStudents(accessToken!, page, activeSearch, status === 'all' ? undefined : status, yearId || undefined),
     enabled: Boolean(accessToken && user),
   })
   const addStudent = useMutation({
@@ -66,8 +68,11 @@ export default function StudentsPage() {
   })
   const columns: TableColumnsType<Student> = [
     { title: 'STUDENT', key: 'name', render: (_, item) => <div className="student-name-cell"><span className="student-avatar">{item.first_name[0]}{item.last_name[0]}</span><span><strong><Link className="student-profile-link" to={`/students/${item.id}`}>{item.first_name} {item.last_name}</Link></strong><small>{item.admission_number}</small></span></div> },
+    { title: 'CLASS', dataIndex: 'class_name', key: 'class', render: value => value ?? <span className="table-muted">Not enrolled</span> },
+    { title: 'PARENT / GUARDIAN', key: 'guardian', render: (_, item) => item.guardian_name ? <div className="student-guardian-cell"><strong>{item.guardian_name}</strong><small>{item.guardian_contact ?? 'Contact not added'}</small></div> : <span className="table-muted">Not linked</span> },
     { title: 'DATE OF BIRTH', dataIndex: 'date_of_birth', key: 'date_of_birth', render: value => value ? dayjs(value).format('D MMM YYYY') : <span className="table-muted">—</span> },
     { title: 'STATUS', dataIndex: 'status', key: 'status', render: (value: Student['status']) => <Tag color={statusColors[value]} bordered={false} className="student-status">{value}</Tag> },
+    { title: 'ACTION', key: 'action', align: 'right', render: (_, item) => <Link className="student-row-action" to={`/students/${item.id}`}>View</Link> },
   ]
   const submit = handleSubmit(values => {
     setFormError('')
