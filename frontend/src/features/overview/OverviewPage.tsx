@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { Alert, Button, Empty, Spin, Tag } from 'antd'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { Alert, Button, Empty, Spin, Tag, message } from 'antd'
 import { CalendarOutlined, CreditCardOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons'
 import { useAuth } from '../auth/authHooks'
 import { formatApiError } from '../../shared/api/errors'
 import type { Overview, SchoolUser } from '../../shared/api/types'
-import { fetchOverview } from './overviewApi'
+import { fetchOverview, seedDemoFees } from './overviewApi'
 
 const REFRESH_MS = 60_000
 
@@ -71,6 +71,24 @@ export default function Overview({ user }: { user: SchoolUser }) {
     refetchInterval: REFRESH_MS,
   })
   const data = query.data
+
+  const seedMutation = useMutation({
+    mutationFn: () => seedDemoFees(accessToken!),
+    onSuccess: result => {
+      const parts: string[] = []
+      if (result.invoices_created) parts.push(`${result.invoices_created} invoice${result.invoices_created === 1 ? '' : 's'}`)
+      if (result.payments_created) parts.push(`${result.payments_created} payment${result.payments_created === 1 ? '' : 's'}`)
+      if (result.attendance_records_created) parts.push(`${result.attendance_records_created} attendance records`)
+      if (result.results_created) parts.push(`${result.results_created} term results`)
+      if (parts.length) message.success(`Demo data created: ${parts.join(', ')}`)
+      else message.info('Demo data is already generated')
+      void query.refetch()
+    },
+    onError: error => message.error(formatApiError(error)),
+  })
+
+  // Admins can (re)run the idempotent demo seeding at any time.
+  const canSeedDemo = user.role === 'school_admin'
 
   const lessons = useMemo(() => {
     const current = now.getHours() * 60 + now.getMinutes()
@@ -167,7 +185,13 @@ export default function Overview({ user }: { user: SchoolUser }) {
         <p className="welcome-subtitle">Here’s what’s happening at your school today.</p>
         <p className="demo-note">Live data · refreshed automatically · updated {updatedLabel}</p>
       </div>
-      <Link to="/classes"><Button className="outline-button">Manage academics <span>↗</span></Button></Link>
+      <div className="welcome-actions">
+        {canSeedDemo && <Button className="outline-button"
+          loading={seedMutation.isPending} onClick={() => seedMutation.mutate()}>
+          Generate demo data
+        </Button>}
+        <Link to="/classes"><Button className="outline-button">Manage academics <span>↗</span></Button></Link>
+      </div>
     </div>
 
     <section className="stats-grid" aria-label="School summary">

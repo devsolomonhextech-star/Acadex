@@ -25,6 +25,42 @@ export type Student = {
 }
 
 export type StudentPage = { items: Student[]; page: number; page_size: number; total: number }
+export type ProfileGuardian = {
+  guardian_id: string; full_name: string; relationship: string
+  email: string | null; phone: string | null; is_primary: boolean
+}
+export type StudentProfile = {
+  generated_at: string
+  student: {
+    id: string; admission_number: string; first_name: string; last_name: string
+    display_name: string; date_of_birth: string | null; age_years: number | null; status: string
+  }
+  enrollment: {
+    class_group_id: string; class_name: string; grade_level: string
+    stream: string; academic_year: string; enrolled_on: string
+  } | null
+  guardians: ProfileGuardian[]
+  attendance: {
+    present: number; absent: number; late: number; excused: number
+    days_marked: number; rate_percent: number | null
+    recent: { day: string; status: string }[]
+  } | null
+  finance: {
+    invoiced_total: string; paid_total: string; outstanding_total: string
+    invoices: {
+      id: string; invoice_number: string; term_name: string; total_amount: string
+      paid_amount: string; balance: string; status: string; issued_on: string
+    }[]
+  } | null
+  results: {
+    term_id: string; term_name: string; academic_year: string; ordinal: number
+    aggregate_percent: string; grade: string | null; position: number | null; published: boolean
+  }[]
+  schedule_today: {
+    starts_at: string; ends_at: string; subject_code: string
+    subject_name: string; teacher_name: string; room: string | null
+  }[]
+}
 export type AcademicYear = { id: string; name: string; starts_on: string; ends_on: string; status: string }
 export type AcademicTerm = { id: string; academic_year_id: string; name: string; ordinal: number; starts_on: string; ends_on: string }
 export type ClassGroup = { id: string; academic_year_id: string; name: string; grade_level: string; stream: string }
@@ -49,6 +85,11 @@ export type OverviewAttention = {
   meta: string; count: number; to: string
 }
 export type OverviewActivity = { week_start: string; students: number; attendance_rate: number | null; payments: string }
+export type DemoSeedResult = {
+  invoices_created: number; payments_created: number
+  attendance_records_created: number; results_created: number
+  invoiced_total: string; paid_total: string
+}
 export type Overview = {
   generated_at: string; current_term: OverviewTerm | null
   students_total: number; teachers_total: number; classes_total: number
@@ -195,4 +236,36 @@ export type FinanceSummary = {
 export type GenerateInvoicesResult = {
   created: number; skipped: number; students: number
   fee_lines_per_invoice: number; total_billed: string
+}
+
+export interface Announcement {
+  id: string
+  title: string
+  body: string
+  audience: string
+  class_group_id: string | null
+  published_at: string
+  expires_at: string | null
+  status: string
+}
+
+export interface Notification {
+  id: string
+  title: string
+  body: string
+  type: string
+  read_at: string | null
+  link: string | null
+  created_at: string
+}
+
+export interface Guardian {
+  guardian_id: string
+  student_id: string
+  first_name: string
+  last_name: string
+  email: string | null
+  phone: string | null
+  relationship: string | null
+  is_primary: boolean
 }

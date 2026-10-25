@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     Time,
+    Boolean,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -19,6 +20,7 @@ from sqlalchemy import (
     Uuid,
     func,
     text,
+    Text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -701,3 +703,80 @@ class PaymentAllocation(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+
+
+class Guardian(Base):
+    __tablename__ = "guardians"
+    __table_args__ = (
+        UniqueConstraint("school_id", "id", name="uq_guardians_school_id"),
+        UniqueConstraint("user_id", name="uq_guardians_user_id"),
+        Index("ix_guardians_school_name", "school_id", "last_name", "first_name"),
+        Index("ix_guardians_school_email", "school_id", "email"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    user_id: Mapped[UUID | None] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"))
+    first_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(254))
+    phone: Mapped[str | None] = mapped_column(String(40))
+    relationship: Mapped[str | None] = mapped_column(String(40))
+    address: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class StudentGuardian(Base):
+    __tablename__ = "student_guardians"
+    __table_args__ = (
+        UniqueConstraint("school_id", "id", name="uq_student_guardians_school_id"),
+        UniqueConstraint("student_id", "guardian_id", name="uq_student_guardians_pair"),
+        ForeignKeyConstraint(["school_id", "student_id"], ["students.school_id", "students.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["school_id", "guardian_id"], ["guardians.school_id", "guardians.id"], ondelete="RESTRICT"),
+        Index("ix_student_guardians_school_student", "school_id", "student_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    student_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    guardian_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Announcement(Base):
+    __tablename__ = "announcements"
+    __table_args__ = (
+        UniqueConstraint("school_id", "id", name="uq_announcements_school_id"),
+        ForeignKeyConstraint(["school_id", "class_group_id"], ["class_groups.school_id", "class_groups.id"], ondelete="RESTRICT"),
+        Index("ix_announcements_school_published", "school_id", "published_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    audience: Mapped[str] = mapped_column(String(40), nullable=False, default="all", server_default="all")
+    class_group_id: Mapped[UUID | None] = mapped_column(Uuid)
+    published_by_user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="published", server_default="published")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    __table_args__ = (
+        UniqueConstraint("school_id", "id", name="uq_notifications_school_id"),
+        Index("ix_notifications_user_read", "user_id", "read_at", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    type: Mapped[str] = mapped_column(String(40), nullable=False, default="info", server_default="info")
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    link: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, DatePicker, Empty, Input, Modal, Select, Space, Table, Tag } from 'antd'
 import type { TableColumnsType } from 'antd'
@@ -64,7 +65,7 @@ export default function StudentsPage() {
     onError: error => setFormError(formatApiError(error)),
   })
   const columns: TableColumnsType<Student> = [
-    { title: 'STUDENT', key: 'name', render: (_, item) => <div className="student-name-cell"><span className="student-avatar">{item.first_name[0]}{item.last_name[0]}</span><span><strong>{item.first_name} {item.last_name}</strong><small>{item.admission_number}</small></span></div> },
+    { title: 'STUDENT', key: 'name', render: (_, item) => <div className="student-name-cell"><span className="student-avatar">{item.first_name[0]}{item.last_name[0]}</span><span><strong><Link className="student-profile-link" to={`/students/${item.id}`}>{item.first_name} {item.last_name}</Link></strong><small>{item.admission_number}</small></span></div> },
     { title: 'DATE OF BIRTH', dataIndex: 'date_of_birth', key: 'date_of_birth', render: value => value ? dayjs(value).format('D MMM YYYY') : <span className="table-muted">—</span> },
     { title: 'STATUS', dataIndex: 'status', key: 'status', render: (value: Student['status']) => <Tag color={statusColors[value]} bordered={false} className="student-status">{value}</Tag> },
   ]

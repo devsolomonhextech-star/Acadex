@@ -391,5 +391,5 @@ async def overview(
         students_total=int(students_total), teachers_total=int(teachers_total),
         classes_total=int(classes_total),
         attendance=attendance, finance=finance,
-        lessons_today=lessons_today, attention=attention, activity=activity,
-    )
+    lessons_today=lessons_today, attention=attention, activity=activity,
+)

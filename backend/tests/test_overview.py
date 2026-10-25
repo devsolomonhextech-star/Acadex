@@ -1,5 +1,8 @@
 """Overview dashboard figures must come from live rows, never placeholders."""
 
+from datetime import date, timedelta
+from decimal import Decimal
+
 
 async def _admin_session(client, slug="overview-school"):
     created = await client.post("/api/v1/onboarding/schools", json={
@@ -99,3 +102,121 @@ async def test_overview_finance_is_role_scoped(client):
 
     anonymous = await client.get("/api/v1/overview")
     assert anonymous.status_code == 401
+
+
+async def test_demo_seed_creates_real_fees_attendance_and_results(client):
+    token = await _admin_session(client, slug="demo-seed")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Nothing to bill against yet, so seeding refuses cleanly.
+    premature = await client.post("/api/v1/overview/demo/seed", headers=headers)
+    assert premature.status_code == 422, premature.text
+
+    # Year, term, class, two enrolled students. Dates are relative to today so
+    # the 30-day attendance window always lands inside the current term.
+    today = date.today()
+    year = await client.post("/api/v1/academic/years", headers=headers, json={
+        "name": "2026/2027",
+        "starts_on": (today - timedelta(days=90)).isoformat(),
+        "ends_on": (today + timedelta(days=270)).isoformat(),
+    })
+    year_id = year.json()["id"]
+    term = await client.post("/api/v1/academic/terms", headers=headers, json={
+        "academic_year_id": year_id, "name": "Term 1", "ordinal": 1,
+        "starts_on": (today - timedelta(days=45)).isoformat(),
+        "ends_on": (today + timedelta(days=135)).isoformat(),
+    })
+    assert term.status_code == 201, term.text
+    group = await client.post("/api/v1/academic/classes", headers=headers, json={
+        "academic_year_id": year_id, "name": "Primary 4",
+        "grade_level": "Primary 4", "stream": "A",
+    })
+    group_id = group.json()["id"]
+    for index in range(2):
+        student = await client.post("/api/v1/students", headers=headers, json={
+            "admission_number": f"DS-{index:03d}",
+            "first_name": "Kofi", "last_name": f"Seed{index}",
+        })
+        assert student.status_code == 201, student.text
+        enrolled = await client.post("/api/v1/academic/enrollments", headers=headers, json={
+            "academic_year_id": year_id, "class_group_id": group_id,
+            "student_id": student.json()["id"],
+            "enrolled_on": (today - timedelta(days=80)).isoformat(),
+        })
+        assert enrolled.status_code == 201, enrolled.text
+
+    seeded = await client.post("/api/v1/overview/demo/seed", headers=headers)
+    assert seeded.status_code == 200, seeded.text
+    result = seeded.json()
+    assert result["invoices_created"] == 2, result
+    assert result["payments_created"] == 2, result
+    # Every weekday in the term window gets a marked sheet for both students.
+    assert result["attendance_records_created"] >= 20, result
+    assert result["results_created"] == 2, result
+    assert Decimal(result["invoiced_total"]) > 0
+    assert Decimal(result["paid_total"]) > 0
+
+    # The dashboard reports the same money and shows a payments trend.
+    view = await client.get("/api/v1/overview", headers=headers)
+    assert view.status_code == 200, view.text
+    body = view.json()
+    finance = body["finance"]
+    assert Decimal(finance["invoiced_total"]) == Decimal(result["invoiced_total"])
+    assert Decimal(finance["paid_total"]) == Decimal(result["paid_total"])
+    # One full and one partial payment leave a genuine balance outstanding.
+    assert Decimal(finance["outstanding_total"]) > 0, finance
+    paid_weeks = sum(Decimal(point["payments"]) for point in body["activity"])
+    assert paid_weeks == Decimal(result["paid_total"]), (paid_weeks, result)
+    # Seeded attendance feeds the weekly trend on the activity chart.
+    assert any(point["attendance_rate"] is not None for point in body["activity"]), body["activity"]
+    # Invoices were backdated, so partials read as overdue follow-ups.
+    assert finance["overdue_invoice_count"] >= 1, finance
+    assert any(item["key"] == "overdue-invoices" for item in body["attention"])
+
+    # The profile now has attendance and computed results to show.
+    listing = await client.get("/api/v1/students", headers=headers)
+    assert listing.status_code == 200, listing.text
+    student_id = listing.json()["items"][0]["id"]
+    profile = await client.get(f"/api/v1/students/{student_id}/profile", headers=headers)
+    assert profile.status_code == 200, profile.text
+    profile_body = profile.json()
+    profile_attendance = profile_body["attendance"]
+    assert profile_attendance["days_marked"] > 0, profile_attendance
+    assert profile_attendance["rate_percent"] is not None
+    assert len(profile_attendance["recent"]) > 0
+    assert len(profile_body["results"]) == 1, profile_body["results"]
+    seeded_result = profile_body["results"][0]
+    assert seeded_result["grade"] is not None, seeded_result
+    assert seeded_result["position"] is not None
+    assert seeded_result["published"] is False
+
+    # A second click is a no-op across every section.
+    again = await client.post("/api/v1/overview/demo/seed", headers=headers)
+    assert again.status_code == 200, again.text
+    payload = again.json()
+    assert payload["invoices_created"] == 0, payload
+    assert payload["payments_created"] == 0, payload
+    assert payload["attendance_records_created"] == 0, payload
+    assert payload["results_created"] == 0, payload
+
+
+async def test_demo_seed_is_admin_only(client):
+    token = await _admin_session(client, slug="demo-admin-only")
+    admin_headers = {"Authorization": f"Bearer {token}"}
+
+    invitation = await client.post("/api/v1/staff/invitations/teachers", headers=admin_headers, json={
+        "email": "ds-teacher@example.com", "display_name": "Demo Teacher",
+    })
+    assert invitation.status_code == 201, invitation.text
+    accepted = await client.post("/api/v1/staff/invitations/accept", json={
+        "token": invitation.json()["invite_token"], "password": "teacher-long-secure-password",
+    })
+    assert accepted.status_code == 200, accepted.text
+    login = await client.post("/api/v1/auth/login", json={
+        "school_slug": "demo-admin-only", "email": "ds-teacher@example.com",
+        "password": "teacher-long-secure-password",
+    })
+    teacher_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    denied = await client.post("/api/v1/overview/demo/seed", headers=teacher_headers)
+    assert denied.status_code == 403, denied.text

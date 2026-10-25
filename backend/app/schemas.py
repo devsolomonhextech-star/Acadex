@@ -1,5 +1,8 @@
 import re
 
+from datetime import date, datetime
+from uuid import UUID
+
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
@@ -50,3 +53,54 @@ class UserContextResponse(BaseModel):
     display_name: str
     email: str
     role: str
+
+
+class GuardianCreate(BaseModel):
+    first_name: str = Field(min_length=1, max_length=80)
+    last_name: str = Field(min_length=1, max_length=80)
+    email: EmailStr | None = None
+    phone: str | None = Field(default=None, max_length=40)
+    relationship: str | None = Field(default=None, max_length=40)
+    address: str | None = Field(default=None, max_length=255)
+    student_id: UUID
+    is_primary: bool = False
+
+
+class GuardianLinkResponse(BaseModel):
+    guardian_id: UUID
+    student_id: UUID
+    first_name: str
+    last_name: str
+    email: str | None = None
+    phone: str | None = None
+    relationship: str | None = None
+    is_primary: bool
+
+
+class AnnouncementCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    body: str = Field(min_length=1)
+    audience: str = Field(default="all", pattern="^(all|class|staff|parents|students)$")
+    class_group_id: UUID | None = None
+    expires_at: datetime | None = None
+
+
+class AnnouncementResponse(BaseModel):
+    id: UUID
+    title: str
+    body: str
+    audience: str
+    class_group_id: UUID | None = None
+    published_at: datetime
+    expires_at: datetime | None = None
+    status: str
+
+
+class NotificationResponse(BaseModel):
+    id: UUID
+    title: str
+    body: str
+    type: str
+    read_at: datetime | None = None
+    link: str | None = None
+    created_at: datetime

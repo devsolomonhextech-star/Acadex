@@ -1,6 +1,7 @@
 import { apiRequest, apiRequestBlob } from '../../shared/api/client'
 import type {
   ImportHistoryPage, ImportJobDetail, ImportJobSummary, Student, StudentPage,
+  StudentProfile,
 } from '../../shared/api/types'
 
 type NewStudent = { admission_number: string; first_name: string; last_name: string; date_of_birth?: string }
@@ -14,6 +15,10 @@ export function fetchStudents(token: string, page: number, search: string, statu
 
 export function fetchStudentOptions(token: string) {
   return apiRequest<StudentPage>('/students?page=1&page_size=100', {}, token)
+}
+
+export function fetchStudentProfile(token: string, studentId: string) {
+  return apiRequest<StudentProfile>(`/students/${studentId}/profile`, {}, token)
 }
 
 export function createStudent(token: string, payload: NewStudent) {
