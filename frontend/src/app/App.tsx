@@ -18,6 +18,8 @@ const ParentsPage = lazy(() => import('../features/parents/ParentsPage'))
 const CommunicationsPage = lazy(() => import('../features/communications/CommunicationsPage'))
 const AcademicCalendarPage = lazy(() => import('../features/calendar/AcademicCalendarPage'))
 const SettingsPage = lazy(() => import('../features/settings/SettingsPage'))
+const AdmissionsPage = lazy(() => import('../features/admissions/AdmissionsPage'))
+const ReportsPage = lazy(() => import('../features/reports/ReportsPage'))
 const AcceptInvitationPage = lazy(() => import('../features/staff/AcceptInvitationPage'))
 const LoginPage = lazy(() => import('../features/auth/AuthPages').then(module => ({ default: module.LoginPage })))
 const RegisterPage = lazy(() => import('../features/auth/AuthPages').then(module => ({ default: module.RegisterPage })))
@@ -63,6 +65,8 @@ function AppRoutes() {
       <Route path="/settings" element={user?.role === 'school_admin' ? <Suspense fallback={<LoadingPage />}><SettingsPage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/parents" element={user && ['parent'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><ParentsPage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/communications" element={user && ['school_admin', 'principal'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><CommunicationsPage /></Suspense> : <Navigate to="/" replace />} />
+      <Route path="/admissions" element={user && ['school_admin', 'principal', 'registrar'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><AdmissionsPage /></Suspense> : <Navigate to="/" replace />} />
+      <Route path="/reports" element={user && ['school_admin', 'principal', 'registrar', 'teacher', 'finance'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><ReportsPage /></Suspense> : <Navigate to="/" replace />} />
     </Route>
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes>
