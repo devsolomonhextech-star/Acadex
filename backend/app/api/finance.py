@@ -576,12 +576,28 @@ async def list_payments(
     context: Annotated[TenantContext, Depends(require_roles(*finance_roles))],
     session: Annotated[AsyncSession, Depends(get_session)],
     student_id: UUID | None = None,
+    term_id: UUID | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
 ):
     filters = [Payment.school_id == context.school_id]
     if student_id is not None:
         filters.append(Payment.student_id == student_id)
+    if term_id is not None:
+        term_exists = await session.scalar(
+            select(Term.id).where(Term.id == term_id, Term.school_id == context.school_id)
+        )
+        if term_exists is None:
+            raise _conflict("Academic term not found", 404)
+        filters.append(Payment.id.in_(
+            select(PaymentAllocation.payment_id)
+            .join(StudentInvoice, StudentInvoice.id == PaymentAllocation.invoice_id)
+            .where(
+                PaymentAllocation.school_id == context.school_id,
+                StudentInvoice.school_id == context.school_id,
+                StudentInvoice.term_id == term_id,
+            )
+        ))
     query = (
         select(Payment, Student.first_name, Student.last_name, func.coalesce(func.sum(PaymentAllocation.amount), Decimal(0)))
         .join(Student, Student.id == Payment.student_id)

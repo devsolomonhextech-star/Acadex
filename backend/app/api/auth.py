@@ -10,6 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel, Field
 
 from app.db import get_session
 from app.models import AuditEvent, MembershipRole, RefreshSession, School, SchoolMembership, User
@@ -17,11 +18,17 @@ from app.rate_limit import limit_login, limit_signup
 from app.schemas import LoginRequest, SchoolRegistration, TokenResponse, UserContextResponse
 from app.security import (
     create_access_token,
+    authenticator_qr_svg,
+    authenticator_uri,
     decode_access_token,
+    decrypt_totp_secret,
+    encrypt_totp_secret,
     hash_password,
     hash_refresh_token,
     new_csrf_token,
     new_refresh_token,
+    new_totp_secret,
+    totp_counter,
     verify_password,
 )
 from app.settings import get_settings
@@ -35,6 +42,29 @@ class TenantContext:
     user_id: UUID
     school_id: UUID
     role: MembershipRole
+
+
+class LoginResponse(BaseModel):
+    access_token: str | None = None
+    token_type: str = "bearer"
+    expires_in: int | None = None
+    csrf_token: str | None = None
+    requires_two_factor: bool = False
+    challenge_token: str | None = None
+
+
+class TotpCodeRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class LoginTotpRequest(TotpCodeRequest):
+    challenge_token: str
+
+
+class TotpSetupResponse(BaseModel):
+    secret: str
+    otpauth_uri: str
+    qr_svg: str
 
 
 def set_refresh_cookies(response: Response, raw_token: str, csrf: str, expires: datetime) -> None:
@@ -59,6 +89,8 @@ async def current_tenant(
         raise HTTPException(status_code=401, detail="Authentication required", headers={"WWW-Authenticate": "Bearer"})
     try:
         claims = decode_access_token(credentials.credentials)
+        if claims.get("type") != "access":
+            raise ValueError("wrong token type")
         user_id, school_id = UUID(claims["sub"]), UUID(claims["school_id"])
     except (jwt.PyJWTError, KeyError, ValueError):
         raise HTTPException(status_code=401, detail="Invalid or expired session", headers={"WWW-Authenticate": "Bearer"}) from None
@@ -110,8 +142,8 @@ async def register_school(payload: SchoolRegistration, session: Annotated[AsyncS
     return {"school_id": str(school.id), "school_slug": school.slug, "status": "active", "message": "School created. Sign in with your administrator account."}
 
 
-@router.post("/auth/login", response_model=TokenResponse, dependencies=[Depends(limit_login)])
-async def login(payload: LoginRequest, response: Response, session: Annotated[AsyncSession, Depends(get_session)]) -> TokenResponse:
+@router.post("/auth/login", response_model=LoginResponse, dependencies=[Depends(limit_login)])
+async def login(payload: LoginRequest, response: Response, session: Annotated[AsyncSession, Depends(get_session)]) -> LoginResponse:
     school_result = await session.execute(select(School).where(School.slug == payload.school_slug))
     school = school_result.scalar_one_or_none()
     user_result = await session.execute(select(User).where(User.email == str(payload.email)))
@@ -126,6 +158,18 @@ async def login(payload: LoginRequest, response: Response, session: Annotated[As
     membership = membership_result.scalar_one_or_none()
     if membership is None:
         raise HTTPException(status_code=401, detail="Invalid school, email, or password")
+    if user.totp_enabled:
+        challenge = jwt.encode({
+            "sub": str(user.id), "school_id": str(school.id),
+            "exp": datetime.now(UTC) + timedelta(minutes=5), "type": "totp_challenge",
+        }, get_settings().secret_key, algorithm="HS256")
+        response.headers["Cache-Control"] = "no-store"
+        return LoginResponse(requires_two_factor=True, challenge_token=challenge)
+    return await _complete_login(user, school, membership, response, session)
+
+
+async def _complete_login(user: User, school: School, membership: SchoolMembership,
+                          response: Response, session: AsyncSession) -> LoginResponse:
     settings = get_settings()
     now = datetime.now(UTC)
     expires = now + timedelta(days=settings.refresh_token_days)
@@ -136,7 +180,117 @@ async def login(payload: LoginRequest, response: Response, session: Annotated[As
     await session.commit()
     response.headers["Cache-Control"] = "no-store"
     set_refresh_cookies(response, raw_refresh, csrf, expires)
-    return TokenResponse(access_token=create_access_token(user.id, school.id, membership.role.value), expires_in=settings.access_token_minutes * 60, csrf_token=csrf)
+    return LoginResponse(access_token=create_access_token(user.id, school.id, membership.role.value), expires_in=settings.access_token_minutes * 60, csrf_token=csrf)
+
+
+@router.post("/auth/login/verify-totp", response_model=LoginResponse, dependencies=[Depends(limit_login)])
+async def verify_login_totp(payload: LoginTotpRequest,
+                            response: Response, session: Annotated[AsyncSession, Depends(get_session)]) -> LoginResponse:
+    try:
+        claims = jwt.decode(payload.challenge_token, get_settings().secret_key, algorithms=["HS256"],
+                            options={"require": ["exp", "sub", "school_id", "type"]})
+        if claims.get("type") != "totp_challenge":
+            raise ValueError("wrong challenge type")
+        user_id, school_id = UUID(claims["sub"]), UUID(claims["school_id"])
+    except (jwt.PyJWTError, KeyError, ValueError):
+        raise HTTPException(status_code=401, detail="This verification request has expired. Sign in again.") from None
+    result = await session.execute(select(User, School, SchoolMembership)
+        .join(SchoolMembership, SchoolMembership.user_id == User.id)
+        .join(School, SchoolMembership.school_id == School.id)
+        .where(User.id == user_id, School.id == school_id,
+               User.status == "active", School.status == "active",
+               SchoolMembership.status == "active").with_for_update())
+    record = result.one_or_none()
+    if record is None:
+        raise HTTPException(status_code=401, detail="Invalid verification code")
+    user, school, membership = record
+    if not user.totp_enabled or not user.totp_secret_encrypted:
+        raise HTTPException(status_code=401, detail="Invalid verification code")
+    counter = totp_counter(decrypt_totp_secret(user.totp_secret_encrypted), payload.code)
+    if counter is None or (user.totp_last_counter is not None and counter <= user.totp_last_counter):
+        raise HTTPException(status_code=401, detail="Invalid or already used verification code")
+    user.totp_last_counter = counter
+    return await _complete_login(user, school, membership, response, session)
+
+
+def _require_school_admin(context: TenantContext) -> None:
+    if context.role != MembershipRole.SCHOOL_ADMIN:
+        raise HTTPException(status_code=403, detail="Only the school administrator can manage two-factor authentication")
+
+
+@router.get("/auth/totp/status")
+async def totp_status(context: Annotated[TenantContext, Depends(current_tenant)],
+                      session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, bool]:
+    _require_school_admin(context)
+    user = await session.get(User, context.user_id)
+    return {"enabled": bool(user and user.totp_enabled)}
+
+
+@router.post("/auth/totp/setup", response_model=TotpSetupResponse, dependencies=[Depends(limit_login)])
+async def setup_totp(context: Annotated[TenantContext, Depends(current_tenant)],
+                     response: Response,
+                     session: Annotated[AsyncSession, Depends(get_session)]) -> TotpSetupResponse:
+    _require_school_admin(context)
+    result = await session.execute(select(User, School).join(SchoolMembership, SchoolMembership.user_id == User.id)
+        .join(School, School.id == context.school_id)
+        .where(User.id == context.user_id, SchoolMembership.school_id == context.school_id))
+    user, school = result.one()
+    if user.totp_enabled:
+        raise HTTPException(status_code=409, detail="Two-factor authentication is already enabled")
+    secret = new_totp_secret()
+    user.totp_secret_encrypted = encrypt_totp_secret(secret)
+    user.totp_setup_expires_at = datetime.now(UTC) + timedelta(minutes=10)
+    await session.commit()
+    uri = authenticator_uri(secret, user.email, school.name)
+    response.headers["Cache-Control"] = "no-store"
+    return TotpSetupResponse(secret=secret, otpauth_uri=uri, qr_svg=authenticator_qr_svg(uri))
+
+
+@router.post("/auth/totp/enable", dependencies=[Depends(limit_login)])
+async def enable_totp(payload: TotpCodeRequest,
+                      context: Annotated[TenantContext, Depends(current_tenant)],
+                      session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, bool]:
+    _require_school_admin(context)
+    user = await session.get(User, context.user_id, with_for_update=True)
+    if user is None or user.totp_secret_encrypted is None or user.totp_enabled:
+        raise HTTPException(status_code=409, detail="Start authenticator setup before enabling it")
+    setup_expires_at = user.totp_setup_expires_at
+    if setup_expires_at is None or (setup_expires_at.replace(tzinfo=UTC) if setup_expires_at.tzinfo is None else setup_expires_at) <= datetime.now(UTC):
+        user.totp_secret_encrypted = None
+        user.totp_setup_expires_at = None
+        await session.commit()
+        raise HTTPException(status_code=400, detail="Authenticator setup expired. Start setup again.")
+    counter = totp_counter(decrypt_totp_secret(user.totp_secret_encrypted), payload.code)
+    if counter is None:
+        raise HTTPException(status_code=400, detail="That code did not match. Check the authenticator app and try again.")
+    user.totp_enabled = True
+    user.totp_last_counter = counter
+    user.totp_setup_expires_at = None
+    session.add(AuditEvent(school_id=context.school_id, actor_user_id=context.user_id,
+        action="auth.totp_enabled", resource_type="user", resource_id=context.user_id))
+    await session.commit()
+    return {"enabled": True}
+
+
+@router.post("/auth/totp/disable", dependencies=[Depends(limit_login)])
+async def disable_totp(payload: TotpCodeRequest,
+                       context: Annotated[TenantContext, Depends(current_tenant)],
+                       session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, bool]:
+    _require_school_admin(context)
+    user = await session.get(User, context.user_id, with_for_update=True)
+    if user is None or not user.totp_enabled or not user.totp_secret_encrypted:
+        raise HTTPException(status_code=409, detail="Two-factor authentication is not enabled")
+    counter = totp_counter(decrypt_totp_secret(user.totp_secret_encrypted), payload.code)
+    if counter is None or (user.totp_last_counter is not None and counter <= user.totp_last_counter):
+        raise HTTPException(status_code=400, detail="That code did not match or was already used")
+    user.totp_enabled = False
+    user.totp_secret_encrypted = None
+    user.totp_last_counter = None
+    user.totp_setup_expires_at = None
+    session.add(AuditEvent(school_id=context.school_id, actor_user_id=context.user_id,
+        action="auth.totp_disabled", resource_type="user", resource_id=context.user_id))
+    await session.commit()
+    return {"enabled": False}
 
 
 _DUMMY_HASH: str | None = None

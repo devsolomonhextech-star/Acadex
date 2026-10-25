@@ -48,8 +48,10 @@ export function fetchInvoiceDetail(token: string, invoiceId: string) {
   return apiRequest<InvoiceDetail>(`/finance/invoices/${invoiceId}`, {}, token)
 }
 
-export function fetchPayments(token: string, page: number) {
-  return apiRequest<PaymentPage>(`/finance/payments?page=${page}&page_size=10`, {}, token)
+export function fetchPayments(token: string, page: number, termId?: string) {
+  const query = new URLSearchParams({ page: String(page), page_size: '10' })
+  if (termId) query.set('term_id', termId)
+  return apiRequest<PaymentPage>(`/finance/payments?${query}`, {}, token)
 }
 
 export function createPayment(token: string, payload: {

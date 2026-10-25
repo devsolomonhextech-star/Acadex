@@ -2,7 +2,7 @@ import { useCallback, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAppDispatch, useAppSelector } from '../../app/hooks'
-import { apiRequest, fetchCurrentUser, readCsrfCookie, registerSchool, rotateSession, setSessionRefresher, signIn, signOutRequest } from '../../shared/api/client'
+import { apiRequest, fetchCurrentUser, readCsrfCookie, registerSchool, rotateSession, setSessionRefresher, signIn, signOutRequest, verifySignInTotp } from '../../shared/api/client'
 import type { SchoolUser } from '../../shared/api/types'
 import { authInitialized, sessionCleared, sessionEstablished } from './authSlice'
 
@@ -68,6 +68,15 @@ export function useAuth() {
 
   const signInToSchool = useCallback(async (school: string, email: string, password: string) => {
     const session = await signIn(school, email, password)
+    if ('requires_two_factor' in session && session.requires_two_factor) return { requiresTwoFactor: true as const, challengeToken: session.challenge_token }
+    const currentUser = await fetchCurrentUser(session.access_token)
+    queryClient.clear()
+    dispatch(sessionEstablished({ user: currentUser, accessToken: session.access_token }))
+    return { requiresTwoFactor: false as const }
+  }, [dispatch, queryClient])
+
+  const completeTwoFactorSignIn = useCallback(async (challengeToken: string, code: string) => {
+    const session = await verifySignInTotp(challengeToken, code)
     const currentUser = await fetchCurrentUser(session.access_token)
     queryClient.clear()
     dispatch(sessionEstablished({ user: currentUser, accessToken: session.access_token }))
@@ -80,7 +89,7 @@ export function useAuth() {
     }
   }, [dispatch, queryClient])
 
-  return { user: user as SchoolUser | null, accessToken, loading: !initialized, signInToSchool, signOut }
+  return { user: user as SchoolUser | null, accessToken, loading: !initialized, signInToSchool, completeTwoFactorSignIn, signOut }
 }
 
 export function createSchool(payload: {

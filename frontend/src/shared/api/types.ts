@@ -4,6 +4,7 @@ export type Session = {
   expires_in: number
   csrf_token: string
 }
+export type LoginResult = (Session & { requires_two_factor?: false }) | { requires_two_factor: true; challenge_token: string }
 
 export type SchoolUser = {
   user_id: string
@@ -28,13 +29,39 @@ export type StudentPage = { items: Student[]; page: number; page_size: number; t
 export type ProfileGuardian = {
   guardian_id: string; full_name: string; relationship: string
   email: string | null; phone: string | null; is_primary: boolean
+  has_portal_login: boolean
 }
+export type ProfileStudentInfo = {
+  id: string; admission_number: string; first_name: string; last_name: string
+  display_name: string; date_of_birth: string | null; age_years: number | null
+  gender: string | null; phone: string | null; email: string | null
+  status: string; has_portal_login: boolean
+}
+export type ProfileSubject = {
+  subject_code: string; subject_name: string; teacher_name: string | null
+}
+export type ProfileLesson = {
+  starts_at: string; ends_at: string; subject_code: string
+  subject_name: string; teacher_name: string; room: string | null
+}
+export type ProfileWeekdayLesson = ProfileLesson & { day_of_week: number; day_name: string }
+export type ProfileBehavior = {
+  id: string; occurred_on: string; category: string; severity: string
+  title: string; description: string | null; action_taken: string | null; recorded_by: string
+}
+export type ProfileDocument = {
+  id: string; doc_type: string; title: string; reference: string | null
+  issued_on: string | null; notes: string | null; created_at: string; added_by: string
+}
+export type ProfileActivity = {
+  key: string; kind: 'attendance' | 'payment' | 'result' | 'behavior' | 'document'
+  title: string; detail: string; at: string; day: string
+}
+export type PasswordResetResult = { email: string; created_account: boolean }
+export type MessageResult = { recipients: number; guardian_names: string[] }
 export type StudentProfile = {
   generated_at: string
-  student: {
-    id: string; admission_number: string; first_name: string; last_name: string
-    display_name: string; date_of_birth: string | null; age_years: number | null; status: string
-  }
+  student: ProfileStudentInfo
   enrollment: {
     class_group_id: string; class_name: string; grade_level: string
     stream: string; academic_year: string; enrolled_on: string
@@ -47,6 +74,11 @@ export type StudentProfile = {
   } | null
   finance: {
     invoiced_total: string; paid_total: string; outstanding_total: string
+    payments: {
+      id: string; receipt_number: string; amount: string; method: string
+      reference: string | null; payment_date: string
+      allocated_amount: string; unallocated_amount: string
+    }[]
     invoices: {
       id: string; invoice_number: string; term_name: string; total_amount: string
       paid_amount: string; balance: string; status: string; issued_on: string
@@ -56,13 +88,21 @@ export type StudentProfile = {
     term_id: string; term_name: string; academic_year: string; ordinal: number
     aggregate_percent: string; grade: string | null; position: number | null; published: boolean
   }[]
-  schedule_today: {
-    starts_at: string; ends_at: string; subject_code: string
-    subject_name: string; teacher_name: string; room: string | null
-  }[]
+  subjects: ProfileSubject[]
+  schedule_today: ProfileLesson[]
+  schedule: ProfileWeekdayLesson[]
+  behavior: ProfileBehavior[]
+  documents: ProfileDocument[]
+  activities: ProfileActivity[]
 }
 export type AcademicYear = { id: string; name: string; starts_on: string; ends_on: string; status: string }
 export type AcademicTerm = { id: string; academic_year_id: string; name: string; ordinal: number; starts_on: string; ends_on: string }
+export type AcademicCalendarEvent = {
+  id: string; academic_year_id: string; term_id: string | null; class_group_id: string | null
+  class_name: string | null; title: string; category: 'term' | 'holiday' | 'exam' | 'meeting' | 'event' | 'assessment' | 'other'
+  audience: 'all' | 'students' | 'staff' | 'parents' | 'teachers' | 'class'
+  starts_on: string; ends_on: string; description: string | null; created_at: string
+}
 export type ClassGroup = { id: string; academic_year_id: string; name: string; grade_level: string; stream: string }
 export type Enrollment = { id: string; student_id: string; academic_year_id: string; class_group_id: string; enrolled_on: string; status: string }
 export type Subject = { id: string; code: string; name: string; status: string }
@@ -88,6 +128,12 @@ export type OverviewActivity = { week_start: string; students: number; attendanc
 export type DemoSeedResult = {
   invoices_created: number; payments_created: number
   attendance_records_created: number; results_created: number
+  profiles_filled: number; guardians_created: number; teachers_created: number
+  subject_assignments_created: number; timetable_created: number
+  behavior_created: number; documents_created: number
+  history_year_created: boolean; history_results_created: number
+  history_invoices_created: number; history_payments_created: number
+  calendar_events_created: number
   invoiced_total: string; paid_total: string
 }
 export type Overview = {

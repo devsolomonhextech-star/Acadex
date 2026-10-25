@@ -5,7 +5,8 @@ import {
 } from 'antd'
 import type { TableColumnsType } from 'antd'
 import {
-  CheckCircleOutlined, CreditCardOutlined, PlusOutlined, SearchOutlined, ThunderboltOutlined,
+  BarChartOutlined, CheckCircleOutlined, CreditCardOutlined, FileTextOutlined, PlusOutlined,
+  SearchOutlined, ThunderboltOutlined,
 } from '@ant-design/icons'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -15,12 +16,13 @@ import {
   archiveFeeStructure, createFeeCategory, createFeeStructure, createPayment, fetchFeeCategories,
   fetchFeeStructures, fetchFinanceSummary, fetchInvoiceDetail, fetchInvoices, fetchPayments, generateInvoices,
 } from './financeApi'
-import { fetchAcademicTerms, fetchAcademicYears, fetchClassGroups } from '../academic/academicApi'
+import { fetchClassGroups } from '../academic/academicApi'
 import { fetchStudentOptions } from '../students/studentsApi'
 import type {
   FeeStructure, GenerateInvoicesResult, InvoiceStatus, Payment, PaymentMethod,
 } from '../../shared/api/types'
 import { useAuth } from '../auth/authHooks'
+import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 import { formatApiError } from '../../shared/api/errors'
 
 const amountSchema = z.string()
@@ -62,6 +64,7 @@ function money(value: string): string {
 
 export default function FinancePage() {
   const { accessToken, user } = useAuth()
+  const { terms, yearId: activeYearId, termId, year: activeYear, loading: periodLoading } = useAcademicPeriod()
   const queryClient = useQueryClient()
   const token = accessToken!
 
@@ -70,7 +73,7 @@ export default function FinancePage() {
   const [invoiceSearch, setInvoiceSearch] = useState('')
   const [activeSearch, setActiveSearch] = useState('')
   const [paymentPage, setPaymentPage] = useState(1)
-  const [termFilter, setTermFilter] = useState<string>('all')
+  const [activeFinanceTab, setActiveFinanceTab] = useState('overview')
   const [drawerInvoiceId, setDrawerInvoiceId] = useState<string | null>(null)
   const [structureOpen, setStructureOpen] = useState(false)
   const [generateOpen, setGenerateOpen] = useState(false)
@@ -84,22 +87,16 @@ export default function FinancePage() {
     const timer = window.setTimeout(() => setActiveSearch(invoiceSearch), 250)
     return () => window.clearTimeout(timer)
   }, [invoiceSearch])
+  useEffect(() => {
+    setInvoicePage(1)
+    setPaymentPage(1)
+    setDrawerInvoiceId(null)
+  }, [termId])
 
-  const years = useQuery({
-    queryKey: ['academic', 'years', user?.school_id],
-    queryFn: () => fetchAcademicYears(token),
-    enabled: Boolean(user),
-  })
-  const activeYear = years.data?.find(year => year.status === 'active') ?? years.data?.[0]
-  const terms = useQuery({
-    queryKey: ['academic', 'terms', activeYear?.id],
-    queryFn: () => fetchAcademicTerms(token, activeYear!.id),
-    enabled: Boolean(activeYear),
-  })
   const classes = useQuery({
-    queryKey: ['academic', 'classes', activeYear?.id],
-    queryFn: () => fetchClassGroups(token, activeYear!.id),
-    enabled: Boolean(activeYear),
+    queryKey: ['academic', 'classes', activeYearId],
+    queryFn: () => fetchClassGroups(token, activeYearId),
+    enabled: Boolean(activeYearId && !periodLoading),
   })
   const students = useQuery({
     queryKey: ['students', 'options', user?.school_id],
@@ -107,24 +104,29 @@ export default function FinancePage() {
     enabled: Boolean(user),
   })
   const summary = useQuery({
-    queryKey: ['finance', 'summary', user?.school_id, termFilter],
-    queryFn: () => fetchFinanceSummary(token, termFilter === 'all' ? undefined : termFilter),
-    enabled: Boolean(user),
+    queryKey: ['finance', 'summary', user?.school_id, termId],
+    queryFn: () => fetchFinanceSummary(token, termId || undefined),
+    enabled: Boolean(user && !periodLoading),
   })
   const invoices = useQuery({
-    queryKey: ['finance', 'invoices', user?.school_id, invoicePage, invoiceStatus, activeSearch, termFilter],
+    queryKey: ['finance', 'invoices', user?.school_id, invoicePage, invoiceStatus, activeSearch, termId],
     queryFn: () => fetchInvoices(token, {
       page: invoicePage,
-      term_id: termFilter === 'all' ? undefined : termFilter,
+      term_id: termId || undefined,
       status: invoiceStatus === 'all' ? undefined : invoiceStatus,
       search: activeSearch,
     }),
-    enabled: Boolean(user),
+    enabled: Boolean(user && !periodLoading),
+  })
+  const overviewInvoices = useQuery({
+    queryKey: ['finance', 'overview-invoices', user?.school_id, termId],
+    queryFn: () => fetchInvoices(token, { page: 1, term_id: termId || undefined }),
+    enabled: Boolean(user && !periodLoading),
   })
   const payments = useQuery({
-    queryKey: ['finance', 'payments', user?.school_id, paymentPage],
-    queryFn: () => fetchPayments(token, paymentPage),
-    enabled: Boolean(user),
+    queryKey: ['finance', 'payments', user?.school_id, paymentPage, termId],
+    queryFn: () => fetchPayments(token, paymentPage, termId || undefined),
+    enabled: Boolean(user && !periodLoading),
   })
   const feeStructures = useQuery({
     queryKey: ['finance', 'fee-structures', user?.school_id],
@@ -216,17 +218,16 @@ export default function FinancePage() {
     onError: error => setPaymentError(formatApiError(error)),
   })
 
-  const termOptions = [
-    { value: 'all', label: 'All terms' },
-    ...(terms.data ?? []).map(term => ({ value: term.id, label: term.name })),
-  ]
   const classOptions = (classes.data ?? []).map(group => ({ value: group.id, label: group.name }))
-  const termSelectOptions = (terms.data ?? []).map(term => ({ value: term.id, label: term.name }))
+  const termSelectOptions = terms.map(term => ({ value: term.id, label: term.name }))
   const studentOptions = (students.data?.items ?? []).map(student => ({
     value: student.id,
     label: `${student.first_name} ${student.last_name} (${student.admission_number})`,
   }))
   const categoryOptions = (feeCategories.data ?? []).map(category => ({ value: category.name }))
+  const collectionRate = summary.data && Number(summary.data.invoiced_total) > 0
+    ? Math.min(100, Math.round(Number(summary.data.paid_total) / Number(summary.data.invoiced_total) * 100))
+    : 0
 
   const invoiceColumns: TableColumnsType<Awaited<ReturnType<typeof fetchInvoices>>['items'][number]> = [
     {
@@ -340,7 +341,12 @@ export default function FinancePage() {
         <div><h2>Payments</h2><p>Receipts are numbered automatically; allocations apply to the oldest invoices first</p></div>
         <Space size={8}>
           <Button type="primary" icon={<PlusOutlined/>} disabled={!studentOptions.length}
-            onClick={() => { setPaymentError(''); setPaymentResult(null); setPaymentOpen(true) }}>
+            onClick={() => {
+              setPaymentError('')
+              setPaymentResult(null)
+              paymentForm.reset({ student_id: '', amount: '', method: 'cash', payment_date: dayjs().format('YYYY-MM-DD'), reference: '', note: '' })
+              setPaymentOpen(true)
+            }}>
             Record payment
           </Button>
         </Space>
@@ -364,11 +370,11 @@ export default function FinancePage() {
         <div><h2>Fee structures</h2><p>What each class is billed each term — then generate invoices for the whole class</p></div>
         <Space size={8} wrap>
           <Button icon={<ThunderboltOutlined/>} disabled={!activeYear || !classOptions.length || !termSelectOptions.length}
-            onClick={() => { setGenerateError(''); setGenerateResult(null); setGenerateOpen(true) }}>
+          onClick={() => { setGenerateError(''); setGenerateResult(null); setGenerateClassId(''); setGenerateTermId(termId); setGenerateOpen(true) }}>
             Generate invoices
           </Button>
           <Button type="primary" icon={<PlusOutlined/>} disabled={!activeYear || !classOptions.length || !termSelectOptions.length}
-            onClick={() => { setStructureError(''); structureForm.reset({ category: '', class_group_id: '', term_id: '', amount: '' }); setStructureOpen(true) }}>
+          onClick={() => { setStructureError(''); structureForm.reset({ category: '', class_group_id: '', term_id: termId, amount: '' }); setStructureOpen(true) }}>
             Add fee structure
           </Button>
         </Space>
@@ -376,10 +382,91 @@ export default function FinancePage() {
       {feeStructures.isError && <Alert className="import-alert" type="error" showIcon message={formatApiError(feeStructures.error)}/>}
       {!activeYear && <Alert className="import-alert" type="info" showIcon message="Set up an academic year, term, and class first — fees are billed per class and term."/>}
       <Table<FeeStructure>
-        rowKey="id" columns={structureColumns} dataSource={feeStructures.data ?? []} loading={feeStructures.isLoading}
+        rowKey="id" columns={structureColumns} dataSource={(feeStructures.data ?? []).filter(structure => !termId || structure.term_id === termId)} loading={feeStructures.isLoading || periodLoading}
         pagination={{ pageSize: 10, showSizeChanger: false }}
         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No fee structures yet"/> }}
       />
+    </div>
+  )
+
+  const overviewTab = (
+    <div className="finance-overview">
+      <div className="finance-overview-main">
+        <section className="finance-overview-card finance-collection-card">
+          <div className="finance-overview-title">
+            <div><h2>Collection overview</h2><p>Payments received against issued invoices</p></div>
+            <span className="finance-overview-icon"><BarChartOutlined/></span>
+          </div>
+          <div className="finance-collection-total">
+            <strong>GH₵ {summary.data ? money(summary.data.paid_total) : '—'}</strong>
+            <span>{collectionRate}% collected</span>
+          </div>
+          <div className="finance-progress" role="progressbar" aria-label="Invoice collection progress" aria-valuenow={collectionRate} aria-valuemin={0} aria-valuemax={100}>
+            <span style={{ width: `${collectionRate}%` }}/>
+          </div>
+          <div className="finance-progress-labels">
+            <span>Collected <strong>GH₵ {summary.data ? money(summary.data.paid_total) : '—'}</strong></span>
+            <span>Remaining <strong>GH₵ {summary.data ? money(summary.data.outstanding_total) : '—'}</strong></span>
+          </div>
+        </section>
+
+        <section className="finance-overview-card finance-activity-card">
+          <div className="finance-overview-title">
+            <div><h2>Recent payments</h2><p>Latest receipts applied to invoices in this term</p></div>
+            <Button type="link" onClick={() => setActiveFinanceTab('payments')}>All payments →</Button>
+          </div>
+          {payments.isError
+            ? <Alert type="error" showIcon message={formatApiError(payments.error)}/>
+            : <Table<Payment> size="small" rowKey="id" columns={paymentColumns.slice(0, 4)} dataSource={(payments.data?.items ?? []).slice(0, 5)} loading={payments.isLoading}
+                pagination={false} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No payments recorded yet"/> }}/>
+          }
+        </section>
+
+        <section className="finance-overview-card finance-open-invoices">
+          <div className="finance-overview-title">
+            <div><h2>Outstanding invoices</h2><p>Recently issued invoices with a balance remaining</p></div>
+            <Button type="link" onClick={() => setActiveFinanceTab('invoices')}>All invoices →</Button>
+          </div>
+          {overviewInvoices.isError
+            ? <Alert type="error" showIcon message={formatApiError(overviewInvoices.error)}/>
+            : <Table<Awaited<ReturnType<typeof fetchInvoices>>['items'][number]> size="small" rowKey="id"
+                columns={[
+                  { title: 'STUDENT', key: 'student', render: (_, item) => <span className="finance-student-cell"><strong>{item.student_name}</strong><small>{item.class_name ?? item.admission_number}</small></span> },
+                  { title: 'INVOICE', dataIndex: 'invoice_number', key: 'invoice_number' },
+                  { title: 'BALANCE', dataIndex: 'balance', key: 'balance', align: 'right', render: value => <span className="finance-strong">GH₵ {money(value)}</span> },
+                  { title: '', key: 'view', width: 68, render: (_, item) => <Button type="link" size="small" onClick={() => setDrawerInvoiceId(item.id)}>View</Button> },
+                ]}
+                dataSource={(overviewInvoices.data?.items ?? []).filter(item => Number(item.balance) > 0 && item.status !== 'void').slice(0, 5)}
+                loading={overviewInvoices.isLoading} pagination={false}
+                locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No outstanding invoices"/> }}/>
+          }
+        </section>
+      </div>
+
+      <aside className="finance-overview-side">
+        <section className="finance-overview-card finance-quick-actions">
+          <div className="finance-overview-title"><div><h2>Quick actions</h2><p>Common finance tasks</p></div></div>
+          <Button type="primary" icon={<PlusOutlined/>} block disabled={!studentOptions.length}
+            onClick={() => { setPaymentError(''); setPaymentResult(null); paymentForm.reset({ student_id: '', amount: '', method: 'cash', payment_date: dayjs().format('YYYY-MM-DD'), reference: '', note: '' }); setPaymentOpen(true) }}>
+            Record a payment
+          </Button>
+          <Button icon={<ThunderboltOutlined/>} block disabled={!activeYear || !classOptions.length || !termSelectOptions.length}
+            onClick={() => { setGenerateError(''); setGenerateResult(null); setGenerateClassId(''); setGenerateTermId(termId); setGenerateOpen(true) }}>
+            Generate invoices
+          </Button>
+          <Button icon={<FileTextOutlined/>} block disabled={!activeYear || !classOptions.length || !termSelectOptions.length}
+            onClick={() => { setStructureError(''); structureForm.reset({ category: '', class_group_id: '', term_id: termId, amount: '' }); setStructureOpen(true) }}>
+            Add fee structure
+          </Button>
+          <div className="finance-quick-note"><CreditCardOutlined/><span>Payments receive an automatic receipt and are applied to the oldest open invoices first.</span></div>
+        </section>
+        <section className="finance-overview-card finance-balance-card">
+          <span className="finance-overview-icon"><CreditCardOutlined/></span>
+          <span>Open invoices</span>
+          <strong>{summary.data?.open_invoice_count ?? '—'}</strong>
+          <small>Invoices with an outstanding balance</small>
+        </section>
+      </aside>
     </div>
   )
 
@@ -390,8 +477,18 @@ export default function FinancePage() {
         <h1>Finance</h1>
         <p className="welcome-subtitle">Fee structures, invoices, and payments for {user?.school_name}.</p>
       </div>
-      <Select aria-label="Term filter" value={termFilter} className="finance-term-filter"
-        options={termOptions} onChange={setTermFilter} loading={years.isLoading}/>
+      <div className="finance-heading-actions">
+        <span className="finance-period-label">{activeYear?.name ?? 'Academic year'}{terms.find(term => term.id === termId) ? ` · ${terms.find(term => term.id === termId)!.name}` : ''}</span>
+        <Button className="finance-primary-action" type="primary" icon={<PlusOutlined/>} disabled={!studentOptions.length}
+          onClick={() => {
+            setPaymentError('')
+            setPaymentResult(null)
+            paymentForm.reset({ student_id: '', amount: '', method: 'cash', payment_date: dayjs().format('YYYY-MM-DD'), reference: '', note: '' })
+            setPaymentOpen(true)
+          }}>
+          Record payment
+        </Button>
+      </div>
     </div>
 
     <div className="finance-stats">
@@ -406,7 +503,8 @@ export default function FinancePage() {
     {pageError && <Alert className="import-alert" type="error" showIcon message={pageError} closable onClose={() => setPageError('')}/>}
 
     <section className="panel finance-panel">
-      <Tabs items={[
+      <Tabs activeKey={activeFinanceTab} onChange={setActiveFinanceTab} items={[
+        { key: 'overview', label: <span><BarChartOutlined/> Overview</span>, children: overviewTab },
         { key: 'invoices', label: <span><CreditCardOutlined/> Invoices</span>, children: invoicesTab },
         { key: 'payments', label: <span><CheckCircleOutlined/> Payments</span>, children: paymentsTab },
         { key: 'structures', label: <span><CreditCardOutlined/> Fee structures</span>, children: structuresTab },
@@ -430,6 +528,25 @@ export default function FinancePage() {
               <div><span>Paid</span><strong>GH₵ {money(invoiceDetail.data.paid_amount)}</strong></div>
               <div><span>Balance</span><strong>GH₵ {money(invoiceDetail.data.balance)}</strong></div>
             </div>
+            {Number(invoiceDetail.data.balance) > 0 && (
+              <Button className="finance-drawer-pay" type="primary" icon={<PlusOutlined/>} block
+                onClick={() => {
+                  paymentForm.reset({
+                    student_id: invoiceDetail.data!.student_id,
+                    amount: invoiceDetail.data!.balance,
+                    method: 'cash',
+                    payment_date: dayjs().format('YYYY-MM-DD'),
+                    reference: '',
+                    note: `Payment for invoice ${invoiceDetail.data!.invoice_number}`,
+                  })
+                  setPaymentError('')
+                  setPaymentResult(null)
+                  setDrawerInvoiceId(null)
+                  setPaymentOpen(true)
+                }}>
+                Record payment · GH₵ {money(invoiceDetail.data.balance)} due
+              </Button>
+            )}
             <h4 className="drawer-section-title">Fee lines</h4>
             <Table rowKey="id" size="small" pagination={false}
               dataSource={invoiceDetail.data.lines}

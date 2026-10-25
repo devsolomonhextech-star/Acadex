@@ -19,6 +19,8 @@ dependencies = [
   "email-validator>=2.2,<3",
   "redis>=5,<7",
   "python-multipart>=0.0.9,<1",
+  "cryptography>=44,<47",
+  "qrcode>=8,<9",
   "openpyxl>=3.1,<4",
 ]
 

@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +25,7 @@ from app.models import (
     ClassGroup,
     ClassSubjectAssignment,
     MembershipRole,
+    PaymentAllocation,
     SchoolMembership,
     Student,
     StudentEnrollment,
@@ -122,8 +123,20 @@ def _week_start(day: date) -> date:
     return day - timedelta(days=day.weekday())
 
 
-async def _current_term(session: AsyncSession, school_id: UUID) -> TermInfo | None:
+async def _current_term(session: AsyncSession, school_id: UUID, term_id: UUID | None = None) -> TermInfo | None:
     """The term covering today, falling back to the most recent one on record."""
+    if term_id is not None:
+        row = (await session.execute(
+            select(AcademicTerm, AcademicYear)
+            .join(AcademicYear, (AcademicYear.id == AcademicTerm.academic_year_id)
+                  & (AcademicYear.school_id == AcademicTerm.school_id))
+            .where(AcademicTerm.school_id == school_id, AcademicTerm.id == term_id)
+        )).first()
+        if row is None:
+            return None
+        term, year = row
+        return TermInfo(name=term.name, academic_year=year.name, ordinal=term.ordinal,
+                        starts_on=term.starts_on, ends_on=term.ends_on)
     today = date.today()
     row = (await session.execute(
         select(AcademicTerm, AcademicYear)
@@ -146,24 +159,29 @@ async def _current_term(session: AsyncSession, school_id: UUID) -> TermInfo | No
 
 
 async def _attendance_figures(
-    session: AsyncSession, school_id: UUID, lessons_today: int
+    session: AsyncSession, school_id: UUID, lessons_today: int, term_id: UUID | None = None
 ) -> AttendanceFigures:
     today = date.today()
-    submitted = (await session.execute(
-        select(AttendanceSession.class_group_id).where(
+    date_filters = [AttendanceSession.school_id == school_id, AttendanceSession.attendance_date == today]
+    if term_id is not None:
+        term = await session.scalar(select(AcademicTerm).where(
+            AcademicTerm.id == term_id, AcademicTerm.school_id == school_id,
+        ))
+        date_filters = [
             AttendanceSession.school_id == school_id,
-            AttendanceSession.attendance_date == today,
-        )
+            AttendanceSession.attendance_date >= term.starts_on,
+            AttendanceSession.attendance_date <= term.ends_on,
+        ]
+        today = term.ends_on
+    submitted = (await session.execute(
+        select(AttendanceSession.id).where(*date_filters)
     )).scalars().all()
     counts = (await session.execute(
-        select(AttendanceRecord.status, func.count()).where(
+        select(AttendanceRecord.status, func.count())
+        .join(AttendanceSession, AttendanceSession.id == AttendanceRecord.session_id)
+        .where(
             AttendanceRecord.school_id == school_id,
-            AttendanceRecord.session_id.in_(
-                select(AttendanceSession.id).where(
-                    AttendanceSession.school_id == school_id,
-                    AttendanceSession.attendance_date == today,
-                )
-            ),
+            *date_filters,
         ).group_by(AttendanceRecord.status)
     )).all()
     by_status = dict(counts)
@@ -175,20 +193,27 @@ async def _attendance_figures(
     # Late students attended, so they count towards the attendance rate.
     rate = round((present + late) * 100 / total, 1) if total else None
     return AttendanceFigures(
-        date=today, lessons_today=lessons_today, sessions_submitted=len(submitted),
+        date=today, lessons_today=0 if term_id else lessons_today, sessions_submitted=len(submitted),
         records_total=total, present=present, late=late, absent=absent, excused=excused,
         rate_percent=rate,
     )
 
 
-async def _finance_figures(session: AsyncSession, school_id: UUID) -> FinanceFigures:
+async def _finance_figures(session: AsyncSession, school_id: UUID, term_id: UUID | None = None) -> FinanceFigures:
+    term_filter = [StudentInvoice.school_id == school_id, StudentInvoice.status != "void"]
+    overdue_filter = [
+        StudentInvoice.school_id == school_id,
+        StudentInvoice.status.in_(("issued", "partially_paid")),
+    ]
+    if term_id is not None:
+        term_filter.append(StudentInvoice.term_id == term_id)
+        overdue_filter.append(StudentInvoice.term_id == term_id)
     totals = (await session.execute(
         select(
             func.coalesce(func.sum(StudentInvoice.total_amount), 0),
             func.coalesce(func.sum(StudentInvoice.paid_amount), 0),
             func.count().filter(StudentInvoice.status.in_(("issued", "partially_paid"))),
-        ).where(StudentInvoice.school_id == school_id,
-                StudentInvoice.status != "void")
+        ).where(*term_filter)
     )).one()
     invoiced, paid, open_count = totals
     overdue_cutoff = date.today() - timedelta(days=OVERDUE_DAYS)
@@ -196,11 +221,7 @@ async def _finance_figures(session: AsyncSession, school_id: UUID) -> FinanceFig
         select(
             func.count(),
             func.coalesce(func.sum(StudentInvoice.total_amount - StudentInvoice.paid_amount), 0),
-        ).where(
-            StudentInvoice.school_id == school_id,
-            StudentInvoice.status.in_(("issued", "partially_paid")),
-            StudentInvoice.issued_on < overdue_cutoff,
-        )
+        ).where(*overdue_filter, StudentInvoice.issued_on < overdue_cutoff)
     )).one()
     return FinanceFigures(
         invoiced_total=invoiced, paid_total=paid,
@@ -210,7 +231,9 @@ async def _finance_figures(session: AsyncSession, school_id: UUID) -> FinanceFig
     )
 
 
-async def _lessons_today(session: AsyncSession, school_id: UUID) -> list[LessonFigures]:
+async def _lessons_today(
+    session: AsyncSession, school_id: UUID, academic_year_id: UUID | None = None
+) -> list[LessonFigures]:
     today_index = datetime.now(UTC).weekday()
     rows = (await session.execute(
         select(TimetableSlot, ClassGroup, Subject, User)
@@ -221,7 +244,11 @@ async def _lessons_today(session: AsyncSession, school_id: UUID) -> list[LessonF
         .join(SchoolMembership, (SchoolMembership.id == TimetableSlot.teacher_membership_id)
               & (SchoolMembership.school_id == TimetableSlot.school_id))
         .join(User, User.id == SchoolMembership.user_id)
-        .where(TimetableSlot.school_id == school_id, TimetableSlot.day_of_week == today_index)
+        .where(
+            TimetableSlot.school_id == school_id,
+            TimetableSlot.day_of_week == today_index,
+            *([TimetableSlot.academic_year_id == academic_year_id] if academic_year_id else []),
+        )
         .order_by(TimetableSlot.starts_at)
     )).all()
     return [LessonFigures(
@@ -295,18 +322,37 @@ async def _attention(
     return items
 
 
-async def _activity(session: AsyncSession, school_id: UUID) -> list[ActivityPoint]:
-    """Eight weeks of real attendance rate and cumulative active enrollment."""
-    today = date.today()
-    this_week = _week_start(today)
-    starts = [this_week - timedelta(weeks=offset) for offset in range(ACTIVITY_WEEKS - 1, -1, -1)]
-    oldest = starts[0]
+async def _activity(
+    session: AsyncSession,
+    school_id: UUID,
+    academic_year_id: UUID | None = None,
+    term_id: UUID | None = None,
+) -> list[ActivityPoint]:
+    """Eight weeks of activity ending in the selected term/year or the current week."""
+    if term_id is not None:
+        period = await session.scalar(select(AcademicTerm).where(
+            AcademicTerm.id == term_id, AcademicTerm.school_id == school_id,
+        ))
+        period_start, period_end = period.starts_on, period.ends_on
+    elif academic_year_id is not None:
+        period = await session.scalar(select(AcademicYear).where(
+            AcademicYear.id == academic_year_id, AcademicYear.school_id == school_id,
+        ))
+        period_start, period_end = period.starts_on, period.ends_on
+    else:
+        period_start, period_end = date.today() - timedelta(weeks=ACTIVITY_WEEKS), date.today()
+    final_week = _week_start(period_end)
+    first_week = max(_week_start(period_start), final_week - timedelta(weeks=ACTIVITY_WEEKS - 1))
+    starts = [first_week + timedelta(weeks=offset) for offset in range((final_week - first_week).days // 7 + 1)]
+    oldest = max(period_start, starts[0])
+    newest = min(period_end, starts[-1] + timedelta(days=6))
 
     daily = (await session.execute(
         select(AttendanceSession.attendance_date, AttendanceRecord.status, func.count())
         .join(AttendanceRecord, AttendanceRecord.session_id == AttendanceSession.id)
         .where(AttendanceSession.school_id == school_id,
-               AttendanceSession.attendance_date >= oldest)
+               AttendanceSession.attendance_date >= oldest,
+               AttendanceSession.attendance_date <= newest)
         .group_by(AttendanceSession.attendance_date, AttendanceRecord.status)
     )).all()
     weekly_attended: dict[date, int] = {}
@@ -317,10 +363,25 @@ async def _activity(session: AsyncSession, school_id: UUID) -> list[ActivityPoin
         if status in ("present", "late"):
             weekly_attended[bucket] = weekly_attended.get(bucket, 0) + count
 
+    payment_filters = [
+        Payment.school_id == school_id,
+        Payment.status == "recorded",
+        Payment.payment_date >= oldest,
+        Payment.payment_date <= newest,
+    ]
+    if term_id is not None:
+        payment_filters.append(Payment.id.in_(
+            select(PaymentAllocation.payment_id)
+            .join(StudentInvoice, StudentInvoice.id == PaymentAllocation.invoice_id)
+            .where(
+                PaymentAllocation.school_id == school_id,
+                StudentInvoice.school_id == school_id,
+                StudentInvoice.term_id == term_id,
+            )
+        ))
     payment_rows = (await session.execute(
         select(Payment.payment_date, func.sum(Payment.amount))
-        .where(Payment.school_id == school_id, Payment.status == "recorded",
-               Payment.payment_date >= oldest)
+        .where(*payment_filters)
         .group_by(Payment.payment_date)
     )).all()
     weekly_payments: dict[date, Decimal] = {}
@@ -328,9 +389,11 @@ async def _activity(session: AsyncSession, school_id: UUID) -> list[ActivityPoin
         bucket = _week_start(day)
         weekly_payments[bucket] = weekly_payments.get(bucket, Decimal(0)) + amount
 
+    enrollment_filters = [StudentEnrollment.school_id == school_id, StudentEnrollment.status == "active"]
+    if academic_year_id is not None:
+        enrollment_filters.append(StudentEnrollment.academic_year_id == academic_year_id)
     enrolled_on = (await session.execute(
-        select(StudentEnrollment.enrolled_on).where(
-            StudentEnrollment.school_id == school_id, StudentEnrollment.status == "active")
+        select(StudentEnrollment.enrolled_on).where(*enrollment_filters)
     )).scalars().all()
 
     points: list[ActivityPoint] = []
@@ -351,26 +414,65 @@ async def _activity(session: AsyncSession, school_id: UUID) -> list[ActivityPoin
 async def overview(
     context: Annotated[TenantContext, Depends(current_tenant)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    academic_year_id: UUID | None = None,
+    term_id: UUID | None = None,
 ):
     school_id = context.school_id
     role = context.role
 
-    students_total = (await session.execute(
-        select(func.count()).select_from(Student).where(
-            Student.school_id == school_id, Student.status == "active")
-    )).scalar_one()
-    teachers_total = (await session.execute(
-        select(func.count()).select_from(SchoolMembership).where(
-            SchoolMembership.school_id == school_id,
-            SchoolMembership.role == MembershipRole.TEACHER,
-            SchoolMembership.status == "active",
-        )
-    )).scalar_one()
+    if academic_year_id is not None:
+        year_exists = await session.scalar(select(AcademicYear.id).where(
+            AcademicYear.id == academic_year_id, AcademicYear.school_id == school_id,
+        ))
+        if year_exists is None:
+            raise HTTPException(status_code=404, detail="Academic year not found")
+    if term_id is not None:
+        selected_term = await session.scalar(select(AcademicTerm).where(
+            AcademicTerm.id == term_id, AcademicTerm.school_id == school_id,
+        ))
+        if selected_term is None:
+            raise HTTPException(status_code=404, detail="Academic term not found")
+        if academic_year_id is not None and selected_term.academic_year_id != academic_year_id:
+            raise HTTPException(status_code=422, detail="The selected term does not belong to the selected academic year")
+        academic_year_id = selected_term.academic_year_id
 
-    latest_year = (await session.scalar(
+    latest_year = academic_year_id or (await session.scalar(
         select(AcademicYear.id).where(AcademicYear.school_id == school_id)
         .order_by(AcademicYear.starts_on.desc()).limit(1)
     ))
+    if latest_year:
+        students_total = (await session.execute(
+            select(func.count(func.distinct(StudentEnrollment.student_id))).where(
+                StudentEnrollment.school_id == school_id,
+                StudentEnrollment.academic_year_id == latest_year,
+            )
+        )).scalar_one()
+        teachers_total = (await session.execute(
+            select(func.count(func.distinct(ClassSubjectAssignment.teacher_membership_id)))
+            .join(ClassGroup, (ClassGroup.id == ClassSubjectAssignment.class_group_id)
+                  & (ClassGroup.school_id == ClassSubjectAssignment.school_id))
+            .join(SchoolMembership, (SchoolMembership.id == ClassSubjectAssignment.teacher_membership_id)
+                  & (SchoolMembership.school_id == ClassSubjectAssignment.school_id))
+            .where(
+                ClassSubjectAssignment.school_id == school_id,
+                ClassGroup.academic_year_id == latest_year,
+                SchoolMembership.role == MembershipRole.TEACHER,
+                SchoolMembership.status == "active",
+            )
+        )).scalar_one()
+    else:
+        students_total = (await session.execute(
+            select(func.count()).select_from(Student).where(
+                Student.school_id == school_id, Student.status == "active")
+        )).scalar_one()
+        teachers_total = (await session.execute(
+            select(func.count()).select_from(SchoolMembership).where(
+                SchoolMembership.school_id == school_id,
+                SchoolMembership.role == MembershipRole.TEACHER,
+                SchoolMembership.status == "active",
+            )
+        )).scalar_one()
+
     classes_total = 0
     if latest_year:
         classes_total = (await session.execute(
@@ -378,16 +480,16 @@ async def overview(
                 ClassGroup.school_id == school_id, ClassGroup.academic_year_id == latest_year)
         )).scalar_one()
 
-    lessons_today = await _lessons_today(session, school_id)
-    attendance = await _attendance_figures(session, school_id, len(lessons_today)) \
+    lessons_today = await _lessons_today(session, school_id, latest_year)
+    attendance = await _attendance_figures(session, school_id, len(lessons_today), term_id) \
         if role in ATTENDANCE_ROLES else None
-    finance = await _finance_figures(session, school_id) if role in FINANCE_ROLES else None
+    finance = await _finance_figures(session, school_id, term_id) if role in FINANCE_ROLES else None
     attention = await _attention(session, school_id, role)
-    activity = await _activity(session, school_id)
+    activity = await _activity(session, school_id, academic_year_id, term_id)
 
     return OverviewResponse(
         generated_at=datetime.now(UTC),
-        current_term=await _current_term(session, school_id),
+        current_term=await _current_term(session, school_id, term_id),
         students_total=int(students_total), teachers_total=int(teachers_total),
         classes_total=int(classes_total),
         attendance=attendance, finance=finance,
