@@ -47,6 +47,7 @@ class InvitationAccepted(BaseModel):
     email: str
     school_name: str
     school_slug: str
+    role: str
     message: str
 
 
@@ -90,6 +91,45 @@ async def invite_teacher(
     return TeacherInvitationResponse(id=invitation.id, email=invitation.email, role="teacher", expires_at=expires, invite_token=raw_token)
 
 
+@router.post("/invitations/support-staff", response_model=TeacherInvitationResponse, status_code=status.HTTP_201_CREATED)
+async def invite_support_staff(
+    payload: TeacherInvitationCreate,
+    context: Annotated[TenantContext, Depends(require_roles(MembershipRole.SCHOOL_ADMIN, MembershipRole.PRINCIPAL))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    existing_user = await session.scalar(select(User.id).where(User.email == str(payload.email)))
+    if existing_user:
+        member = await session.scalar(select(SchoolMembership.id).where(
+            SchoolMembership.school_id == context.school_id, SchoolMembership.user_id == existing_user,
+        ))
+        if member:
+            raise HTTPException(status_code=409, detail="This person already has an account at your school")
+    pending = await session.scalar(select(SchoolInvitation.id).where(
+        SchoolInvitation.school_id == context.school_id,
+        SchoolInvitation.email == str(payload.email), SchoolInvitation.status == "pending",
+        SchoolInvitation.expires_at > datetime.now(UTC),
+    ))
+    if pending:
+        raise HTTPException(status_code=409, detail="An unexpired invitation already exists for this email")
+    raw_token = secrets.token_urlsafe(36)
+    expires = datetime.now(UTC) + timedelta(days=7)
+    invitation = SchoolInvitation(
+        id=uuid4(), school_id=context.school_id, email=str(payload.email),
+        display_name=payload.display_name.strip(), role=MembershipRole.STAFF,
+        token_hash=hashlib.sha256(raw_token.encode()).hexdigest(), expires_at=expires,
+        created_by_user_id=context.user_id,
+    )
+    session.add(invitation)
+    session.add(AuditEvent(school_id=context.school_id, actor_user_id=context.user_id,
+                           action="staff.support_staff_invited", resource_type="school_invitation", resource_id=invitation.id))
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="Could not create this invitation") from None
+    return TeacherInvitationResponse(id=invitation.id, email=invitation.email, role="staff", expires_at=expires, invite_token=raw_token)
+
+
 @router.post("/invitations/accept", response_model=InvitationAccepted, dependencies=[Depends(limit_signup)])
 async def accept_invitation(payload: InvitationAccept, session: Annotated[AsyncSession, Depends(get_session)]):
     token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
@@ -121,15 +161,18 @@ async def accept_invitation(payload: InvitationAccept, session: Annotated[AsyncS
     session.add(membership)
     invitation.status = "accepted"
     invitation.accepted_at = now
+    joined_action = "staff.support_staff_joined" if invitation.role == MembershipRole.STAFF else "staff.teacher_joined"
     session.add(AuditEvent(school_id=invitation.school_id, actor_user_id=user.id,
-                           action="staff.teacher_joined", resource_type="school_membership", resource_id=membership.id))
+                           action=joined_action, resource_type="school_membership", resource_id=membership.id))
     try:
         await session.commit()
     except IntegrityError:
         await session.rollback()
         raise HTTPException(status_code=409, detail="This invitation has already been used") from None
+    role_label = "support staff" if invitation.role == MembershipRole.STAFF else "teacher"
     return InvitationAccepted(email=user.email, school_name=school.name, school_slug=school.slug,
-                              message="Your teacher account is ready. Sign in with your email and password.")
+                              role=invitation.role.value,
+                              message=f"Your {role_label} account is ready. Sign in with your email and password.")
 
 
 class TeacherAdminResponse(BaseModel):

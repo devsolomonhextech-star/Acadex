@@ -19,6 +19,7 @@ export function fetchGradebook(token: string, assessmentId: string) {
 
 export function saveGradebook(token: string, assessmentId: string, marks: {
   student_id: string; score: string | null; comment: string | null
+  submission_status: 'not_recorded' | 'submitted' | 'missing' | 'excused'
 }[]) {
   return apiRequest<Gradebook>(`/assessments/${assessmentId}/gradebook`, {
     method: 'PUT', body: JSON.stringify({ marks }),

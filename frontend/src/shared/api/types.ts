@@ -128,6 +128,35 @@ export type OverviewAttention = {
   meta: string; count: number; to: string
 }
 export type OverviewActivity = { week_start: string; students: number; attendance_rate: number | null; payments: string }
+export type SupportSignal = { key: string; title: string; detail: string; severity: 'watch' | 'concern' }
+export type SupportRecommendation = { category: 'attendance' | 'academic' | 'assignment' | 'wellbeing' | 'family_contact' | 'other'; title: string; action: string; suggested_owner: string }
+export type StudentSupportRow = {
+  student_id: string; first_name: string; last_name: string; admission_number: string
+  class_group_id: string; class_name: string; support_score: number
+  support_level: 'urgent_review' | 'follow_up' | 'monitor' | 'no_current_signal'
+  attendance_rate: number | null; recent_attendance_rate: number | null
+  assessment_average: number | null; assessment_change_points: number | null
+  missing_assignments: number; recent_incidents: number; signal_count: number
+  signals: SupportSignal[]; recommendations: SupportRecommendation[]
+}
+export type StudentSupportSummary = {
+  academic_year_id: string; academic_year_name: string; term_id: string | null; term_name: string | null
+  generated_at: string; students_total: number; urgent_review: number; follow_up: number; monitor: number
+  students: StudentSupportRow[]
+}
+export type SupportIntervention = {
+  id: string; student_id: string; student_name: string; admission_number: string; class_name: string
+  academic_year_id: string; term_id: string | null
+  category: 'attendance' | 'academic' | 'assignment' | 'wellbeing' | 'family_contact' | 'other'
+  title: string; action: string; status: 'planned' | 'in_progress' | 'completed' | 'cancelled'
+  assigned_to_membership_id: string | null; assigned_to_name: string | null
+  follow_up_on: string | null; outcome: string | null
+  baseline_attendance_rate: number | null; baseline_assessment_average: number | null
+  latest_attendance_rate: number | null; latest_assessment_average: number | null
+  completed_at: string | null
+  created_at: string; updated_at: string
+}
+export type SupportAssignee = { membership_id: string; display_name: string; role: string }
 export type DemoSeedResult = {
   invoices_created: number; payments_created: number
   attendance_records_created: number; results_created: number
@@ -182,6 +211,7 @@ export type AssessmentSummary = {
 export type GradebookStudent = {
   student_id: string; admission_number: string; first_name: string; last_name: string
   score: string | null; comment: string | null
+  submission_status: 'not_recorded' | 'submitted' | 'missing' | 'excused'
 }
 export type Gradebook = { assessment: AssessmentSummary; students: GradebookStudent[] }
 export type GradingBand = {

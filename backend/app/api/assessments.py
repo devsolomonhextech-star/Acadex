@@ -77,6 +77,7 @@ class GradebookMark(BaseModel):
     student_id: UUID
     score: Decimal | None = Field(default=None, ge=0, max_digits=7, decimal_places=2)
     comment: str | None = Field(default=None, max_length=240)
+    submission_status: Literal["not_recorded", "submitted", "missing", "excused"] = "not_recorded"
 
 
 class GradebookSave(BaseModel):
@@ -90,6 +91,7 @@ class GradebookStudent(BaseModel):
     last_name: str
     score: Decimal | None
     comment: str | None
+    submission_status: Literal["not_recorded", "submitted", "missing", "excused"]
 
 
 class GradebookResponse(BaseModel):
@@ -280,6 +282,7 @@ async def get_gradebook(
         student_id=student.id, admission_number=student.admission_number,
         first_name=student.first_name, last_name=student.last_name,
         score=score.score if score else None, comment=score.comment if score else None,
+        submission_status=score.submission_status if score else "not_recorded",
     ) for student, score in rows.all()]
     return GradebookResponse(assessment=await _summary(session, assessment), students=roster)
 
@@ -318,11 +321,13 @@ async def save_gradebook(
             session.add(AssessmentScore(
                 id=uuid4(), school_id=context.school_id, assessment_id=assessment.id,
                 student_id=student_id, score=mark.score, comment=comment,
+                submission_status=mark.submission_status,
                 updated_by_membership_id=member_id,
             ))
         else:
             score.score = mark.score
             score.comment = comment
+            score.submission_status = mark.submission_status
             score.updated_by_membership_id = member_id
     session.add(AuditEvent(school_id=context.school_id, actor_user_id=context.user_id,
                            action="assessment.scores_saved", resource_type="assessment", resource_id=assessment.id))
