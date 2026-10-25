@@ -8,6 +8,7 @@ import { formatApiError } from '../../shared/api/errors'
 import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 import type { Overview, SchoolUser } from '../../shared/api/types'
 import { fetchOverview, seedDemoFees } from './overviewApi'
+import { fetchStudentSupport } from '../student-support/studentSupportApi'
 
 const REFRESH_MS = 60_000
 
@@ -72,7 +73,14 @@ export default function Overview({ user }: { user: SchoolUser }) {
     enabled: !!accessToken && !periodLoading,
     refetchInterval: REFRESH_MS,
   })
+  const supportQuery = useQuery({
+    queryKey: ['student-support', user.school_id, yearId, termId],
+    queryFn: () => fetchStudentSupport(accessToken!, yearId, termId || undefined),
+    enabled: !!accessToken && !periodLoading && ['school_admin', 'principal', 'registrar', 'teacher', 'staff'].includes(user.role),
+    refetchInterval: REFRESH_MS,
+  })
   const data = query.data
+  const supportReviewCount = (supportQuery.data?.urgent_review ?? 0) + (supportQuery.data?.follow_up ?? 0)
 
   const seedMutation = useMutation({
     mutationFn: () => seedDemoFees(accessToken!),
@@ -212,6 +220,12 @@ export default function Overview({ user }: { user: SchoolUser }) {
         </div>
       </article>)}
     </section>
+
+    {['school_admin', 'principal', 'registrar', 'teacher', 'staff'].includes(user.role) && supportQuery.data && <section className="overview-support-alert" aria-label="Early student support">
+      <div className="overview-support-icon"><span>✦</span></div>
+      <div className="overview-support-copy"><strong>{supportReviewCount ? `${supportReviewCount} students may benefit from an early check-in` : supportQuery.data.monitor ? `No follow-ups needed; ${supportQuery.data.monitor} student${supportQuery.data.monitor === 1 ? '' : 's'} to monitor` : 'No students currently need an early support review'}</strong><span>{supportQuery.data.urgent_review} priority reviews · {supportQuery.data.follow_up} follow-ups · {supportQuery.data.monitor} to monitor in {supportQuery.data.term_name ?? supportQuery.data.academic_year_name}. Signals are prompts for staff review, not predictions.</span></div>
+      <Link to="/student-support"><Button type="primary">Review support signals</Button></Link>
+    </section>}
 
     <div className="content-grid">
       <section className="panel activity-panel">

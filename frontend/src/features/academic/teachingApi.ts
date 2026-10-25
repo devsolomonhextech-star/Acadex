@@ -28,7 +28,7 @@ export function inviteTeacher(token: string, payload: { email: string; display_n
 }
 
 export function acceptTeacherInvitation(payload: { token: string; password?: string }) {
-  return apiRequest<{ email: string; school_name: string; school_slug: string; message: string }>(
+  return apiRequest<{ email: string; school_name: string; school_slug: string; role: string; message: string }>(
     '/staff/invitations/accept', { method: 'POST', body: JSON.stringify(payload) },
   )
 }

@@ -5,7 +5,7 @@ import {
   AppstoreOutlined, BarChartOutlined, BellOutlined, BookOutlined, CalendarOutlined,
   CarOutlined, CreditCardOutlined, DashboardOutlined, FlagOutlined, HomeOutlined,
   MenuOutlined, MessageOutlined, ReadOutlined, SearchOutlined, SettingOutlined,
-  TeamOutlined, TrophyOutlined, UserAddOutlined, UserOutlined,
+  TeamOutlined, TrophyOutlined, UserAddOutlined, UserOutlined, HeartOutlined,
 } from '@ant-design/icons'
 import { Avatar, Badge, Button, Input, Select } from 'antd'
 import type { ReactNode } from 'react'
@@ -19,6 +19,7 @@ const workspaceItems: SidebarItem[] = [
   { label: 'Students', to: '/students', icon: <TeamOutlined /> },
   { label: 'Classes & academics', to: '/classes', icon: <BookOutlined /> },
   { label: 'Assessment gradebook', to: '/assessments', icon: <BarChartOutlined /> },
+  { label: 'Student support', to: '/student-support', icon: <HeartOutlined /> },
   { label: 'Term results', to: '/results', icon: <TrophyOutlined /> },
   { label: 'Attendance', to: '/attendance', icon: <CalendarOutlined /> },
   { label: 'Finance', to: '/finance', icon: <CreditCardOutlined /> },
@@ -64,6 +65,7 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
     if (item.label === 'Classes & academics') return canManageAcademics
     if (item.label === 'Attendance') return canTakeAttendance
     if (item.label === 'Assessment gradebook' || item.label === 'Term results') return canViewAssessments
+    if (item.label === 'Student support') return ['school_admin', 'principal', 'registrar', 'teacher', 'staff'].includes(user.role)
     if (item.label === 'Finance') return canViewFinance
     if (item.label === 'Communications') return ['school_admin', 'principal'].includes(user.role)
     if (item.label === 'Parent Portal') return user.role === 'parent'

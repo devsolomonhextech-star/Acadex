@@ -546,6 +546,7 @@ class AssessmentScore(Base):
         ForeignKeyConstraint(["school_id", "updated_by_membership_id"], ["school_memberships.school_id", "school_memberships.id"], ondelete="RESTRICT"),
         UniqueConstraint("school_id", "assessment_id", "student_id", name="uq_assessment_score_student"),
         CheckConstraint("score IS NULL OR score >= 0", name="ck_assessment_scores_nonnegative"),
+        CheckConstraint("submission_status IN ('not_recorded', 'submitted', 'missing', 'excused')", name="ck_assessment_scores_submission_status"),
         Index("ix_assessment_scores_school_student", "school_id", "student_id"),
     )
 
@@ -555,6 +556,7 @@ class AssessmentScore(Base):
     student_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     score: Mapped[Decimal | None] = mapped_column(Numeric(7, 2))
     comment: Mapped[str | None] = mapped_column(String(240))
+    submission_status: Mapped[str] = mapped_column(String(20), nullable=False, default="not_recorded", server_default="not_recorded")
     updated_by_membership_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=utcnow)
 
@@ -846,6 +848,45 @@ class BehaviorRecord(Base):
     action_taken: Mapped[str | None] = mapped_column(String(240))
     recorded_by_membership_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("school_memberships.id", ondelete="RESTRICT"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class StudentSupportIntervention(Base):
+    """A school-owned, human-reviewed action and follow-up for one student."""
+
+    __tablename__ = "student_support_interventions"
+    __table_args__ = (
+        ForeignKeyConstraint(["school_id", "student_id"], ["students.school_id", "students.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["school_id", "academic_year_id"], ["academic_years.school_id", "academic_years.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["school_id", "academic_year_id", "term_id"], ["academic_terms.school_id", "academic_terms.academic_year_id", "academic_terms.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["school_id", "created_by_membership_id"], ["school_memberships.school_id", "school_memberships.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["school_id", "assigned_to_membership_id"], ["school_memberships.school_id", "school_memberships.id"], ondelete="RESTRICT"),
+        UniqueConstraint("school_id", "id", name="uq_student_support_interventions_school_id"),
+        CheckConstraint("status IN ('planned', 'in_progress', 'completed', 'cancelled')", name="ck_student_support_interventions_status"),
+        CheckConstraint("category IN ('attendance', 'academic', 'assignment', 'wellbeing', 'family_contact', 'other')", name="ck_student_support_interventions_category"),
+        Index("ix_support_interventions_school_year_status", "school_id", "academic_year_id", "status"),
+        Index("ix_support_interventions_school_student", "school_id", "student_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    student_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    academic_year_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    term_id: Mapped[UUID | None] = mapped_column(Uuid)
+    created_by_membership_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    assigned_to_membership_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    category: Mapped[str] = mapped_column(String(24), nullable=False)
+    title: Mapped[str] = mapped_column(String(140), nullable=False)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="planned", server_default="planned")
+    follow_up_on: Mapped[date | None] = mapped_column(Date)
+    outcome: Mapped[str | None] = mapped_column(Text)
+    baseline_attendance_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    baseline_assessment_average: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    latest_attendance_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    latest_assessment_average: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=utcnow)
 
 
 class StudentDocument(Base):

@@ -21,7 +21,7 @@ type AssessmentFields = {
   max_score: number; weight_percent?: number; due_on?: Dayjs
 }
 type ReviewFields = { note?: string }
-type DraftMark = { score: number | null; comment: string }
+type DraftMark = { score: number | null; comment: string; submission_status: GradebookStudent['submission_status'] }
 const categories: { value: AssessmentCategory; label: string }[] = [
   { value: 'quiz', label: 'Quiz' }, { value: 'assignment', label: 'Assignment' },
   { value: 'project', label: 'Project' }, { value: 'class_test', label: 'Class test' },
@@ -90,6 +90,7 @@ export default function AssessmentsPage() {
     if (!gradebook) return
     setDraft(Object.fromEntries(gradebook.students.map(student => [student.student_id, {
       score: student.score === null ? null : Number(student.score), comment: student.comment ?? '',
+      submission_status: student.submission_status,
     }])))
   }, [gradebook])
   const refreshAssessmentData = async (assessmentId?: string) => Promise.all([
@@ -113,9 +114,9 @@ export default function AssessmentsPage() {
       if (!accessToken || !gradebook) throw new Error('Open an assessment gradebook first')
       const maxScore = Number(gradebook.assessment.max_score)
       const marks = gradebook.students.map(student => {
-        const item = draft[student.student_id] ?? { score: null, comment: '' }
+        const item = draft[student.student_id] ?? { score: null, comment: '', submission_status: 'not_recorded' as const }
         if (item.score !== null && (item.score < 0 || item.score > maxScore)) throw new Error(`Scores must be between 0 and ${maxScore}`)
-        return { student_id: student.student_id, score: item.score === null ? null : item.score.toFixed(2), comment: item.comment.trim() || null }
+        return { student_id: student.student_id, score: item.score === null ? null : item.score.toFixed(2), comment: item.comment.trim() || null, submission_status: item.submission_status }
       })
       return saveGradebook(accessToken, gradebook.assessment.id, marks)
     },
@@ -153,9 +154,10 @@ export default function AssessmentsPage() {
   ]
   const gradebookColumns: TableColumnsType<GradebookStudent> = [
     { title: 'STUDENT', key: 'student', render: (_, row) => <div className="assessment-primary"><strong>{row.first_name} {row.last_name}</strong><small>{row.admission_number}</small></div> },
-    { title: 'SCORE', key: 'score', width: 160, render: (_, row) => <InputNumber min={0} max={gradebook ? Number(gradebook.assessment.max_score) : undefined} precision={2} step={0.5} value={draft[row.student_id]?.score ?? null} disabled={!editable} onChange={value => setDraft(current => ({ ...current, [row.student_id]: { ...(current[row.student_id] ?? { score: null, comment: '' }), score: value === null ? null : Number(value) } }))} addonAfter={`/ ${gradebook?.assessment.max_score ?? ''}`} aria-label={`Score for ${row.first_name} ${row.last_name}`}/> },
+    ...(gradebook && ['assignment', 'project'].includes(gradebook.assessment.category) ? [{ title: 'WORK STATUS', key: 'submission_status', width: 145, render: (_: unknown, row: GradebookStudent) => <Select value={draft[row.student_id]?.submission_status ?? row.submission_status} disabled={!editable} options={[{ value: 'not_recorded', label: 'Not recorded' }, { value: 'submitted', label: 'Submitted' }, { value: 'missing', label: 'Missing' }, { value: 'excused', label: 'Excused' }]} onChange={value => setDraft(current => ({ ...current, [row.student_id]: { ...(current[row.student_id] ?? { score: null, comment: '', submission_status: 'not_recorded' }), submission_status: value } }))} aria-label={`Assignment status for ${row.first_name} ${row.last_name}`}/> }] : []),
+    { title: 'SCORE', key: 'score', width: 160, render: (_, row) => <InputNumber min={0} max={gradebook ? Number(gradebook.assessment.max_score) : undefined} precision={2} step={0.5} value={draft[row.student_id]?.score ?? null} disabled={!editable} onChange={value => setDraft(current => { const previous = current[row.student_id] ?? { score: null, comment: '', submission_status: 'not_recorded' as const }; const status = value !== null && previous.submission_status === 'not_recorded' ? 'submitted' : value === null && previous.submission_status === 'submitted' ? 'not_recorded' : previous.submission_status; return { ...current, [row.student_id]: { ...previous, score: value === null ? null : Number(value), submission_status: status } } })} addonAfter={`/ ${gradebook?.assessment.max_score ?? ''}`} aria-label={`Score for ${row.first_name} ${row.last_name}`}/> },
     { title: 'PERCENT', key: 'percent', width: 100, render: (_, row) => { const value = draft[row.student_id]?.score; return value === null || value === undefined || !gradebook ? '—' : `${((value / Number(gradebook.assessment.max_score)) * 100).toFixed(1)}%` } },
-    { title: 'TEACHER COMMENT', key: 'comment', render: (_, row) => <Input maxLength={240} value={draft[row.student_id]?.comment ?? ''} disabled={!editable} placeholder="Optional feedback" onChange={event => setDraft(current => ({ ...current, [row.student_id]: { ...(current[row.student_id] ?? { score: null, comment: '' }), comment: event.target.value } }))} aria-label={`Comment for ${row.first_name} ${row.last_name}`}/> },
+    { title: 'TEACHER COMMENT', key: 'comment', render: (_, row) => <Input maxLength={240} value={draft[row.student_id]?.comment ?? ''} disabled={!editable} placeholder="Optional feedback" onChange={event => setDraft(current => ({ ...current, [row.student_id]: { ...(current[row.student_id] ?? { score: null, comment: '', submission_status: 'not_recorded' }), comment: event.target.value } }))} aria-label={`Comment for ${row.first_name} ${row.last_name}`}/> },
   ]
 
   return <div className="page-content assessments-page">
