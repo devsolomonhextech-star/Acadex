@@ -22,6 +22,7 @@ import {
   TeamOutlined,
   TrophyOutlined,
   WalletOutlined,
+  HeartFilled,
 } from '@ant-design/icons'
 
 const navLinks = [
@@ -604,6 +605,11 @@ export default function LandingPage() {
               </ul>
               <Link to="/register" className="lp-btn lp-btn-primary">Set up your school <ArrowRightOutlined /></Link>
               <small className="lp-plan-footnote">New student enrollment is available when your school plan is active.</small>
+              <div className="lp-community-commitment">
+                <span className="lp-community-icon"><HeartFilled /></span>
+                <div><strong>Every subscription gives back</strong><p>Acadex dedicates 10% of subscription revenue to supporting orphanage homes in Ghana. Your school’s tools can help more children access care and learning support.</p></div>
+                <span className="lp-community-share">10%</span>
+              </div>
             </article>
             <article className="lp-parent-card">
               <div className="lp-parent-copy">
