@@ -49,7 +49,7 @@ export default function TeacherDashboard({ user }: { user: SchoolUser }) {
         <p>Here’s your class activity, attendance and teaching schedule for today.</p>
         <div className="teacher-context">{user.school_name} <span>·</span> {data.academic_year ?? 'No academic year selected'} <span>·</span> Updated {timeLabel}</div>
       </div>
-      <Link to="/academic"><Button icon={<CalendarOutlined />}>View timetable</Button></Link>
+      <Link to="/timetable"><Button icon={<CalendarOutlined />}>View timetable</Button></Link>
     </div>
     <div className="teacher-stat-grid">{stats.map(stat => <Card key={stat.label} className="teacher-stat-card" bordered={false}>
       <div className={`teacher-stat-icon ${stat.color}`}>{stat.icon}</div><div className="teacher-stat-label">{stat.label}</div><strong>{stat.value}</strong><small>{stat.note}</small>

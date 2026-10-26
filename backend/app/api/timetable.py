@@ -135,6 +135,16 @@ async def list_slots(
         query = query.where(TimetableSlot.class_group_id == class_group_id)
     if day_of_week is not None:
         query = query.where(TimetableSlot.day_of_week == day_of_week)
+    if context.role == MembershipRole.TEACHER:
+        membership_id = await session.scalar(select(SchoolMembership.id).where(
+            SchoolMembership.school_id == context.school_id,
+            SchoolMembership.user_id == context.user_id,
+            SchoolMembership.role == MembershipRole.TEACHER,
+            SchoolMembership.status == "active",
+        ))
+        if membership_id is None:
+            raise HTTPException(status_code=403, detail="Active teacher membership required")
+        query = query.where(TimetableSlot.teacher_membership_id == membership_id)
     rows = (await session.execute(query.order_by(TimetableSlot.day_of_week, TimetableSlot.starts_at))).all()
     return [_respond(slot, group, subject, user.display_name) for slot, group, subject, user in rows]
 

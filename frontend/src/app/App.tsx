@@ -8,6 +8,7 @@ import { AcademicPeriodProvider } from '../shared/academic/AcademicPeriodContext
 const StudentsPage = lazy(() => import('../features/students/StudentsPage'))
 const StudentProfilePage = lazy(() => import('../features/students/StudentProfilePage'))
 const AcademicPage = lazy(() => import('../features/academic/AcademicPage'))
+const TeacherTimetablePage = lazy(() => import('../features/academic/TeacherTimetablePage'))
 const AttendancePage = lazy(() => import('../features/attendance/AttendancePage'))
 const AssessmentsPage = lazy(() => import('../features/assessments/AssessmentsPage'))
 const ResultsPage = lazy(() => import('../features/results/ResultsPage'))
@@ -64,6 +65,7 @@ function AppRoutes() {
       <Route path="/students" element={user && ['school_admin', 'principal', 'registrar'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><StudentsPage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/students/:studentId" element={user && ['school_admin', 'principal', 'registrar'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><StudentProfilePage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/classes" element={user && ['school_admin', 'principal', 'registrar'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><AcademicPage /></Suspense> : <Navigate to="/" replace />} />
+      <Route path="/timetable" element={user?.role === 'teacher' ? <Suspense fallback={<LoadingPage />}><TeacherTimetablePage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/attendance" element={user && ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><AttendancePage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/results" element={user && ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><ResultsPage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/report-card" element={user && ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><ReportCardPage /></Suspense> : <Navigate to="/" replace />} />
