@@ -6,6 +6,7 @@ import {
 import type { TableColumnsType } from 'antd'
 import { BookOutlined, CheckOutlined, PlusOutlined, SaveOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/authHooks'
 import { fetchAcademicTerms, fetchAcademicYears, fetchClassGroups } from '../academic/academicApi'
 import { fetchSubjects, fetchTeachingAssignments } from '../academic/teachingApi'
@@ -37,6 +38,7 @@ function displayCategory(value: string) {
 
 export default function AssessmentsPage() {
   const { accessToken, user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { yearId: periodYearId, termId: periodTermId, setYearId: setPeriodYearId, setTermId: setPeriodTermId } = useAcademicPeriod()
   const queryClient = useQueryClient()
   const [toast, contextHolder] = message.useMessage()
@@ -64,7 +66,9 @@ export default function AssessmentsPage() {
   const terms = termsQuery.data ?? []
   const classesQuery = useQuery({ queryKey: ['class-groups', user?.school_id, yearId], queryFn: () => fetchClassGroups(accessToken!, yearId), enabled: !!accessToken && !!yearId })
   const classes = classesQuery.data ?? []
-  const classId = classes.some(group => group.id === selectedClass) ? selectedClass : ''
+  const requestedClassId = searchParams.get('class_group_id') ?? ''
+  const classId = classes.some(group => group.id === selectedClass) ? selectedClass
+    : classes.some(group => group.id === requestedClassId) ? requestedClassId : ''
   const formClassId = Form.useWatch('class_group_id', createForm) ?? classId
   const subjectsQuery = useQuery({ queryKey: ['subjects', user?.school_id], queryFn: () => fetchSubjects(accessToken!), enabled: !!accessToken })
   const assignmentsQuery = useQuery({ queryKey: ['teaching-assignments', user?.school_id, yearId], queryFn: () => fetchTeachingAssignments(accessToken!, yearId), enabled: !!accessToken && !!yearId })
@@ -78,6 +82,15 @@ export default function AssessmentsPage() {
     : subjects).map(item => ({ value: item.id, label: `${item.name} · ${item.code}` }))
   const yearTerms = terms.filter(term => term.academic_year_id === yearId)
   const termId = yearTerms.some(term => term.id === periodTermId) ? periodTermId : yearTerms[0]?.id ?? ''
+  useEffect(() => {
+    if (searchParams.get('create_exam') !== '1' || !requestedClassId || !termId || !classes.some(group => group.id === requestedClassId)) return
+    createForm.resetFields()
+    createForm.setFieldsValue({ class_group_id: requestedClassId, term_id: termId, category: 'examination', max_score: 100, weight_percent: 0 })
+    setCreateOpen(true)
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.delete('create_exam')
+    setSearchParams(nextParams, { replace: true })
+  }, [searchParams, setSearchParams, requestedClassId, termId, classes, createForm])
   const listQuery = useQuery({ queryKey: ['assessments', user?.school_id, yearId], queryFn: () => fetchAssessments(accessToken!, yearId), enabled: !!accessToken && !!yearId })
   const gradebookQuery = useQuery({ queryKey: ['gradebook', user?.school_id, gradebookId], queryFn: () => fetchGradebook(accessToken!, gradebookId), enabled: !!accessToken && !!gradebookId })
   const gradebook = gradebookQuery.data
