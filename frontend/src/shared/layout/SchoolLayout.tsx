@@ -81,7 +81,7 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
       </div>)}
     </div>}
     <aside className={`sidebar ${open ? 'sidebar-open' : ''}`}>
-      <div className="brand"><div className="brand-mark"><AppstoreOutlined /></div><span>school<span className="brand-accent">OS</span></span><button className="mobile-close" onClick={() => setOpen(false)} aria-label="Close menu">×</button></div>
+      <div className="brand"><div className="brand-mark"><AppstoreOutlined /></div><span>Acadex</span><button className="mobile-close" onClick={() => setOpen(false)} aria-label="Close menu">×</button></div>
       <div className="school-switch"><div className="school-emblem">{user.school_name.slice(0, 1).toUpperCase()}</div><div className="school-name"><strong>{user.school_name}</strong><span>{user.school_slug}</span></div><span className="chevron">⌄</span></div>
       <button type="button" className="nav-caption nav-section-toggle" aria-expanded={!collapsedSections.workspace}
         aria-controls="sidebar-workspace" onClick={() => toggleSection('workspace')}>

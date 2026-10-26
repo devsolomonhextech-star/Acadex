@@ -20,6 +20,7 @@ from app.api.grading import router as grading_router
 from app.api.guardians import router as guardians_router
 from app.api.overview import router as overview_router
 from app.api.student_support import router as student_support_router
+from app.api.subscriptions import router as subscriptions_router
 from app.api.results import router as results_router
 from app.api.staff import router as staff_router
 from app.api.student_imports import router as student_imports_router
@@ -42,13 +43,14 @@ async def lifespan(application: FastAPI):
         await engine.dispose()
 
 
-app = FastAPI(title="SchoolOS API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Acadex API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
+    expose_headers=["Retry-After"],
 )
 app.include_router(identity_router)
 app.include_router(students_router)
@@ -68,6 +70,7 @@ app.include_router(communications_router)
 app.include_router(family_router)
 app.include_router(overview_router)
 app.include_router(student_support_router)
+app.include_router(subscriptions_router)
 app.include_router(demo_seed_router)
 
 

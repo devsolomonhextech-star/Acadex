@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AuditEvent, Student, StudentImportJob, utcnow
+from app.domain.subscriptions import require_student_capacity
 
 REQUIRED_COLUMNS = ("admission_number", "first_name", "last_name")
 OPTIONAL_COLUMNS = ("date_of_birth",)
@@ -310,6 +311,8 @@ async def commit_import(
     if preview_valid == 0:
         raise ImportConflict("This import has no valid rows to create")
     await flag_existing_duplicates(session, school_id, outcomes)
+    importable = sum(1 for item in outcomes if item.status == "valid")
+    await require_student_capacity(session, school_id, importable)
     created = 0
     for item in outcomes:
         if item.status != "valid":

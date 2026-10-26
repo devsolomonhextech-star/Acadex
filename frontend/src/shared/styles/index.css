@@ -1,5 +1,7 @@
 @import './global.css';
 @import './layout.css';
+@import './landing.css';
+@import './subscriptions.css';
 @import './auth.css';
 @import './students.css';
 @import './academic.css';

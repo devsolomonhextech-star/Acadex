@@ -22,7 +22,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import TenantContext, require_roles
 from app.api.students import student_roles
+from app.api.subscriptions import subscription_limit_error
 from app.db import get_session
+from app.domain.subscriptions import StudentSubscriptionRequired, require_student_capacity
 from app.models import (
     AcademicTerm,
     AcademicYear,
@@ -627,6 +629,11 @@ async def edit_student(
     """Update the editable profile fields of one student."""
     student = await _find_student(session, context.school_id, student_id)
     changes = payload.model_dump(exclude_unset=True)
+    if changes.get("status") == "active" and student.status != "active":
+        try:
+            await require_student_capacity(session, context.school_id)
+        except StudentSubscriptionRequired as error:
+            raise subscription_limit_error(error) from None
     for field, value in changes.items():
         setattr(student, field, value)
     await session.commit()

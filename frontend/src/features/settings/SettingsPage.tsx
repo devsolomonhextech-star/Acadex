@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { Alert, Button, Input, Skeleton, Switch, Tabs, message } from 'antd'
 import { AppstoreOutlined, BellOutlined, BookOutlined, CheckCircleFilled, CreditCardOutlined, LockOutlined, SafetyCertificateOutlined, SettingOutlined, TeamOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/authHooks'
 import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 import { formatApiError } from '../../shared/api/errors'
 import { beginTotpSetup, disableTotp, enableTotp, fetchTotpStatus, type TotpSetup } from './settingsApi'
+import SubscriptionSettings from './SubscriptionSettings'
 
 type SettingsTab = 'school' | 'users' | 'academic' | 'notifications' | 'billing' | 'system'
 type ProfileSection = 'general' | 'contact' | 'branding' | 'social' | 'location' | 'hours'
@@ -13,7 +15,8 @@ type ProfileSection = 'general' | 'contact' | 'branding' | 'social' | 'location'
 export default function SettingsPage() {
   const { accessToken, user } = useAuth()
   const { year, term } = useAcademicPeriod()
-  const [activeTab, setActiveTab] = useState<SettingsTab>('school')
+  const [searchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState<SettingsTab>(searchParams.get('tab') === 'billing' ? 'billing' : 'school')
   const [profileSection, setProfileSection] = useState<ProfileSection>('general')
   const [setup, setSetup] = useState<TotpSetup | null>(null)
   const [enrollmentCode, setEnrollmentCode] = useState('')
@@ -32,13 +35,13 @@ export default function SettingsPage() {
     { key: 'users', label: <span className="settings-tab-label"><TeamOutlined/>Users & roles</span> },
     { key: 'academic', label: <span className="settings-tab-label"><BookOutlined/>Academic settings</span> },
     { key: 'notifications', label: <span className="settings-tab-label"><BellOutlined/>Notifications</span> },
-    { key: 'billing', label: <span className="settings-tab-label"><CreditCardOutlined/>Billing & subscription</span> },
+    ...(user?.role === 'school_admin' ? [{ key: 'billing', label: <span className="settings-tab-label"><CreditCardOutlined/>Billing & subscription</span> }] : []),
     { key: 'system', label: <span className="settings-tab-label"><SettingOutlined/>System</span> },
   ]
   const codeInput = (label: string, value: string, setValue: (value: string) => void) => <Input aria-label={label} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="Enter 6-digit code" value={value} onChange={event => setValue(event.target.value.replace(/\D/g, '').slice(0, 6))}/>
 
   const content = () => {
-    if (activeTab === 'billing') return <section className="settings-panel settings-placeholder"><span className="settings-icon amber"><CreditCardOutlined/></span><div><small>BILLING & SUBSCRIPTION</small><h2>Subscription management</h2><p>Subscription plans and billing tools are coming soon.</p><span className="settings-soon">Upcoming soon</span></div></section>
+    if (activeTab === 'billing') return user?.role === 'school_admin' ? <SubscriptionSettings /> : null
     if (activeTab === 'school') {
       const sections: { key: ProfileSection; label: string }[] = [
         { key: 'general', label: 'General information' }, { key: 'contact', label: 'Contact information' },
@@ -48,7 +51,7 @@ export default function SettingsPage() {
       const profileDetails: Record<ProfileSection, { title: string; description: string; rows: [string, string][] }> = {
         general: { title: 'General information', description: 'Your school’s basic information and details.', rows: [['School name', user?.school_name ?? '—'], ['School address', user?.school_slug ?? '—'], ['School code', 'Not configured'], ['School type', 'Not configured']] },
         contact: { title: 'Contact information', description: 'The main account contact currently registered for this school.', rows: [['Administrator', user?.display_name ?? '—'], ['Email address', user?.email ?? '—'], ['Phone number', 'Not configured'], ['Website', 'Not configured']] },
-        branding: { title: 'Logo & branding', description: 'School logo and brand colors are not configured yet.', rows: [['School logo', 'Not configured'], ['Primary color', 'Default SchoolOS blue']] },
+        branding: { title: 'Logo & branding', description: 'School logo and brand colors are not configured yet.', rows: [['School logo', 'Not configured'], ['Primary color', 'Default Acadex blue']] },
         social: { title: 'Social links', description: 'Add school social profiles when those details are available.', rows: [['Facebook', 'Not configured'], ['Instagram', 'Not configured'], ['LinkedIn', 'Not configured']] },
         location: { title: 'Location', description: 'Your school location has not been added yet.', rows: [['Country', 'Not configured'], ['Region / state', 'Not configured'], ['City', 'Not configured'], ['Address', 'Not configured']] },
         hours: { title: 'School hours', description: 'School-wide operating hours have not been configured yet.', rows: [['School days', 'Not configured'], ['Opening time', 'Not configured'], ['Closing time', 'Not configured']] },
@@ -74,7 +77,7 @@ export default function SettingsPage() {
         </div>}
         {disablePrompt && <div className="settings-disable"><div><b>Confirm this change</b><small>Enter a current authenticator code to turn off two-factor sign-in.</small></div>{codeInput('Authenticator code to disable two-factor authentication', disableCode, setDisableCode)}<Button danger type="primary" disabled={disableCode.length !== 6} loading={disableMutation.isPending} onClick={() => disableMutation.mutate()}>Disable</Button><Button onClick={() => { setDisablePrompt(false); setDisableCode('') }}>Cancel</Button></div>}
       </div>
-      <Alert type="info" showIcon message="Keep your authenticator app available" description="SchoolOS never displays or stores your one-time codes. If you lose access to the app, contact your school administrator for account recovery."/>
+      <Alert type="info" showIcon message="Keep your authenticator app available" description="Acadex never displays or stores your one-time codes. If you lose access to the app, contact your school administrator for account recovery."/>
     </section>
   }
 

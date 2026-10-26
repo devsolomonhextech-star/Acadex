@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Avatar, Button, Card, DatePicker, Descriptions, Drawer, Empty, Form, Input, Modal, Select, Skeleton, Space, Table, Tag, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
@@ -9,6 +9,8 @@ import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 import { formatApiError } from '../../shared/api/errors'
 import type { StudentSupportRow, SupportIntervention } from '../../shared/api/types'
 import { createSupportIntervention, fetchStudentSupport, fetchSupportAssignees, fetchSupportInterventions, inviteSupportStaff, updateSupportIntervention } from './studentSupportApi'
+import { trackSupportActionCreated, trackSupportFollowUpUpdated, trackSupportQueueViewed, trackSupportReviewOpened } from '../../shared/analytics/events'
+import type { SupportArea, SupportFollowUpStatus } from '../../shared/analytics/events'
 
 const levelLabels: Record<StudentSupportRow['support_level'], string> = {
   urgent_review: 'Priority review', follow_up: 'Follow-up', monitor: 'Monitor', no_current_signal: 'No current signal',
@@ -56,6 +58,18 @@ export default function StudentSupportPage() {
     queryKey: ['student-support-assignees', user?.school_id], queryFn: () => fetchSupportAssignees(accessToken!),
     enabled: !!accessToken && canAssign,
   })
+  const staffRole = user?.role ?? 'unknown'
+  const queueViewKey = support.data ? `${yearId}:${termId || 'all'}` : null
+  const lastQueueView = useRef<string | null>(null)
+  useEffect(() => {
+    if (!support.data || !queueViewKey || lastQueueView.current === queueViewKey) return
+    lastQueueView.current = queueViewKey
+    trackSupportQueueViewed({
+      staffRole,
+      termScope: termId ? 'term' : 'academic_year',
+      studentsWithSignals: support.data.students.filter(row => row.support_level !== 'no_current_signal').length,
+    })
+  }, [queueViewKey, staffRole, support.data, termId])
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['student-support', user?.school_id] })
     void queryClient.invalidateQueries({ queryKey: ['student-support-interventions', user?.school_id] })
@@ -67,7 +81,14 @@ export default function StudentSupportPage() {
       assigned_to_membership_id: (values.assigned_to_membership_id as string | undefined) || null,
       follow_up_on: values.follow_up_on ? dayjs(values.follow_up_on as dayjs.ConfigType).format('YYYY-MM-DD') : null,
     }),
-    onSuccess: () => { message.success('Support action added to the follow-up plan'); setInterventionOpen(false); form.resetFields(); refresh() },
+    onSuccess: (_created, values) => {
+      trackSupportActionCreated({
+        staffRole, supportArea: values.category as SupportArea,
+        assignedOwner: Boolean(values.assigned_to_membership_id), hasFollowUpDate: Boolean(values.follow_up_on),
+        fromSuggestion: recommendation !== null,
+      })
+      message.success('Support action added to the follow-up plan'); setInterventionOpen(false); form.resetFields(); refresh()
+    },
     onError: error => message.error(formatApiError(error)),
   })
   const updateMutation = useMutation({
@@ -76,7 +97,13 @@ export default function StudentSupportPage() {
       follow_up_on: values.follow_up_on ? dayjs(values.follow_up_on as dayjs.ConfigType).format('YYYY-MM-DD') : null,
       outcome: (values.outcome as string | undefined) || null,
     }),
-    onSuccess: () => { message.success('Follow-up record updated'); setEditing(null); refresh() },
+    onSuccess: (_updated, values) => {
+      trackSupportFollowUpUpdated({
+        staffRole, status: values.status as SupportFollowUpStatus,
+        hasOutcome: Boolean(values.outcome), hasFollowUpDate: Boolean(values.follow_up_on),
+      })
+      message.success('Follow-up record updated'); setEditing(null); refresh()
+    },
     onError: error => message.error(formatApiError(error)),
   })
   const inviteMutation = useMutation({
@@ -96,6 +123,13 @@ export default function StudentSupportPage() {
     const needle = search.trim().toLowerCase()
     return matchLevel && (!needle || `${row.first_name} ${row.last_name} ${row.admission_number} ${row.class_name}`.toLowerCase().includes(needle))
   }), [activeStudents, level, search])
+  const openReview = (student: StudentSupportRow) => {
+    setSelected(student)
+    trackSupportReviewOpened({
+      staffRole, supportLevel: student.support_level,
+      signalCount: student.signal_count, hasRecommendations: student.recommendations.length > 0,
+    })
+  }
   const openAction = (student: StudentSupportRow, item?: StudentSupportRow['recommendations'][number]) => {
     setSelected(student); setRecommendation(item ?? null)
     form.resetFields()
@@ -108,7 +142,7 @@ export default function StudentSupportPage() {
     { title: 'SUPPORT SIGNALS', key: 'signals', render: (_, row) => <div className="support-tags">{row.signals.slice(0, 2).map(signal => <Tag key={signal.key} color={signal.severity === 'concern' ? 'volcano' : 'gold'}>{signal.title}</Tag>)}{row.signal_count > 2 && <Tag>+{row.signal_count - 2}</Tag>}</div> },
     { title: 'REVIEW BAND', key: 'level', render: (_, row) => <Tag color={levelColor[row.support_level]}>{levelLabels[row.support_level]}</Tag> },
     { title: 'REVIEW SCORE', dataIndex: 'support_score', key: 'score', render: (value: number) => <span className="support-score">{value}<small>/100</small></span> },
-    { title: '', key: 'action', render: (_, row) => <Button onClick={() => setSelected(row)}>Review</Button> },
+    { title: '', key: 'action', render: (_, row) => <Button onClick={() => openReview(row)}>Review</Button> },
   ]
 
   if (support.isLoading || periodLoading) return <div className="page-content"><Skeleton active paragraph={{ rows: 8 }}/></div>

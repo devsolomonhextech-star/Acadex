@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     access_token_minutes: int = 10
     refresh_token_days: int = 14
+    paystack_secret_key: str | None = None
+    frontend_url: str = "http://localhost:5173"
 
     def model_post_init(self, __context: object, /) -> None:
         if self.app_env == "production":

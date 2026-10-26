@@ -5,6 +5,7 @@ import { useAppDispatch, useAppSelector } from '../../app/hooks'
 import { apiRequest, fetchCurrentUser, readCsrfCookie, registerSchool, rotateSession, setSessionRefresher, signIn, signOutRequest, verifySignInTotp } from '../../shared/api/client'
 import type { SchoolUser } from '../../shared/api/types'
 import { authInitialized, sessionCleared, sessionEstablished } from './authSlice'
+import { identifyAnalyticsUser, resetAnalyticsUser } from '../../shared/analytics/posthogSdk'
 
 let restoreRequest: Promise<{ user: SchoolUser; accessToken: string } | null> | null = null
 
@@ -20,6 +21,14 @@ function restoreSession() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const dispatch = useAppDispatch()
+  const userId = useAppSelector(state => state.auth.user?.user_id ?? null)
+
+  // Analytics identity follows the signed-in session: the opaque auth id only,
+  // cleared when the session ends so later events are not attributed to it.
+  useEffect(() => {
+    if (userId) identifyAnalyticsUser(userId)
+    else resetAnalyticsUser()
+  }, [userId])
 
   useEffect(() => {
     let active = true
@@ -85,6 +94,7 @@ export function useAuth() {
   const signOut = useCallback(async () => {
     try { await signOutRequest() } finally {
       queryClient.clear()
+      resetAnalyticsUser()
       dispatch(sessionCleared())
     }
   }, [dispatch, queryClient])

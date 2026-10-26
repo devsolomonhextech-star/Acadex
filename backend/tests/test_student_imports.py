@@ -1,6 +1,15 @@
 """Bulk student import: preview is read-only, confirm is transactional, jobs are tenant-scoped."""
 import csv
 import io
+import os
+from datetime import UTC, datetime, timedelta
+from uuid import UUID
+
+from sqlalchemy import update
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from app.models import SchoolSubscription
+from app.security import decode_access_token
 
 from openpyxl import Workbook
 
@@ -17,6 +26,23 @@ async def _admin_session(client, slug="import-school"):
         "password": "correct-horse-battery-staple",
     })
     assert signed_in.status_code == 200, signed_in.text
+    school_id = UUID(decode_access_token(signed_in.json()["access_token"])["school_id"])
+    engine = create_async_engine(os.environ["TEST_DATABASE_URL"])
+    now = datetime.now(UTC)
+    async with async_sessionmaker(engine)() as session:
+        await session.execute(
+            update(SchoolSubscription)
+            .where(SchoolSubscription.school_id == school_id)
+            .values(
+                student_limit=100,
+                status="active",
+                current_period_start=now,
+                current_period_end=now + timedelta(days=30),
+                updated_at=now,
+            )
+        )
+        await session.commit()
+    await engine.dispose()
     return {"Authorization": f"Bearer {signed_in.json()['access_token']}"}
 
 

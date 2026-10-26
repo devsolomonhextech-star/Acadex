@@ -1,4 +1,4 @@
-# SchoolOS
+# Acadex
 
 Multi-tenant school operations platform. This fresh project includes tenant provisioning, authentication, student records, and initial academic setup workflows.
 
@@ -15,7 +15,7 @@ The initial repository contained only Git metadata: no application code, framewo
 - Redis-backed signup/login throttling, liveness/readiness endpoints, and Alembic migrations are in place.
 - Student directory supports scoped creation, duplicate admission-number protection, search, status filters, pagination, and tenant-scoped detail reads. The React screen is connected to these APIs.
 - Academic years, terms, class groups, and dated student enrollments are school-scoped, audited, role-protected, and constrained against cross-school or cross-year references.
-- School administrators can invite teachers with expiring, single-use links. Only a token hash is stored, new accounts choose a password, and existing SchoolOS credentials are preserved.
+- School administrators can invite teachers with expiring, single-use links. Only a token hash is stored, new accounts choose a password, and existing Acadex credentials are preserved.
 - Subject and teacher assignments are school-scoped and retained against their class groups. Teacher access to class lists and attendance is limited to assigned classes.
 - Daily attendance supports present, absent, late, and excused statuses, class-roster completeness checks, one session per class/date, correction audit events, and tenant-safe reads/writes.
 - The assessment gradebook supports class/subject/term assessments, score bounds, partial drafts, complete-roster submission, teacher score entry, and principal/admin approval or return with reviewer feedback.
