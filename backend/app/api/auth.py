@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.db import get_session
 from app.models import AuditEvent, MembershipRole, RefreshSession, School, SchoolMembership, User
-from app.rate_limit import limit_login, limit_signup
+from app.rate_limit import check_login_lockout, clear_login_failures, limit_login, limit_signup, record_login_failure
 from app.schemas import LoginRequest, SchoolRegistration, TokenResponse, UserContextResponse
 from app.security import (
     create_access_token,
@@ -142,8 +142,9 @@ async def register_school(payload: SchoolRegistration, session: Annotated[AsyncS
     return {"school_id": str(school.id), "school_slug": school.slug, "status": "active", "message": "School created. Sign in with your administrator account."}
 
 
-@router.post("/auth/login", response_model=LoginResponse, dependencies=[Depends(limit_login)])
-async def login(payload: LoginRequest, response: Response, session: Annotated[AsyncSession, Depends(get_session)]) -> LoginResponse:
+@router.post("/auth/login", response_model=LoginResponse, dependencies=[Depends(check_login_lockout), Depends(limit_login)])
+async def login(payload: LoginRequest, request: Request, response: Response,
+                session: Annotated[AsyncSession, Depends(get_session)]) -> LoginResponse:
     school_result = await session.execute(select(School).where(School.slug == payload.school_slug))
     school = school_result.scalar_one_or_none()
     user_result = await session.execute(select(User).where(User.email == str(payload.email)))
@@ -151,13 +152,16 @@ async def login(payload: LoginRequest, response: Response, session: Annotated[As
     # Verify a fixed-cost dummy hash on unknown users to reduce account enumeration timing.
     valid_password = verify_password(payload.password, user.password_hash if user else _dummy_password_hash())
     if not valid_password or user is None or school is None or user.status != "active" or school.status != "active":
+        await record_login_failure(request)
         raise HTTPException(status_code=401, detail="Invalid school, email, or password")
     membership_result = await session.execute(select(SchoolMembership).where(
         SchoolMembership.user_id == user.id, SchoolMembership.school_id == school.id, SchoolMembership.status == "active",
     ))
     membership = membership_result.scalar_one_or_none()
     if membership is None:
+        await record_login_failure(request)
         raise HTTPException(status_code=401, detail="Invalid school, email, or password")
+    await clear_login_failures(request)
     if user.totp_enabled:
         challenge = jwt.encode({
             "sub": str(user.id), "school_id": str(school.id),
@@ -183,9 +187,10 @@ async def _complete_login(user: User, school: School, membership: SchoolMembersh
     return LoginResponse(access_token=create_access_token(user.id, school.id, membership.role.value), expires_in=settings.access_token_minutes * 60, csrf_token=csrf)
 
 
-@router.post("/auth/login/verify-totp", response_model=LoginResponse, dependencies=[Depends(limit_login)])
+@router.post("/auth/login/verify-totp", response_model=LoginResponse, dependencies=[Depends(check_login_lockout), Depends(limit_login)])
 async def verify_login_totp(payload: LoginTotpRequest,
-                            response: Response, session: Annotated[AsyncSession, Depends(get_session)]) -> LoginResponse:
+                            request: Request, response: Response,
+                            session: Annotated[AsyncSession, Depends(get_session)]) -> LoginResponse:
     try:
         claims = jwt.decode(payload.challenge_token, get_settings().secret_key, algorithms=["HS256"],
                             options={"require": ["exp", "sub", "school_id", "type"]})
@@ -193,6 +198,7 @@ async def verify_login_totp(payload: LoginTotpRequest,
             raise ValueError("wrong challenge type")
         user_id, school_id = UUID(claims["sub"]), UUID(claims["school_id"])
     except (jwt.PyJWTError, KeyError, ValueError):
+        await record_login_failure(request)
         raise HTTPException(status_code=401, detail="This verification request has expired. Sign in again.") from None
     result = await session.execute(select(User, School, SchoolMembership)
         .join(SchoolMembership, SchoolMembership.user_id == User.id)
@@ -202,13 +208,17 @@ async def verify_login_totp(payload: LoginTotpRequest,
                SchoolMembership.status == "active").with_for_update())
     record = result.one_or_none()
     if record is None:
+        await record_login_failure(request)
         raise HTTPException(status_code=401, detail="Invalid verification code")
     user, school, membership = record
     if not user.totp_enabled or not user.totp_secret_encrypted:
+        await record_login_failure(request)
         raise HTTPException(status_code=401, detail="Invalid verification code")
     counter = totp_counter(decrypt_totp_secret(user.totp_secret_encrypted), payload.code)
     if counter is None or (user.totp_last_counter is not None and counter <= user.totp_last_counter):
+        await record_login_failure(request)
         raise HTTPException(status_code=401, detail="Invalid or already used verification code")
+    await clear_login_failures(request)
     user.totp_last_counter = counter
     return await _complete_login(user, school, membership, response, session)
 

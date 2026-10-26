@@ -5,6 +5,13 @@ const apiBase = import.meta.env.VITE_API_URL ?? ''
 type SessionRefresher = () => Promise<string | null>
 let sessionRefresher: SessionRefresher | null = null
 
+export class ApiRequestError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string, readonly retryAfterSeconds?: number) {
+    super(message)
+    this.name = 'ApiRequestError'
+  }
+}
+
 /** Registered by the auth provider so a 401 can mint a fresh access token once. */
 export function setSessionRefresher(refresher: SessionRefresher | null) {
   sessionRefresher = refresher
@@ -34,12 +41,18 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}, acc
 async function parseResponse<T>(response: Response, path: string): Promise<T> {
   if (!response.ok) {
     let message = `Request failed (${response.status})`
+    let code: string | undefined
     try {
-      const body = await response.json() as { detail?: string }
-      if (body.detail) message = body.detail
+      const body = await response.json() as { detail?: string | { code?: string; message?: string } }
+      if (typeof body.detail === 'string') message = body.detail
+      else if (body.detail) {
+        message = body.detail.message ?? message
+        code = body.detail.code
+      }
     } catch { /* Preserve the status message for non-JSON responses. */ }
     if (response.status === 401 && !path.startsWith('/auth/')) message = 'Your session has expired. Please sign in again.'
-    throw new Error(message)
+    const retryAfter = Number(response.headers.get('Retry-After'))
+    throw new ApiRequestError(message, response.status, code, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined)
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
