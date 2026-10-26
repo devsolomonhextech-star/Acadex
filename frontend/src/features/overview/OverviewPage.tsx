@@ -10,6 +10,7 @@ import type { Overview, SchoolUser } from '../../shared/api/types'
 import { fetchOverview, seedDemoFees } from './overviewApi'
 import { fetchStudentSupport } from '../student-support/studentSupportApi'
 import TeacherDashboard from './TeacherDashboard'
+import { DonutChart, WeeklyBarChart } from './DashboardCharts'
 
 const REFRESH_MS = 60_000
 
@@ -294,6 +295,40 @@ function AdminOverview({ user }: { user: SchoolUser }) {
         <Link to="/classes" className="all-events">View full timetable <span>→</span></Link>
       </section>
     </div>
+
+    <section className="dashboard-chart-grid" aria-label="School performance charts">
+      <WeeklyBarChart
+        title={data.finance ? 'Weekly fee collections' : 'Weekly student enrolment'}
+        subtitle={data.finance ? 'Payments received over the last weeks' : 'Enrolled student totals over the last weeks'}
+        values={data.activity.map(point => ({
+          label: new Date(point.week_start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+          value: data.finance ? Number(point.payments) : point.students,
+        }))}
+        formatValue={value => data.finance ? `₵${money(value)}` : value.toLocaleString()}
+      />
+      <DonutChart
+        title="Attendance breakdown"
+        subtitle="Recorded attendance for the selected period"
+        segments={[
+          { label: 'Present', value: data.attendance?.present ?? 0, color: '#21b68a' },
+          { label: 'Late', value: data.attendance?.late ?? 0, color: '#f0ad4e' },
+          { label: 'Absent', value: data.attendance?.absent ?? 0, color: '#ed6a72' },
+          { label: 'Excused', value: data.attendance?.excused ?? 0, color: '#6280ef' },
+        ]}
+        centerValue={data.attendance?.rate_percent == null ? '—' : `${data.attendance.rate_percent}%`}
+        centerLabel="attendance"
+      />
+      {data.finance && <DonutChart
+        title="Fee collection status"
+        subtitle="Paid and outstanding invoice balances"
+        segments={[
+          { label: 'Collected', value: Number(data.finance.paid_total), color: '#21b68a' },
+          { label: 'Outstanding', value: Number(data.finance.outstanding_total), color: '#f0ad4e' },
+        ]}
+        centerValue={`₵${money(data.finance.invoiced_total)}`}
+        centerLabel="invoiced"
+      />}
+    </section>
 
     <section className="panel attention-panel">
       <div className="panel-heading">

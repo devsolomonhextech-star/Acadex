@@ -8,6 +8,7 @@ import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 import { formatApiError } from '../../shared/api/errors'
 import type { OverviewLesson, SchoolUser, TeacherDashboard as TeacherDashboardData } from '../../shared/api/types'
 import { fetchTeacherDashboard } from './overviewApi'
+import { ClassAttendanceChart, DonutChart } from './DashboardCharts'
 
 function timeMinutes(value: string) { const [h, m] = value.split(':').map(Number); return h * 60 + m }
 function lessonState(lesson: OverviewLesson, now: Date) {
@@ -70,6 +71,20 @@ export default function TeacherDashboard({ user }: { user: SchoolUser }) {
         <p className="teacher-focus-note">Use these indicators to check in with students and coordinate support with your school team.</p>
       </section>
     </div>
+    <section className="dashboard-chart-grid teacher-chart-grid" aria-label="Class attendance charts">
+      <DonutChart
+        title="Attendance across my classes"
+        subtitle="Today’s student attendance status"
+        segments={[
+          { label: 'Present (including late)', value: data.classes.reduce((sum, group) => sum + group.present + group.late, 0), color: '#21b68a' },
+          { label: 'Absent', value: data.classes.reduce((sum, group) => sum + group.absent, 0), color: '#ed6a72' },
+          { label: 'Excused / unmarked', value: data.classes.reduce((sum, group) => sum + Math.max(0, group.students_total - group.present - group.late - group.absent), 0), color: '#6280ef' },
+        ]}
+        centerValue={`${data.attendance_total ? Math.round(data.attendance_marked * 100 / data.attendance_total) : 0}%`}
+        centerLabel="rolls marked"
+      />
+      <ClassAttendanceChart rows={data.classes.map(group => ({ id: group.id, name: group.name, rate: group.attendance_rate }))} />
+    </section>
     <section className="teacher-panel teacher-classes-panel">
       <div className="teacher-panel-heading"><div><span className="teacher-panel-icon"><TeamOutlined /></span><div><h2>My classes</h2><p>Class-by-class snapshot of what’s happening</p></div></div><span className="teacher-updated">Live · refreshes every minute</span></div>
       {data.classes.length ? <div className="teacher-class-grid">{data.classes.map(group => <Link to={`/teacher/classes/${group.id}`} className="teacher-class-link" key={group.id} aria-label={`Open ${group.name} class room`}><Card className="teacher-class-card" bordered={false} hoverable>
