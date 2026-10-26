@@ -28,12 +28,17 @@ function clockOf(time: string) {
   return `${((hours + 11) % 12) + 1}:${String(minutes).padStart(2, '0')}`
 }
 
-const SOON_MS = 5 * 60 * 1000
+function localDayKey() {
+  const date = new Date()
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+const SOON_MS = 15 * 60 * 1000
 const GRACE_MS = 10 * 60 * 1000
 
 /**
  * Watches today's lessons and raises two in-app alerts: one when a lesson starts
- * in five minutes, and one when a teacher's lesson has ended. Each fires once
+ * in fifteen minutes, and one when a teacher's lesson has ended. Each fires once
  * per lesson per session.
  */
 export function useLessonAlerts() {
@@ -60,7 +65,7 @@ export function useLessonAlerts() {
       const label = `${slot.subject_name} · ${slot.class_name}`
 
       if (now >= start - SOON_MS && now < start) {
-        const key = `soon-${slot.id}`
+        const key = `soon-${localDayKey()}-${slot.id}`
         if (announced.has(key)) return
         announced.add(key)
         const minutes = Math.max(1, Math.ceil((start - now) / 60_000))
@@ -69,7 +74,7 @@ export function useLessonAlerts() {
           detail: `${label} starts at ${clockOf(slot.starts_at)} with ${slot.teacher_name}${slot.room ? ` in ${slot.room}` : ''}`,
         })
       } else if (now >= end && now < end + GRACE_MS) {
-        const key = `ended-${slot.id}`
+        const key = `ended-${localDayKey()}-${slot.id}`
         if (announced.has(key)) return
         announced.add(key)
         fresh.push({

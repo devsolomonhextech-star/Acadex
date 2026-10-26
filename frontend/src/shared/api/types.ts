@@ -107,6 +107,7 @@ export type AcademicCalendarEvent = {
   starts_on: string; ends_on: string; description: string | null; created_at: string
 }
 export type ClassGroup = { id: string; academic_year_id: string; name: string; grade_level: string; stream: string; class_teacher_membership_id?: string | null; class_teacher_name?: string | null }
+export type ClassRosterStudent = { id: string; admission_number: string; first_name: string; last_name: string; gender: string | null; status: string; enrolled_on: string }
 export type Enrollment = { id: string; student_id: string; academic_year_id: string; class_group_id: string; enrolled_on: string; status: string }
 export type Subject = { id: string; code: string; name: string; status: string }
 export type Teacher = { membership_id: string; user_id: string; display_name: string; email: string; class_teacher_of?: string | null; classes_taught?: number; subjects_taught?: number }

@@ -104,6 +104,16 @@ class EnrollmentResponse(BaseModel):
     status: str
 
 
+class ClassRosterStudent(BaseModel):
+    id: UUID
+    admission_number: str
+    first_name: str
+    last_name: str
+    gender: str | None
+    status: str
+    enrolled_on: date
+
+
 class SubjectCreate(BaseModel):
     code: str = Field(min_length=2, max_length=24)
     name: str = Field(min_length=2, max_length=100)
@@ -277,6 +287,55 @@ async def list_enrollments(class_group_id: UUID, context: Annotated[TenantContex
         raise HTTPException(status_code=404, detail="Class group not found")
     query = select(StudentEnrollment).where(StudentEnrollment.school_id == context.school_id, StudentEnrollment.class_group_id == class_group_id).order_by(StudentEnrollment.enrolled_on)
     return list((await session.scalars(query)).all())
+
+
+@router.get("/classes/{class_group_id}/roster", response_model=list[ClassRosterStudent])
+async def class_roster(
+    class_group_id: UUID,
+    context: Annotated[TenantContext, Depends(require_roles(*roles, MembershipRole.TEACHER))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    group = await session.scalar(select(ClassGroup).where(
+        ClassGroup.id == class_group_id, ClassGroup.school_id == context.school_id,
+    ))
+    if group is None:
+        raise HTTPException(status_code=404, detail="Class group not found")
+    if context.role == MembershipRole.TEACHER:
+        membership_id = await session.scalar(select(SchoolMembership.id).where(
+            SchoolMembership.school_id == context.school_id,
+            SchoolMembership.user_id == context.user_id,
+            SchoolMembership.role == MembershipRole.TEACHER,
+            SchoolMembership.status == "active",
+        ))
+        assigned = membership_id is not None and (
+            group.class_teacher_membership_id == membership_id or bool(await session.scalar(
+                select(ClassSubjectAssignment.id).where(
+                    ClassSubjectAssignment.school_id == context.school_id,
+                    ClassSubjectAssignment.class_group_id == group.id,
+                    ClassSubjectAssignment.teacher_membership_id == membership_id,
+                ).limit(1)
+            ))
+        )
+        if not assigned:
+            raise HTTPException(status_code=403, detail="You are not assigned to this class")
+    rows = (await session.execute(
+        select(Student, StudentEnrollment)
+        .join(StudentEnrollment, (StudentEnrollment.student_id == Student.id)
+              & (StudentEnrollment.school_id == Student.school_id))
+        .where(
+            Student.school_id == context.school_id,
+            StudentEnrollment.class_group_id == group.id,
+            StudentEnrollment.academic_year_id == group.academic_year_id,
+            StudentEnrollment.status == "active",
+            Student.status == "active",
+        )
+        .order_by(Student.first_name, Student.last_name)
+    )).all()
+    return [ClassRosterStudent(
+        id=student.id, admission_number=student.admission_number,
+        first_name=student.first_name, last_name=student.last_name,
+        gender=student.gender, status=student.status, enrolled_on=enrollment.enrolled_on,
+    ) for student, enrollment in rows]
 
 
 @router.post("/enrollments", response_model=EnrollmentResponse, status_code=status.HTTP_201_CREATED)

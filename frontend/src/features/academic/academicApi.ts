@@ -1,5 +1,5 @@
 import { apiRequest } from '../../shared/api/client'
-import type { AcademicTerm, AcademicYear, ClassGroup, Enrollment } from '../../shared/api/types'
+import type { AcademicTerm, AcademicYear, ClassGroup, ClassRosterStudent, Enrollment } from '../../shared/api/types'
 
 export function fetchAcademicYears(token: string) {
   return apiRequest<AcademicYear[]>('/academic/years', {}, token)
@@ -27,6 +27,10 @@ export function createClassGroup(token: string, payload: Omit<ClassGroup, 'id'>)
 
 export function fetchClassEnrollments(token: string, classId: string) {
   return apiRequest<Enrollment[]>(`/academic/classes/${classId}/enrollments`, {}, token)
+}
+
+export function fetchClassRoster(token: string, classId: string) {
+  return apiRequest<ClassRosterStudent[]>(`/academic/classes/${encodeURIComponent(classId)}/roster`, {}, token)
 }
 
 export function createEnrollment(token: string, payload: Omit<Enrollment, 'id' | 'status'>) {

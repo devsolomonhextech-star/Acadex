@@ -72,14 +72,15 @@ export default function TeacherDashboard({ user }: { user: SchoolUser }) {
     </div>
     <section className="teacher-panel teacher-classes-panel">
       <div className="teacher-panel-heading"><div><span className="teacher-panel-icon"><TeamOutlined /></span><div><h2>My classes</h2><p>Class-by-class snapshot of what’s happening</p></div></div><span className="teacher-updated">Live · refreshes every minute</span></div>
-      {data.classes.length ? <div className="teacher-class-grid">{data.classes.map(group => <Card key={group.id} className="teacher-class-card" bordered={false}>
+      {data.classes.length ? <div className="teacher-class-grid">{data.classes.map(group => <Link to={`/teacher/classes/${group.id}`} className="teacher-class-link" key={group.id} aria-label={`Open ${group.name} class room`}><Card className="teacher-class-card" bordered={false} hoverable>
         <div className="teacher-class-title"><div><b>{group.name}</b><span>{group.grade_level}{group.stream ? ` · ${group.stream}` : ''}</span></div>{group.is_class_teacher && <Tag color="blue">Class teacher</Tag>}</div>
         <div className="teacher-subjects">{group.subjects.length ? group.subjects.map(subject => <Tag key={subject}>{subject}</Tag>) : <span>Class teacher</span>}</div>
         <div className="teacher-attendance-line"><span>Today’s attendance</span><b>{group.attendance_rate == null ? 'Not recorded' : `${group.attendance_rate}%`}</b></div>
         <Progress percent={group.attendance_rate ?? 0} showInfo={false} strokeColor={group.attendance_rate == null ? '#e7eaf0' : group.attendance_rate >= 85 ? '#19b982' : '#f2a83b'} />
         <div className="teacher-class-counts"><span><b>{group.present + group.late}</b> present</span><span><b>{group.absent}</b> absent</span><span><b>{group.unmarked}</b> unmarked</span></div>
         <div className="teacher-class-footer"><span>{group.students_total} students</span><span>{group.upcoming_assessments} upcoming assessments</span></div>
-      </Card>)}</div> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No classes are assigned to you for this academic year" />}
+        <div className="teacher-class-open">Open class room <span>→</span></div>
+      </Card></Link>)}</div> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No classes are assigned to you for this academic year" />}
     </section>
   </div>
 }

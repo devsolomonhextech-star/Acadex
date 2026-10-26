@@ -17,7 +17,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import TenantContext, require_roles
@@ -245,12 +245,37 @@ async def _find_student(session: AsyncSession, school_id: UUID, student_id: UUID
 @router.get("/{student_id}/profile", response_model=StudentProfile)
 async def student_profile(
     student_id: UUID,
-    context: Annotated[TenantContext, Depends(require_roles(*student_roles))],
+    context: Annotated[TenantContext, Depends(require_roles(*student_roles, MembershipRole.TEACHER))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> StudentProfile:
     """Everything the student profile page shows, in one role-scoped payload."""
     school_id = context.school_id
     student = await _find_student(session, school_id, student_id)
+    if context.role == MembershipRole.TEACHER:
+        membership_id = await session.scalar(select(SchoolMembership.id).where(
+            SchoolMembership.school_id == school_id,
+            SchoolMembership.user_id == context.user_id,
+            SchoolMembership.role == MembershipRole.TEACHER,
+            SchoolMembership.status == "active",
+        ))
+        teaches_student_class = select(ClassSubjectAssignment.id).where(
+            ClassSubjectAssignment.school_id == school_id,
+            ClassSubjectAssignment.class_group_id == ClassGroup.id,
+            ClassSubjectAssignment.teacher_membership_id == membership_id,
+        ).exists()
+        assigned_student = await session.scalar(
+            select(ClassGroup.id)
+            .join(StudentEnrollment, (StudentEnrollment.class_group_id == ClassGroup.id)
+                  & (StudentEnrollment.school_id == ClassGroup.school_id))
+            .where(
+                ClassGroup.school_id == school_id,
+                StudentEnrollment.student_id == student_id,
+                StudentEnrollment.status == "active",
+                or_(ClassGroup.class_teacher_membership_id == membership_id, teaches_student_class),
+            ).limit(1)
+        )
+        if membership_id is None or assigned_student is None:
+            raise HTTPException(status_code=404, detail="Student not found in your assigned classes")
 
     today = date.today()
     age = None
@@ -296,6 +321,8 @@ async def student_profile(
         relationship=guardian.relationship, email=guardian.email, phone=guardian.phone,
         is_primary=link.is_primary, has_portal_login=guardian.user_id is not None,
     ) for link, guardian in guardian_rows]
+    if context.role == MembershipRole.TEACHER:
+        guardians = []
 
     # Attendance: whole current term when one exists, plus a 30-day trail.
     attendance = None
@@ -479,6 +506,8 @@ async def student_profile(
         reference=record.reference, issued_on=record.issued_on, notes=record.notes,
         created_at=record.created_at, added_by=adder,
     ) for record, adder in document_rows]
+    if context.role == MembershipRole.TEACHER:
+        documents = []
 
     activities = await _recent_activities(
         session, school_id, student_id, attendance_role,
@@ -492,7 +521,9 @@ async def student_profile(
             first_name=student.first_name, last_name=student.last_name,
             display_name=f"{student.first_name} {student.last_name}",
             date_of_birth=student.date_of_birth, age_years=age,
-            gender=student.gender, phone=student.phone, email=student.email,
+            gender=student.gender,
+            phone=None if context.role == MembershipRole.TEACHER else student.phone,
+            email=None if context.role == MembershipRole.TEACHER else student.email,
             status=student.status, has_portal_login=student.user_id is not None,
         ),
         enrollment=enrollment, guardians=guardians, attendance=attendance,

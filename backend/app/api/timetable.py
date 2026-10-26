@@ -144,7 +144,21 @@ async def list_slots(
         ))
         if membership_id is None:
             raise HTTPException(status_code=403, detail="Active teacher membership required")
-        query = query.where(TimetableSlot.teacher_membership_id == membership_id)
+        if class_group_id:
+            group = await session.scalar(select(ClassGroup).where(
+                ClassGroup.id == class_group_id,
+                ClassGroup.school_id == context.school_id,
+                ClassGroup.academic_year_id == academic_year_id,
+            ))
+            assigned_subject = await session.scalar(select(ClassSubjectAssignment.id).where(
+                ClassSubjectAssignment.school_id == context.school_id,
+                ClassSubjectAssignment.class_group_id == class_group_id,
+                ClassSubjectAssignment.teacher_membership_id == membership_id,
+            ).limit(1))
+            if group is None or (group.class_teacher_membership_id != membership_id and assigned_subject is None):
+                raise HTTPException(status_code=403, detail="You are not assigned to this class")
+        else:
+            query = query.where(TimetableSlot.teacher_membership_id == membership_id)
     rows = (await session.execute(query.order_by(TimetableSlot.day_of_week, TimetableSlot.starts_at))).all()
     return [_respond(slot, group, subject, user.display_name) for slot, group, subject, user in rows]
 
