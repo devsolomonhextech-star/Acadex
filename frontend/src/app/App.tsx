@@ -12,6 +12,7 @@ const TeacherTimetablePage = lazy(() => import('../features/academic/TeacherTime
 const TeacherClassRoomPage = lazy(() => import('../features/academic/TeacherClassRoomPage'))
 const AttendancePage = lazy(() => import('../features/attendance/AttendancePage'))
 const AssessmentsPage = lazy(() => import('../features/assessments/AssessmentsPage'))
+const StudentExamsPage = lazy(() => import('../features/assessments/StudentExamsPage'))
 const ResultsPage = lazy(() => import('../features/results/ResultsPage'))
 const ReportCardPage = lazy(() => import('../features/results/ReportCardPage'))
 const FinancePage = lazy(() => import('../features/finance/FinancePage'))
@@ -42,6 +43,7 @@ function AuthenticatedLayout() {
 function HomeRoute() {
   const { user, signOut } = useAuth()
   if (!user) return <Suspense fallback={<LoadingPage />}><LandingPage /></Suspense>
+  if (user.role === 'student') return <AcademicPeriodProvider><SchoolLayout user={user} onLogout={() => { void signOut() }}><Suspense fallback={<LoadingPage />}><StudentExamsPage /></Suspense></SchoolLayout></AcademicPeriodProvider>
   return <AcademicPeriodProvider><SchoolLayout user={user} onLogout={() => { void signOut() }}><Suspense fallback={<LoadingPage />}><OverviewPage user={user} /></Suspense></SchoolLayout></AcademicPeriodProvider>
 }
 
@@ -73,6 +75,7 @@ function AppRoutes() {
       <Route path="/results" element={user && ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><ResultsPage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/report-card" element={user && ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><ReportCardPage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/assessments" element={user && ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><AssessmentsPage /></Suspense> : <Navigate to="/" replace />} />
+      <Route path="/student/exams" element={user?.role === 'student' ? <Suspense fallback={<LoadingPage />}><StudentExamsPage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/finance" element={user && ['school_admin', 'principal', 'finance'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><FinancePage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/academic-calendar" element={user && ['school_admin', 'principal', 'registrar', 'teacher', 'finance', 'staff'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><AcademicCalendarPage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/settings" element={user?.role === 'teacher' ? <Suspense fallback={<LoadingPage />}><TeacherSettingsPage /></Suspense> : user?.role === 'school_admin' ? <Suspense fallback={<LoadingPage />}><SettingsPage /></Suspense> : <Navigate to="/" replace />} />

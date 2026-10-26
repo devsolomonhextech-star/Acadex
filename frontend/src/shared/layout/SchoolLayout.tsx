@@ -28,6 +28,7 @@ const workspaceItems: SidebarItem[] = [
   { label: 'Students', to: '/students', icon: <TeamOutlined /> },
   { label: 'Classes & academics', to: '/classes', icon: <BookOutlined /> },
   { label: 'Assessment gradebook', to: '/assessments', icon: <BarChartOutlined /> },
+  { label: 'My exams', to: '/student/exams', icon: <BookOutlined /> },
   { label: 'Student support', to: '/student-support', icon: <HeartOutlined /> },
   { label: 'Term results', to: '/results', icon: <TrophyOutlined /> },
   { label: 'Attendance', to: '/attendance', icon: <CalendarOutlined /> },
@@ -82,6 +83,7 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
   const canViewAssessments = ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role)
   const canViewFinance = ['school_admin', 'principal', 'finance'].includes(user.role)
   const visibleNavigation = workspaceItems.filter(item => {
+    if (item.label === 'My exams') return user.role === 'student'
     if (item.label === 'Students') return canManageAcademics
     if (item.label === 'Classes & academics') return canManageAcademics
     if (item.label === 'Attendance') return canTakeAttendance

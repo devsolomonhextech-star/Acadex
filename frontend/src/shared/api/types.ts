@@ -227,6 +227,17 @@ export type GradebookStudent = {
   submission_status: 'not_recorded' | 'submitted' | 'missing' | 'excused'
 }
 export type Gradebook = { assessment: AssessmentSummary; students: GradebookStudent[] }
+export type ExamQuestion = { id: string; position: number; text: string; type: 'multiple_choice' | 'written'; points: string; options: { id: string; text: string; correct?: boolean }[] }
+export type OnlineExam = {
+  id: string; assessment_id: string; title: string; class_group_id: string; class_name: string
+  subject_id: string; term_id: string; duration_minutes: number; instructions: string | null
+  opens_at: string | null; closes_at: string | null; published: boolean; questions: ExamQuestion[]
+}
+export type OnlineExamCard = {
+  id: string; assessment_id: string; title: string; subject_id: string; duration_minutes: number
+  instructions: string | null; opens_at: string | null; closes_at: string | null
+  attempt_status: 'not_started' | 'in_progress' | 'submitted' | 'reviewed'; deadline_at: string | null; score: string | null
+}
 export type GradingBand = {
   min_percent: string; max_percent: string; grade: string
   points: string | null; description: string | null
@@ -309,6 +320,10 @@ export type ReportCard = {
   aggregate_grade: string | null; aggregate_points: string | null
   position: number | null; class_size: number
   grading_scale_name: string | null; published_at: string | null; published_by: string | null
+}
+export type ParentReportCardTerm = {
+  term_id: string; term_name: string; academic_year_name: string; published_at: string
+  aggregate_percent: string | null; grade: string | null; position: number | null
 }
 export type FeeCategory = { id: string; name: string; created_at: string }
 export type FeeStructure = {

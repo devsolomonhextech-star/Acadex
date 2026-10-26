@@ -15,6 +15,7 @@ import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 import {
   createAssessment, fetchAssessments, fetchGradebook, reviewAssessment, saveGradebook, submitAssessment,
 } from './assessmentsApi'
+import OnlineExamTools from './OnlineExamTools'
 
 type AssessmentFields = {
   class_group_id: string; subject_id: string; term_id: string; title: string; category: AssessmentCategory
@@ -150,7 +151,7 @@ export default function AssessmentsPage() {
     { title: 'CLASS & SUBJECT', key: 'class-subject', render: (_, row) => <div className="assessment-primary"><strong>{row.class_name} · {row.subject_name}</strong><small>{row.term_name}{row.due_on ? ` · Due ${dayjs(row.due_on).format('D MMM YYYY')}` : ''}</small></div> },
     { title: 'WEIGHT', dataIndex: 'weight_percent', key: 'weight', render: (value: string) => `${Number(value).toFixed(0)}%` },
     { title: 'STATUS', dataIndex: 'status', key: 'status', render: (value: string) => <Tag color={statusColor[value]}>{value}</Tag> },
-    { title: '', key: 'actions', align: 'right', render: (_, row) => <Button size="small" onClick={() => setGradebookId(row.id)}>{canReview && row.status === 'submitted' ? 'Review scores' : 'Open gradebook'}</Button> },
+    { title: '', key: 'actions', align: 'right', render: (_, row) => <div className="assessment-row-actions">{row.category === 'examination' && <OnlineExamTools assessment={row}/>}<Button size="small" onClick={() => setGradebookId(row.id)}>{canReview && row.status === 'submitted' ? 'Review scores' : 'Open gradebook'}</Button></div> },
   ]
   const gradebookColumns: TableColumnsType<GradebookStudent> = [
     { title: 'STUDENT', key: 'student', render: (_, row) => <div className="assessment-primary"><strong>{row.first_name} {row.last_name}</strong><small>{row.admission_number}</small></div> },

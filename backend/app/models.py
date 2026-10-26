@@ -615,6 +615,106 @@ class AssessmentScore(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=utcnow)
 
 
+class OnlineExam(Base):
+    __tablename__ = "online_exams"
+    __table_args__ = (
+        ForeignKeyConstraint(["school_id", "assessment_id"], ["assessments.school_id", "assessments.id"], ondelete="CASCADE"),
+        UniqueConstraint("school_id", "id", name="uq_online_exams_school_id"),
+        UniqueConstraint("school_id", "assessment_id", name="uq_online_exams_assessment"),
+        CheckConstraint("duration_minutes BETWEEN 1 AND 480", name="ck_online_exams_duration"),
+        Index("ix_online_exams_school_published", "school_id", "published_at"),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    assessment_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    instructions: Mapped[str | None] = mapped_column(Text)
+    opens_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    closes_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=utcnow, nullable=False)
+
+
+class ExamQuestion(Base):
+    __tablename__ = "exam_questions"
+    __table_args__ = (
+        ForeignKeyConstraint(["school_id", "exam_id"], ["online_exams.school_id", "online_exams.id"], ondelete="CASCADE"),
+        UniqueConstraint("school_id", "id", name="uq_exam_questions_school_id"),
+        CheckConstraint("question_type IN ('multiple_choice', 'written')", name="ck_exam_questions_type"),
+        CheckConstraint("points > 0", name="ck_exam_questions_points"),
+        UniqueConstraint("school_id", "exam_id", "position", name="uq_exam_questions_position"),
+        Index("ix_exam_questions_exam", "school_id", "exam_id", "position"),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    exam_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    question_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    points: Mapped[Decimal] = mapped_column(Numeric(7, 2), nullable=False)
+
+
+class ExamOption(Base):
+    __tablename__ = "exam_options"
+    __table_args__ = (
+        ForeignKeyConstraint(["school_id", "question_id"], ["exam_questions.school_id", "exam_questions.id"], ondelete="CASCADE"),
+        UniqueConstraint("school_id", "id", name="uq_exam_options_school_id"),
+        UniqueConstraint("school_id", "question_id", "position", name="uq_exam_options_position"),
+        Index("ix_exam_options_question", "school_id", "question_id", "position"),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    question_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    option_text: Mapped[str] = mapped_column(Text, nullable=False)
+    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+
+
+class ExamAttempt(Base):
+    __tablename__ = "exam_attempts"
+    __table_args__ = (
+        ForeignKeyConstraint(["school_id", "exam_id"], ["online_exams.school_id", "online_exams.id"], ondelete="CASCADE"),
+        ForeignKeyConstraint(["school_id", "student_id"], ["students.school_id", "students.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["school_id", "reviewed_by_membership_id"], ["school_memberships.school_id", "school_memberships.id"], ondelete="RESTRICT"),
+        UniqueConstraint("school_id", "id", name="uq_exam_attempts_school_id"),
+        UniqueConstraint("school_id", "exam_id", "student_id", name="uq_exam_attempt_student"),
+        CheckConstraint("status IN ('in_progress', 'submitted', 'reviewed')", name="ck_exam_attempt_status"),
+        Index("ix_exam_attempts_school_exam_status", "school_id", "exam_id", "status"),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    exam_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    student_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="in_progress", server_default="in_progress")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    deadline_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    score: Mapped[Decimal | None] = mapped_column(Numeric(7, 2))
+    reviewed_by_membership_id: Mapped[UUID | None] = mapped_column(Uuid)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ExamAnswer(Base):
+    __tablename__ = "exam_answers"
+    __table_args__ = (
+        ForeignKeyConstraint(["school_id", "attempt_id"], ["exam_attempts.school_id", "exam_attempts.id"], ondelete="CASCADE"),
+        ForeignKeyConstraint(["school_id", "question_id"], ["exam_questions.school_id", "exam_questions.id"], ondelete="CASCADE"),
+        ForeignKeyConstraint(["school_id", "selected_option_id"], ["exam_options.school_id", "exam_options.id"], ondelete="RESTRICT"),
+        UniqueConstraint("school_id", "attempt_id", "question_id", name="uq_exam_answers_question"),
+        CheckConstraint("points_awarded IS NULL OR points_awarded >= 0", name="ck_exam_answers_points"),
+        Index("ix_exam_answers_attempt", "school_id", "attempt_id"),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    attempt_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    question_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    selected_option_id: Mapped[UUID | None] = mapped_column(Uuid)
+    written_answer: Mapped[str | None] = mapped_column(Text)
+    points_awarded: Mapped[Decimal | None] = mapped_column(Numeric(7, 2))
+    teacher_feedback: Mapped[str | None] = mapped_column(String(1000))
+
+
 class StudentImportJob(Base):
     """A validated import preview; students are only created when it is confirmed."""
 

@@ -6,6 +6,7 @@
 @import './students.css';
 @import './academic.css';
 @import './timetable.css';
+@import './timetable-professional.css';
 @import './attendance.css';
 @import './assessments.css';
 @import './results.css';
@@ -20,3 +21,6 @@
 @import './teacher-classroom.css';
 @import './teacher-settings.css';
 @import './dashboard-charts.css';
+@import './online-exams.css';
+@import './student-exams.css';
+@import './parent-reports.css';

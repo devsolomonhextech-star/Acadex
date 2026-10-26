@@ -36,6 +36,7 @@ function initialYearId(years: AcademicYear[]) {
 
 export function AcademicPeriodProvider({ children }: { children: ReactNode }) {
   const { accessToken, user } = useAuth()
+  const canSelectAcademicPeriod = Boolean(user && !['student', 'parent'].includes(user.role))
   const [saved, setSaved] = useState<{ schoolId: string; yearId: string; termId: string } | null>(null)
   const storageKey = user ? `acadex-academic-period:${user.school_id}` : ''
 
@@ -56,7 +57,7 @@ export function AcademicPeriodProvider({ children }: { children: ReactNode }) {
   const yearsQuery = useQuery({
     queryKey: ['academic-years', user?.school_id],
     queryFn: () => fetchAcademicYears(accessToken!),
-    enabled: Boolean(accessToken && user),
+    enabled: Boolean(accessToken && canSelectAcademicPeriod),
   })
   const years = yearsQuery.data ?? []
   const yearId = years.some(year => year.id === saved?.yearId)
@@ -65,7 +66,7 @@ export function AcademicPeriodProvider({ children }: { children: ReactNode }) {
   const termsQuery = useQuery({
     queryKey: ['academic-terms', user?.school_id, yearId],
     queryFn: () => fetchAcademicTerms(accessToken!, yearId),
-    enabled: Boolean(accessToken && user && yearId),
+    enabled: Boolean(accessToken && canSelectAcademicPeriod && yearId),
   })
   const terms = termsQuery.data ?? []
   const termId = terms.some(term => term.id === saved?.termId)
@@ -81,7 +82,7 @@ export function AcademicPeriodProvider({ children }: { children: ReactNode }) {
     years, terms, yearId, termId,
     year: years.find(year => year.id === yearId),
     term: terms.find(term => term.id === termId),
-    loading: saved?.schoolId !== user?.school_id || yearsQuery.isLoading || termsQuery.isLoading,
+    loading: canSelectAcademicPeriod && (saved?.schoolId !== user?.school_id || yearsQuery.isLoading || termsQuery.isLoading),
     setYearId: id => persist({ yearId: id, termId: '' }),
     setTermId: id => persist({ yearId, termId: id }),
   }), [years, terms, yearId, termId, yearsQuery.isLoading, termsQuery.isLoading, saved?.schoolId, user])

@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.api.academic import router as academic_router
 from app.api.academic_calendar import router as academic_calendar_router
 from app.api.assessments import router as assessments_router
+from app.api.exams import router as exams_router
 from app.api.attendance import router as attendance_router
 from app.api.auth import router as identity_router
 from app.api.communications import router as communications_router
@@ -62,6 +63,7 @@ app.include_router(academic_calendar_router)
 app.include_router(staff_router)
 app.include_router(attendance_router)
 app.include_router(assessments_router)
+app.include_router(exams_router)
 app.include_router(grading_router)
 app.include_router(results_router)
 app.include_router(timetable_router)

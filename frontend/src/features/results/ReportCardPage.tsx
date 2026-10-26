@@ -1,12 +1,13 @@
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Alert, Button, Spin } from 'antd'
-import { ArrowLeftOutlined, PrinterOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, DownloadOutlined, PrinterOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { useAuth } from '../auth/authHooks'
 import type { ReportCard } from '../../shared/api/types'
 import { formatApiError } from '../../shared/api/errors'
 import { fetchReportCard } from './resultsApi'
+import { downloadReportCardPdf } from './reportCardPdf'
 
 function InfoCell({ label, value }: { label: string; value: string }) {
   return <div className="rc-info-cell"><span>{label}</span><strong>{value}</strong></div>
@@ -40,6 +41,9 @@ export default function ReportCardPage() {
       <Button icon={<ArrowLeftOutlined/>} onClick={() => navigate('/results')}>Back to results</Button>
       <Button type="primary" icon={<PrinterOutlined/>} disabled={!card} onClick={() => window.print()}>
         Print report card
+      </Button>
+      <Button icon={<DownloadOutlined/>} disabled={!card} onClick={() => card && downloadReportCardPdf(card)}>
+        Download PDF
       </Button>
     </div>
 
