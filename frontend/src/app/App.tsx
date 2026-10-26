@@ -24,6 +24,7 @@ const StudentSupportPage = lazy(() => import('../features/student-support/Studen
 const AcceptInvitationPage = lazy(() => import('../features/staff/AcceptInvitationPage'))
 const LoginPage = lazy(() => import('../features/auth/AuthPages').then(module => ({ default: module.LoginPage })))
 const RegisterPage = lazy(() => import('../features/auth/AuthPages').then(module => ({ default: module.RegisterPage })))
+const LandingPage = lazy(() => import('../features/marketing/LandingPage'))
 
 function LoadingPage() {
   return <main className="auth-loading"><Spin size="large"/><span>Checking your school workspace…</span></main>
@@ -33,6 +34,12 @@ function AuthenticatedLayout() {
   const { user, signOut } = useAuth()
   if (!user) return <Navigate to="/login" replace />
   return <AcademicPeriodProvider><SchoolLayout user={user} onLogout={() => { void signOut() }}><Outlet /></SchoolLayout></AcademicPeriodProvider>
+}
+
+function HomeRoute() {
+  const { user, signOut } = useAuth()
+  if (!user) return <Suspense fallback={<LoadingPage />}><LandingPage /></Suspense>
+  return <AcademicPeriodProvider><SchoolLayout user={user} onLogout={() => { void signOut() }}><Suspense fallback={<LoadingPage />}><OverviewPage user={user} /></Suspense></SchoolLayout></AcademicPeriodProvider>
 }
 
 function LoginRoute() {
@@ -49,11 +56,11 @@ function AppRoutes() {
   const { user, loading } = useAuth()
   if (loading) return <LoadingPage />
   return <Routes>
+    <Route path="/" element={<HomeRoute />} />
     <Route path="/login" element={<LoginRoute />} />
     <Route path="/register" element={<RegisterRoute />} />
     <Route path="/accept-invitation" element={<Suspense fallback={<LoadingPage />}><AcceptInvitationPage /></Suspense>} />
     <Route element={<AuthenticatedLayout />}>
-      <Route path="/" element={user ? <OverviewPage user={user} /> : <Navigate to="/login" replace />} />
       <Route path="/students" element={user && ['school_admin', 'principal', 'registrar'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><StudentsPage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/students/:studentId" element={user && ['school_admin', 'principal', 'registrar'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><StudentProfilePage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/classes" element={user && ['school_admin', 'principal', 'registrar'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><AcademicPage /></Suspense> : <Navigate to="/" replace />} />
