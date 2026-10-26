@@ -1,0 +1,40 @@
+.teacher-settings-page{max-width:980px}
+.teacher-settings-heading{display:flex;align-items:center;gap:13px;margin-bottom:20px}
+.teacher-settings-heading>span{display:grid;place-items:center;width:44px;height:44px;border-radius:13px;background:#eef2ff;color:#4868e6;font-size:19px}
+.teacher-settings-heading h1{margin:4px 0;color:#192b4b;font-size:25px}
+.teacher-settings-heading p{margin:0;color:#8792a6;font-size:13px}
+.teacher-settings-card{padding:22px;border:1px solid #e7ebf3;border-radius:13px;background:#fff;box-shadow:0 4px 15px #203a7009}
+.teacher-settings-card-head{display:flex;align-items:center;gap:13px;padding-bottom:18px;border-bottom:1px solid #eef1f5}
+.teacher-settings-card-head>div{flex:1}
+.teacher-settings-security-icon{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:#eef2ff;color:#4868e6;font-size:18px}
+.teacher-settings-card-head h2{margin:0;color:#263753;font-size:16px}
+.teacher-settings-card-head p{margin:4px 0 0;color:#8792a6;font-size:12px}
+.teacher-settings-active{display:flex;align-items:center;gap:10px;margin-top:17px;padding:13px 15px;border:1px solid #d4f1e6;border-radius:9px;background:#f2fbf7;color:#19a778}
+.teacher-settings-active>span,.teacher-settings-note>span{display:flex;flex-direction:column;gap:3px}
+.teacher-settings-active b{color:#27664f;font-size:12px}
+.teacher-settings-active small{color:#81968e;font-size:11px}
+.teacher-settings-explainer{display:flex;align-items:center;justify-content:space-between;gap:20px;padding-top:18px}
+.teacher-settings-explainer>div{display:flex;align-items:flex-start;gap:11px;max-width:600px;color:#6380da;font-size:17px}
+.teacher-settings-explainer span{display:flex;flex-direction:column;gap:5px}
+.teacher-settings-explainer b{color:#33425d;font-size:13px}
+.teacher-settings-explainer small{color:#8995a9;font-size:12px;line-height:1.55}
+.teacher-settings-explainer .ant-btn,.teacher-settings-confirm .ant-btn,.teacher-settings-disable .ant-btn{height:35px;border-radius:8px;font-size:12px}
+.teacher-settings-enroll{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:18px;padding-top:19px}
+.teacher-settings-steps h3{margin:0 0 9px;color:#2e3d59;font-size:14px}
+.teacher-settings-steps ol{margin:0;padding-left:19px;color:#6e7a90;font-size:12px;line-height:1.8}
+.teacher-settings-steps p{margin:13px 0 6px;color:#79869c;font-size:12px}
+.teacher-settings-steps code{display:inline-block;padding:7px 9px;border:1px dashed #dce2ee;border-radius:6px;background:#f8f9fc;color:#344461;font-size:12px;letter-spacing:.7px}
+.teacher-settings-qr{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:10px;border:1px solid #edf0f5;border-radius:10px;background:#fbfcfe}
+.teacher-settings-qr img{width:145px;height:145px;object-fit:contain}
+.teacher-settings-qr span{color:#8b96a8;font-size:10px}
+.teacher-settings-confirm{grid-column:1/-1;display:flex;align-items:center;gap:9px;padding-top:14px;border-top:1px solid #edf0f5}
+.teacher-settings-confirm .ant-input{max-width:220px;height:35px;border-radius:7px}
+.teacher-settings-disable{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:17px;padding:13px;border:1px solid #f2d9d4;border-radius:9px;background:#fff8f7}
+.teacher-settings-disable>div{display:flex;flex:1 1 100%;flex-direction:column;gap:4px}
+.teacher-settings-disable b{color:#844b43;font-size:12px}
+.teacher-settings-disable small{color:#9c7771;font-size:11px}
+.teacher-settings-disable .ant-input{max-width:230px;height:35px;border-radius:7px}
+.teacher-settings-note{display:flex;align-items:flex-start;gap:10px;margin-top:13px;padding:13px 15px;border:1px solid #e6ebf7;border-radius:9px;background:#f8faff;color:#6279ce}
+.teacher-settings-note b{color:#465774;font-size:12px}
+.teacher-settings-note small{color:#8b96a8;font-size:11px;line-height:1.5}
+@media(max-width:650px){.teacher-settings-card{padding:15px}.teacher-settings-explainer{align-items:flex-start;flex-direction:column}.teacher-settings-enroll{grid-template-columns:1fr}.teacher-settings-qr{justify-self:start;width:190px}.teacher-settings-confirm{grid-column:auto;flex-wrap:wrap}.teacher-settings-confirm .ant-input{max-width:none;width:100%}}
