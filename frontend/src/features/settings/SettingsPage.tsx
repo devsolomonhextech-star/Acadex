@@ -51,7 +51,7 @@ export default function SettingsPage() {
       const profileDetails: Record<ProfileSection, { title: string; description: string; rows: [string, string][] }> = {
         general: { title: 'General information', description: 'Your school’s basic information and details.', rows: [['School name', user?.school_name ?? '—'], ['School address', user?.school_slug ?? '—'], ['School code', 'Not configured'], ['School type', 'Not configured']] },
         contact: { title: 'Contact information', description: 'The main account contact currently registered for this school.', rows: [['Administrator', user?.display_name ?? '—'], ['Email address', user?.email ?? '—'], ['Phone number', 'Not configured'], ['Website', 'Not configured']] },
-        branding: { title: 'Logo & branding', description: 'School logo and brand colors are not configured yet.', rows: [['School logo', 'Not configured'], ['Primary color', 'Default SchoolOS blue']] },
+        branding: { title: 'Logo & branding', description: 'School logo and brand colors are not configured yet.', rows: [['School logo', 'Not configured'], ['Primary color', 'Default Acadex blue']] },
         social: { title: 'Social links', description: 'Add school social profiles when those details are available.', rows: [['Facebook', 'Not configured'], ['Instagram', 'Not configured'], ['LinkedIn', 'Not configured']] },
         location: { title: 'Location', description: 'Your school location has not been added yet.', rows: [['Country', 'Not configured'], ['Region / state', 'Not configured'], ['City', 'Not configured'], ['Address', 'Not configured']] },
         hours: { title: 'School hours', description: 'School-wide operating hours have not been configured yet.', rows: [['School days', 'Not configured'], ['Opening time', 'Not configured'], ['Closing time', 'Not configured']] },
@@ -77,7 +77,7 @@ export default function SettingsPage() {
         </div>}
         {disablePrompt && <div className="settings-disable"><div><b>Confirm this change</b><small>Enter a current authenticator code to turn off two-factor sign-in.</small></div>{codeInput('Authenticator code to disable two-factor authentication', disableCode, setDisableCode)}<Button danger type="primary" disabled={disableCode.length !== 6} loading={disableMutation.isPending} onClick={() => disableMutation.mutate()}>Disable</Button><Button onClick={() => { setDisablePrompt(false); setDisableCode('') }}>Cancel</Button></div>}
       </div>
-      <Alert type="info" showIcon message="Keep your authenticator app available" description="SchoolOS never displays or stores your one-time codes. If you lose access to the app, contact your school administrator for account recovery."/>
+      <Alert type="info" showIcon message="Keep your authenticator app available" description="Acadex never displays or stores your one-time codes. If you lose access to the app, contact your school administrator for account recovery."/>
     </section>
   }
 

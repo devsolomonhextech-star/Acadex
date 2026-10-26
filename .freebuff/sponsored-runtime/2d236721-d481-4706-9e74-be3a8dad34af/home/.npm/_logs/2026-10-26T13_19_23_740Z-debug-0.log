@@ -1,0 +1,18 @@
+0 verbose cli /usr/local/bin/node /usr/local/lib/node_modules/npm/bin/npm-cli.js
+1 info using npm@11.12.1
+2 info using node@v24.15.0
+3 silly config load:file:/usr/local/lib/node_modules/npm/npmrc
+4 silly config load:file:/Users/hextechnologyconsultdev1/Documents/projects/Acadex/frontend/.npmrc
+5 silly config load:file:/Users/hextechnologyconsultdev1/Documents/projects/Acadex/.freebuff/sponsored-runtime/***/home/.npmrc
+6 silly config load:file:/usr/local/etc/npmrc
+7 verbose title npm exec tsc --noEmit -p tsconfig.json --pretty
+8 verbose argv "exec" "--" "tsc" "--noEmit" "-p" "tsconfig.json" "--pretty"
+9 verbose logfile logs-max:10 dir:/Users/hextechnologyconsultdev1/Documents/projects/Acadex/.freebuff/sponsored-runtime/***/home/.npm/_logs/2026-10-26T13_19_23_740Z-
+10 verbose logfile /Users/hextechnologyconsultdev1/Documents/projects/Acadex/.freebuff/sponsored-runtime/***/home/.npm/_logs/2026-10-26T13_19_23_740Z-debug-0.log
+11 silly logfile done cleaning log files
+12 verbose cwd /Users/hextechnologyconsultdev1/Documents/projects/Acadex/frontend
+13 verbose os Darwin 25.5.0
+14 verbose node v24.15.0
+15 verbose npm  v11.12.1
+16 verbose exit 0
+17 info ok

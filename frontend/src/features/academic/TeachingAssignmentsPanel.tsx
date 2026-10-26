@@ -104,7 +104,7 @@ export function TeachingAssignmentsPanel({ yearId, classes }: { yearId: string; 
     <Modal title="Invite a teacher" open={inviteOpen} onCancel={() => { setInviteOpen(false); setCreatedInviteUrl('') }} footer={null} destroyOnClose>
       {createdInviteUrl ? <div className="invite-success"><Alert type="success" showIcon message="Invitation ready" description="Share this one-time link with the teacher. It expires in seven days."/><Input value={createdInviteUrl} readOnly/><Button icon={<CopyOutlined />} onClick={() => void copyInvite()}>Copy invitation link</Button><p>The invitation token is shown only once. If it is lost, create a new invitation.</p></div>
         : <Form form={inviteForm} layout="vertical" onFinish={values => inviteMutation.mutate(values)}>
-          <p className="form-hint">The teacher will join this school with a teacher account and can set a password if they are new to SchoolOS.</p>
+          <p className="form-hint">The teacher will join this school with a teacher account and can set a password if they are new to Acadex.</p>
           <Form.Item name="display_name" label="Teacher name" rules={[{ required: true, min: 2 }]}><Input maxLength={160} placeholder="Full name"/></Form.Item>
           <Form.Item name="email" label="Email address" rules={[{ required: true, type: 'email' }]}><Input type="email" maxLength={254} placeholder="teacher@school.edu.gh"/></Form.Item>
           <div className="student-form-actions"><Button onClick={() => setInviteOpen(false)}>Cancel</Button><Button type="primary" htmlType="submit" loading={inviteMutation.isPending}>Create invitation</Button></div>

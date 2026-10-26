@@ -81,7 +81,7 @@
 .lp-hero-photo{position:absolute;inset:0 0 24px 110px;border-radius:18px;overflow:hidden;box-shadow:0 24px 48px -28px #1b213647}
 .lp-hero-photo img{width:100%;height:100%;object-fit:cover;display:block}
 .lp-hero-photo::after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,#24348f40,#24348f14 45%,transparent 70%)}
-.lp-dash{position:absolute;left:0;top:34px;width:88%;background:#fff;border:1px solid var(--lp-line);border-radius:14px;box-shadow:0 34px 70px -34px #1b213659,0 10px 26px -16px #1b213633;overflow:hidden;display:grid;grid-template-columns:132px 1fr}
+.lp-dash{position:absolute;left:0;top:34px;width:80%;background:#fff;border:1px solid var(--lp-line);border-radius:14px;box-shadow:0 34px 70px -34px #1b213659,0 10px 26px -16px #1b213633;overflow:hidden;display:grid;grid-template-columns:132px 1fr}
 .lp-dash-side{background:#fbfcff;border-right:1px solid var(--lp-line-soft);padding:14px 10px}
 .lp-dash-brand{display:flex;align-items:center;gap:7px;padding:0 4px 12px;margin-bottom:8px;border-bottom:1px solid var(--lp-line-soft);font-family:Manrope,sans-serif;font-size:13.5px;font-weight:800;letter-spacing:-.02em}
 .lp-dash-brand .lp-mark{width:22px;height:22px;border-radius:7px;font-size:11px}

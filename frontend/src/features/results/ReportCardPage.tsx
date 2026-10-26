@@ -109,7 +109,7 @@ export default function ReportCardPage() {
           <strong>{card.published_at ? dayjs(card.published_at).format('D MMM YYYY, HH:mm') : '—'}
             {card.published_by ? ` by ${card.published_by}` : ''}</strong>
         </div>
-        <div className="rc-generated">Generated {dayjs().format('D MMM YYYY')} · SchoolOS</div>
+        <div className="rc-generated">Generated {dayjs().format('D MMM YYYY')} · Acadex</div>
       </footer>
     </article>}
   </div>
