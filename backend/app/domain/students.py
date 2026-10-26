@@ -73,6 +73,8 @@ async def create_student(session: AsyncSession, school_id: UUID, actor_id: UUID,
     )
     if duplicate.scalar_one_or_none():
         raise DuplicateAdmissionNumber
+    # Paid seats are checked per added student; the free trial bypasses this.
+    await require_student_capacity(session, school_id, 1)
     student = Student(
         school_id=school_id,
         admission_number=data.admission_number,

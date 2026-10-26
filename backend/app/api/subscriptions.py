@@ -20,8 +20,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import TenantContext, require_roles
 from app.db import get_session
-from app.domain.subscriptions import StudentSubscriptionRequired, active_student_count
-from app.models import MembershipRole, SchoolSubscription, SubscriptionPayment, User
+from app.domain.subscriptions import (
+    StudentSubscriptionRequired,
+    active_student_count,
+    trial_active,
+    trial_days_remaining,
+)
+from app.models import MembershipRole, School, SchoolSubscription, SubscriptionPayment, User
 from app.settings import get_settings
 
 router = APIRouter(prefix="/api/v1/subscription", tags=["subscription"])
@@ -127,6 +132,7 @@ async def get_subscription(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict[str, Any]:
     subscription = await _subscription(session, context.school_id)
+    school = await session.get(School, context.school_id)
     usage = await active_student_count(session, context.school_id)
     payments = (await session.execute(
         select(SubscriptionPayment)
@@ -135,10 +141,23 @@ async def get_subscription(
         .limit(10)
     )).scalars().all()
     active = _active(subscription)
+    trial_ends_at = school.trial_ends_at if school else None
+    in_trial = trial_active(trial_ends_at)
+    if active:
+        subscription_status = "active"
+    elif in_trial:
+        subscription_status = "trial"
+    elif subscription and subscription.status == "active":
+        subscription_status = "expired"
+    else:
+        subscription_status = "inactive"
     limit = subscription.student_limit if subscription else 0
     amount = Decimal(limit * PRICE_PER_STUDENT_PESWAS) / 100
     return {
-        "status": "active" if active else ("expired" if subscription and subscription.status == "active" else "inactive"),
+        "status": subscription_status,
+        "in_trial": in_trial,
+        "trial_ends_at": trial_ends_at,
+        "trial_days_remaining": trial_days_remaining(trial_ends_at) if in_trial else 0,
         "active_students": usage,
         "student_limit": limit,
         "available_places": max(limit - usage, 0) if active else 0,

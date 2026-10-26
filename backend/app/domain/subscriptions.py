@@ -1,11 +1,20 @@
-"""Subscription rules shared by student enrollment and bulk import."""
+"""Subscription rules shared by student enrollment and bulk import.
+
+Every new institution receives a free trial of TRIAL_MONTHS calendar months.
+While the trial runs, seat capacity is unlimited; once it ends the paid
+GH₵3-per-student seats take over.
+"""
+import calendar
+import math
 from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import SchoolSubscription, Student
+from app.models import School, SchoolSubscription, Student
+
+TRIAL_MONTHS = 3
 
 
 class StudentSubscriptionRequired(Exception):
@@ -18,6 +27,35 @@ class StudentSubscriptionRequired(Exception):
             "Ask your school administrator to add student places in Settings → Billing. "
             "Plans are GH₵3 per student per month."
         )
+
+
+def trial_end_for(start: datetime) -> datetime:
+    """TRIAL_MONTHS calendar months after ``start``, safe for month ends."""
+    day = start.day
+    end = start
+    for _ in range(TRIAL_MONTHS):
+        month = end.month % 12 + 1
+        year = end.year + (1 if end.month == 12 else 0)
+        end = end.replace(year=year, month=month, day=min(day, calendar.monthrange(year, month)[1]))
+    return end
+
+
+def trial_active(trial_ends_at: datetime | None, now: datetime | None = None) -> bool:
+    if trial_ends_at is None:
+        return False
+    now = now or datetime.now(UTC)
+    return trial_ends_at > now
+
+
+def trial_days_remaining(trial_ends_at: datetime | None, now: datetime | None = None) -> int:
+    """Whole days left, rounded up, so the last day still shows as one day."""
+    if trial_ends_at is None:
+        return 0
+    now = now or datetime.now(UTC)
+    remaining = (trial_ends_at - now).total_seconds()
+    if remaining <= 0:
+        return 0
+    return math.ceil(remaining / 86400)
 
 
 async def active_student_count(session: AsyncSession, school_id: UUID) -> int:
@@ -33,6 +71,11 @@ async def require_student_capacity(
     session: AsyncSession, school_id: UUID, additional: int = 1,
 ) -> None:
     """Lock the tenant subscription and ensure new active student seats are paid."""
+    trial_ends_at = (await session.execute(
+        select(School.trial_ends_at).where(School.id == school_id)
+    )).scalar_one_or_none()
+    if trial_active(trial_ends_at):
+        return  # Free-trial institutions enrol without seat limits.
     subscription = (await session.execute(
         select(SchoolSubscription)
         .where(SchoolSubscription.school_id == school_id)

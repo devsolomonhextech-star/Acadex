@@ -26,6 +26,14 @@ function initialTermId(terms: AcademicTerm[]) {
   return current?.id ?? [...terms].sort((a, b) => b.ordinal - a.ordinal)[0]?.id ?? ''
 }
 
+// Default to the year actually running today, so a completed history year
+// (which also carries status "active") never hijacks the workspace view.
+function initialYearId(years: AcademicYear[]) {
+  const today = dayjs()
+  const current = years.find(year => !today.isBefore(dayjs(year.starts_on), 'day') && !today.isAfter(dayjs(year.ends_on), 'day'))
+  return current?.id ?? years.find(year => year.status === 'active')?.id ?? years[0]?.id ?? ''
+}
+
 export function AcademicPeriodProvider({ children }: { children: ReactNode }) {
   const { accessToken, user } = useAuth()
   const [saved, setSaved] = useState<{ schoolId: string; yearId: string; termId: string } | null>(null)
@@ -53,7 +61,7 @@ export function AcademicPeriodProvider({ children }: { children: ReactNode }) {
   const years = yearsQuery.data ?? []
   const yearId = years.some(year => year.id === saved?.yearId)
     ? saved!.yearId
-    : years.find(year => year.status === 'active')?.id ?? years[0]?.id ?? ''
+    : initialYearId(years)
   const termsQuery = useQuery({
     queryKey: ['academic-terms', user?.school_id, yearId],
     queryFn: () => fetchAcademicTerms(accessToken!, yearId),

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, Button, Card, Empty, InputNumber, Progress, Skeleton, Table, Tag, message } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { ArrowRightOutlined, CheckCircleFilled, CreditCardOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
+import { ArrowRightOutlined, CheckCircleFilled, CreditCardOutlined, GiftOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/authHooks'
@@ -18,7 +18,10 @@ type SubscriptionPayment = {
 }
 
 type SubscriptionStatus = {
-  status: 'inactive' | 'active' | 'expired'
+  status: 'inactive' | 'active' | 'expired' | 'trial'
+  in_trial: boolean
+  trial_ends_at: string | null
+  trial_days_remaining: number
   active_students: number
   student_limit: number
   available_places: number
@@ -104,6 +107,14 @@ export default function SubscriptionSettings() {
 
   return <div className="subscription-settings">
     {contextHolder}
+    {data.in_trial && <div className="trial-countdown" role="status">
+      <span className="trial-countdown-badge"><GiftOutlined /> FREE TRIAL</span>
+      <div className="trial-countdown-number">{data.trial_days_remaining}<small>{data.trial_days_remaining === 1 ? 'day left' : 'days left'}</small></div>
+      <div className="trial-countdown-copy">
+        <strong>Your institution runs free for three months</strong>
+        <p>Everything is unlocked until {date(data.trial_ends_at)}. After that, GH₵3 per student per month keeps your records, results and finance running — subscribe at any time from this page.</p>
+      </div>
+    </div>}
     {!data.payment_enabled && <Alert type="warning" showIcon message="Online payments are being set up" description="Your administrator can review the plan here. Secure checkout will be available once Acadex payments are configured." />}
     <Card className="subscription-plan-card" bordered={false}>
       <div className="subscription-plan-copy">
@@ -116,7 +127,7 @@ export default function SubscriptionSettings() {
       <div className="subscription-plan-picker">
         <div className="subscription-current">
           <span>Current plan</span>
-          <Tag color={data.status === 'active' ? 'green' : data.status === 'expired' ? 'orange' : 'default'}>{data.status === 'active' ? 'Active' : data.status === 'expired' ? 'Renewal due' : 'Not subscribed'}</Tag>
+          <Tag color={data.status === 'active' ? 'green' : data.status === 'trial' ? 'blue' : data.status === 'expired' ? 'orange' : 'default'}>{data.status === 'active' ? 'Active' : data.status === 'trial' ? 'Free trial' : data.status === 'expired' ? 'Renewal due' : 'Not subscribed'}</Tag>
         </div>
         <label htmlFor="student-capacity">How many student places do you need?</label>
         <InputNumber id="student-capacity" min={minimum} max={100000} step={10} value={capacity} onChange={value => setCapacity(Math.max(minimum, value ?? minimum))} addonAfter="students" />
@@ -131,14 +142,14 @@ export default function SubscriptionSettings() {
     <div className="subscription-usage-grid">
       <Card className="subscription-usage-card" bordered={false}>
         <div className="subscription-card-title"><div><h3>Student places</h3><p>Your current roster against the plan</p></div><span className="subscription-usage-icon"><CheckCircleFilled /></span></div>
-        <div className="subscription-usage-count"><strong>{data.active_students}</strong><span>of {data.student_limit} places</span></div>
+        <div className="subscription-usage-count"><strong>{data.active_students}</strong><span>{data.in_trial && !data.student_limit ? 'students · no seat limit in trial' : `of ${data.student_limit} places`}</span></div>
         <Progress percent={data.student_limit ? Math.min(100, Math.round(data.active_students / data.student_limit * 100)) : 0} showInfo={false} strokeColor="#3563e9" trailColor="#eaf0ff" />
-        <div className="subscription-usage-foot"><span>{data.available_places} places available</span><span>{data.student_limit ? `${Math.round(data.active_students / data.student_limit * 100)}% used` : 'Choose a plan to begin'}</span></div>
+        <div className="subscription-usage-foot"><span>{data.in_trial && !data.student_limit ? 'Free trial — enrol freely' : `${data.available_places} places available`}</span><span>{data.student_limit ? `${Math.round(data.active_students / data.student_limit * 100)}% used` : data.in_trial ? 'Trial seats are free' : 'Choose a plan to begin'}</span></div>
       </Card>
       <Card className="subscription-usage-card subscription-renewal-card" bordered={false}>
         <span className="subscription-eyebrow">BILLING PERIOD</span>
-        <h3>{data.status === 'active' ? 'Your school is covered' : 'Activate before enrolling'}</h3>
-        <p>{data.status === 'active' ? `Current access runs through ${date(data.current_period_end)}.` : 'Choose the number of student places you need. New student enrollment opens as soon as payment is confirmed.'}</p>
+        <h3>{data.status === 'active' ? 'Your school is covered' : data.status === 'trial' ? 'Free trial in progress' : 'Activate before enrolling'}</h3>
+        <p>{data.status === 'active' ? `Current access runs through ${date(data.current_period_end)}.` : data.status === 'trial' ? `Everything stays unlocked until ${date(data.trial_ends_at)} — ${data.trial_days_remaining} days left. Choose a plan before then to keep enrolling students without interruption.` : 'Choose the number of student places you need. New student enrollment opens as soon as payment is confirmed.'}</p>
         {data.status === 'active' && <div className="subscription-period-line"><span>Next renewal</span><strong>{date(data.current_period_end)}</strong></div>}
         <div className="subscription-renewal-note"><ArrowRightOutlined /> Student records stay available if a plan expires; adding or reactivating students requires an active plan.</div>
       </Card>

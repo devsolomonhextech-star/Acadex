@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { useAuth } from '../../features/auth/authHooks'
+import { apiRequest } from '../api/client'
 import { useLessonAlerts } from '../../features/academic/useLessonAlerts'
 import {
-  AppstoreOutlined, BarChartOutlined, BellOutlined, BookOutlined, CalendarOutlined,
-  CarOutlined, CreditCardOutlined, DashboardOutlined, FlagOutlined, HomeOutlined,
+  AppstoreOutlined, ArrowRightOutlined, BarChartOutlined, BellOutlined, BookOutlined, CalendarOutlined,
+  CarOutlined, CreditCardOutlined, DashboardOutlined, FlagOutlined, GiftOutlined, HomeOutlined,
   MenuOutlined, MessageOutlined, ReadOutlined, SearchOutlined, SettingOutlined,
   TeamOutlined, TrophyOutlined, UserAddOutlined, UserOutlined, HeartOutlined,
 } from '@ant-design/icons'
@@ -13,6 +16,12 @@ import type { SchoolUser } from '../api/types'
 import { useAcademicPeriod } from '../academic/AcademicPeriodContext'
 
 type SidebarItem = { label: string; to?: string; icon: ReactNode }
+
+type TrialStatus = {
+  in_trial: boolean
+  trial_days_remaining: number
+  trial_ends_at: string | null
+}
 
 const workspaceItems: SidebarItem[] = [
   { label: 'Overview', to: '/', icon: <DashboardOutlined /> },
@@ -51,8 +60,20 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
   const toggleSection = (key: string) =>
     setCollapsedSections(previous => ({ ...previous, [key]: !previous[key] }))
   const location = useLocation()
+  const { accessToken } = useAuth()
   const { years, terms, yearId, termId, setYearId, setTermId, loading: periodLoading } = useAcademicPeriod()
   const { alerts, dismiss, contextHolder } = useLessonAlerts()
+  // Free-trial countdown reminder for the administrators who own billing.
+  const trial = useQuery({
+    queryKey: ['school-subscription-status'],
+    queryFn: () => apiRequest<TrialStatus>('/subscription', {}, accessToken!),
+    enabled: Boolean(accessToken) && user.role === 'school_admin',
+    staleTime: 5 * 60_000,
+    refetchInterval: 30 * 60_000,
+  })
+  const trialInfo = trial.data?.in_trial ? trial.data : undefined
+  const trialDays = trialInfo?.trial_days_remaining ?? 0
+  const trialUrgent = Boolean(trialInfo) && trialDays <= 7
   const currentPage = navigation.find(item => item.to === location.pathname)?.label
     ?? (location.pathname.startsWith('/students/') ? 'Student profile'
       : location.pathname === '/report-card' ? 'Report card' : 'Overview')
@@ -103,6 +124,17 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
         options={years.map(year => ({ value: year.id, label: year.name }))} onChange={setYearId} />
       <Select aria-label="Term context" value={termId || undefined} loading={periodLoading} placeholder="Term"
         options={terms.map(term => ({ value: term.id, label: term.name }))} onChange={setTermId} disabled={!terms.length} />
-    </div>}<div className="top-actions"><Input className="search-box" prefix={<SearchOutlined />} placeholder="Search anything..." aria-label="Search" disabled/><Button className="icon-button" type="text" icon={<Badge dot color="#ec6e53"><BellOutlined /></Badge>} aria-label="Notifications" disabled/><div className="top-divider"/><Avatar size={34} style={{ backgroundColor: '#e5e9ff', color: '#384ec2', fontWeight: 700 }}>{initials(user.display_name)}</Avatar></div></header>{children}</main>
+    </div>}<div className="top-actions"><Input className="search-box" prefix={<SearchOutlined />} placeholder="Search anything..." aria-label="Search" disabled/><Button className="icon-button" type="text" icon={<Badge dot color="#ec6e53"><BellOutlined /></Badge>} aria-label="Notifications" disabled/><div className="top-divider"/><Avatar size={34} style={{ backgroundColor: '#e5e9ff', color: '#384ec2', fontWeight: 700 }}>{initials(user.display_name)}</Avatar></div></header>{trialInfo && <div className={`trial-banner${trialUrgent ? ' trial-banner-urgent' : ''}`} role="status">
+        <span className="trial-banner-icon"><GiftOutlined /></span>
+        <div className="trial-banner-text">
+          <strong>{trialUrgent ? 'Your free trial ends soon' : 'Free trial running'}</strong>
+          <span>
+            {trialDays > 1 ? `${trialDays} days remaining` : trialDays === 1 ? 'Tomorrow is your last day' : 'Today is your last day'}
+            {trialInfo.trial_ends_at && ` · ends ${new Date(trialInfo.trial_ends_at).toLocaleDateString('en-GH', { day: 'numeric', month: 'short', year: 'numeric' })}`}
+          </span>
+        </div>
+        <div className="trial-banner-countdown" aria-label={`${trialDays} days remaining`}>{trialDays}<small>{trialDays === 1 ? 'day' : 'days'} left</small></div>
+        <NavLink to="/settings?tab=billing" className="trial-banner-cta" onClick={() => setOpen(false)}>View plans<ArrowRightOutlined /></NavLink>
+      </div>}{children}</main>
   </div>
 }
