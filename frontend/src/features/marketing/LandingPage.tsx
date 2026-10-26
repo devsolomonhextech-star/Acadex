@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Button, Form, Input, Modal, message } from 'antd'
+import { PhoneInput } from 'react-international-phone'
+import 'react-international-phone/style.css'
 import {
   ArrowRightOutlined,
   BarChartOutlined,
@@ -29,7 +32,6 @@ const navLinks = [
   { label: 'Product', href: '#product' },
   { label: 'Pricing', href: '#pricing' },
   { label: 'How it works', href: '#how' },
-  { label: 'Security', href: '#trust' }, { label: 'FAQs', href: '#faq' },
 ]
 
 const heroChecks = [
@@ -339,10 +341,40 @@ function ParentMobilePreview() {
 
 export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [demoOpen, setDemoOpen] = useState(false)
+  const [demoPhone, setDemoPhone] = useState('+233')
+  const [demoForm] = Form.useForm<{
+    school: string
+    email: string
+    services?: string
+  }>()
   const [perfTab, setPerfTab] = useState<(typeof performanceTabs)[number]['key']>('attendance')
   const [pricePreviewCapacity, setPricePreviewCapacity] = useState(100)
   const activePerf = performanceTabs.find(tab => tab.key === perfTab) ?? performanceTabs[0]
   const closeMenu = () => setMenuOpen(false)
+  const openDemo = () => {
+    closeMenu()
+    setDemoOpen(true)
+  }
+  const submitDemoRequest = (values: { school: string; email: string; services?: string }) => {
+    if (demoPhone.replace(/\D/g, '').length < 9) {
+      message.error('Enter a complete WhatsApp or phone number.')
+      return
+    }
+    const messageText = [
+      'Hello Acadex, I would like to request a school demo.',
+      `School: ${values.school}`,
+      `Email: ${values.email}`,
+      `WhatsApp/phone: ${demoPhone}`,
+      values.services ? `Services needed: ${values.services}` : '',
+      'Please let me know the next steps and how demo credentials will be shared.',
+    ].filter(Boolean).join('\n')
+    window.open(`https://wa.me/233536702357?text=${encodeURIComponent(messageText)}`, '_blank', 'noopener,noreferrer')
+    message.success('Your WhatsApp request is ready. Send it to connect with the Acadex team.')
+    setDemoOpen(false)
+    demoForm.resetFields()
+    setDemoPhone('+233')
+  }
 
   return (
     <div className="lp" id="top">
@@ -358,10 +390,7 @@ export default function LandingPage() {
             {navLinks.map(link => (
               <a key={link.label} href={link.href} onClick={closeMenu}>{link.label}</a>
             ))}
-            <Link to="/login" className="lp-nav-signin" onClick={closeMenu}>Sign in</Link>
-            <Link to="/register" className="lp-nav-cta" onClick={closeMenu}>
-              Set up your school <ArrowRightOutlined />
-            </Link>
+            <button type="button" className="lp-nav-cta" onClick={openDemo}>Request a demo <ArrowRightOutlined /></button>
           </nav>
 
           <button
@@ -425,6 +454,18 @@ export default function LandingPage() {
               </li>
             ))}
           </ul>
+        </section>
+
+        <section className="lp-free-trial" aria-labelledby="lp-free-trial-title">
+          <div className="lp-free-trial-copy">
+            <span className="lp-free-trial-tag"><CheckCircleFilled /> No setup fee · No card required</span>
+            <h2 id="lp-free-trial-title">Your first 3 months are free.</h2>
+            <p>Try Acadex with your team for a full term, with setup and staff training included. If you continue, pay per enrolled student, per term. Get a quote for your school and the services you need.</p>
+          </div>
+          <div className="lp-free-trial-actions">
+            <button type="button" className="lp-btn lp-btn-primary" onClick={openDemo}>Request a demo <ArrowRightOutlined /></button>
+            <a className="lp-btn lp-btn-ghost" href="https://wa.me/233536702357?text=Hello%20Acadex%2C%20I%E2%80%99d%20like%20a%20quote%20for%20my%20school." target="_blank" rel="noreferrer">Get a school quote <MessageOutlined /></a>
+          </div>
         </section>
 
         {/* ---------------------------------------------------------- features */}
@@ -605,7 +646,7 @@ export default function LandingPage() {
             <article className="lp-pricing-card">
               <span className="lp-plan-label">Simple school pricing</span>
               <h2>School management that fits your budget.</h2>
-              <p>Acadex is designed to make great school tools accessible to institutions of every size.</p><div className="lp-trial-badge"><CheckCircleFilled /><span><strong>3 months free</strong><small>Software, setup and staff training included</small></span></div>
+              <p>Acadex is designed to make great school tools accessible to institutions of every size.</p>
               <div className="lp-plan-price"><strong>GH₵3</strong><span>per student<br />each month</span></div>
               <label className="lp-capacity-label" htmlFor="lp-capacity">Estimate monthly cost after your free period</label>
               <input id="lp-capacity" type="range" min="50" max="1000" step="50" value={pricePreviewCapacity} onChange={event => setPricePreviewCapacity(Number(event.target.value))} />
@@ -712,6 +753,42 @@ export default function LandingPage() {
           </Link>
         </section>
       </main>
+
+      <Modal
+        title={<div className="lp-demo-modal-heading"><span className="lp-demo-modal-icon"><CalendarOutlined /></span><div><strong>Request an Acadex demo</strong><small>Tell us about your school and how to reach you.</small></div></div>}
+        open={demoOpen}
+        onCancel={() => setDemoOpen(false)}
+        footer={null}
+        destroyOnHidden
+        className="lp-demo-modal"
+      >
+        <p className="lp-demo-modal-note">Our team will follow up to arrange your demo and share access credentials with you.</p>
+        <Form form={demoForm} layout="vertical" requiredMark={false} onFinish={submitDemoRequest}>
+          <Form.Item name="school" label="School name" rules={[{ required: true, message: 'Enter your school name.' }]}>
+            <Input size="large" placeholder="e.g. Greenwood Academy" autoComplete="organization" />
+          </Form.Item>
+          <Form.Item name="email" label="Email address" rules={[{ required: true, type: 'email', message: 'Enter a valid email address.' }]}>
+            <Input size="large" type="email" placeholder="you@school.edu.gh" autoComplete="email" />
+          </Form.Item>
+          <Form.Item label="WhatsApp or phone number" required>
+            <PhoneInput
+              defaultCountry="gh"
+              value={demoPhone}
+              onChange={setDemoPhone}
+              inputProps={{ 'aria-label': 'WhatsApp or phone number', autoComplete: 'tel' }}
+              inputClassName="lp-demo-phone-input"
+              className="lp-demo-phone"
+            />
+          </Form.Item>
+          <Form.Item name="services" label="What would you like to explore?">
+            <Input.TextArea rows={3} placeholder="For example: student records, fees, attendance, parent app…" />
+          </Form.Item>
+          <div className="lp-demo-modal-contact"><MessageOutlined /><span>Acadex WhatsApp</span><a href="https://wa.me/233536702357" target="_blank" rel="noreferrer">+233 53 670 2357</a></div>
+          <p className="lp-demo-email-help">Prefer email? <a href="mailto:hello@acadex.app">hello@acadex.app</a></p>
+          <Button type="primary" htmlType="submit" size="large" block className="lp-demo-submit">Continue on WhatsApp <ArrowRightOutlined /></Button>
+          <p className="lp-demo-modal-footnote">Your request opens a WhatsApp message to Acadex with the details you provided. You can review it before sending.</p>
+        </Form>
+      </Modal>
 
       {/* ------------------------------------------------------------- footer */}
       <footer className="lp-footer">
