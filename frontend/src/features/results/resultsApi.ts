@@ -1,5 +1,5 @@
 import { apiRequest } from '../../shared/api/client'
-import type { ClassResults, GradingScale, ReportCard } from '../../shared/api/types'
+import type { ClassResults, GradingScale, ReportCard, StudentResultBreakdown } from '../../shared/api/types'
 
 export function fetchGradingScales(token: string) {
   return apiRequest<GradingScale[]>('/grading/scales', {}, token)
@@ -25,6 +25,11 @@ export function archiveGradingScale(token: string, scaleId: string) {
 export function fetchClassResults(token: string, classGroupId: string, termId: string) {
   const query = new URLSearchParams({ class_group_id: classGroupId, term_id: termId })
   return apiRequest<ClassResults>(`/results/class?${query.toString()}`, {}, token)
+}
+
+export function fetchStudentBreakdown(token: string, classGroupId: string, termId: string, studentId: string) {
+  const query = new URLSearchParams({ class_group_id: classGroupId, term_id: termId, student_id: studentId })
+  return apiRequest<StudentResultBreakdown>(`/results/student-breakdown?${query}`, {}, token)
 }
 
 export function computeClassResults(token: string, classGroupId: string, termId: string) {

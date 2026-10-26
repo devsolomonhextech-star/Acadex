@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Alert, Button, Empty, Input, InputNumber, Modal, Select, Space, Spin, Table, Tag, message,
+  Alert, Button, Divider, Drawer, Empty, Input, InputNumber, Modal, Progress, Select, Space, Spin, Table, Tag, message,
 } from 'antd'
 import type { TableColumnsType } from 'antd'
-import { CheckCircleOutlined, EyeInvisibleOutlined, LockOutlined, PlusOutlined, PrinterOutlined, SaveOutlined, TrophyOutlined } from '@ant-design/icons'
+import { CheckCircleOutlined, EyeInvisibleOutlined, EyeOutlined, LockOutlined, PlusOutlined, PrinterOutlined, SaveOutlined, TrophyOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/authHooks'
 import { fetchAcademicTerms, fetchAcademicYears, fetchClassGroups } from '../academic/academicApi'
@@ -13,7 +13,7 @@ import { formatApiError } from '../../shared/api/errors'
 import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 import {
   archiveGradingScale, computeClassResults, fetchClassResults, fetchGradingScales,
-  publishClassResults, saveGradingScale, withdrawClassResults,
+  fetchStudentBreakdown, publishClassResults, saveGradingScale, withdrawClassResults,
 } from './resultsApi'
 
 type BandDraft = { key: number; min_percent: number | null; max_percent: number | null; grade: string; points: number | null; description: string | null }
@@ -77,6 +77,7 @@ export default function ResultsPage() {
   const [bandError, setBandError] = useState<string | null>(null)
   const [publishOpen, setPublishOpen] = useState(false)
   const [publishConfirm, setPublishConfirm] = useState('')
+  const [breakdownStudent, setBreakdownStudent] = useState<StudentResult | null>(null)
 
   const canManage = ['school_admin', 'principal'].includes(user?.role ?? '')
   const canCompute = ['school_admin', 'principal', 'registrar'].includes(user?.role ?? '')
@@ -102,6 +103,12 @@ export default function ResultsPage() {
   })
   const results = resultsQuery.data as ClassResults | undefined
   const published = results?.publication.status === 'published'
+  const breakdownQuery = useQuery({
+    queryKey: ['student-result-breakdown', user?.school_id, classId, termId, breakdownStudent?.student_id],
+    queryFn: () => fetchStudentBreakdown(accessToken!, classId, termId, breakdownStudent!.student_id),
+    enabled: !!accessToken && !!classId && !!termId && !!breakdownStudent,
+  })
+  const breakdown = breakdownQuery.data
 
   const subjectColumns = useMemo<TableColumnsType<StudentResult>>(() => {
     const subjects = new Map<string, { name: string; code: string }>()
@@ -128,7 +135,7 @@ export default function ResultsPage() {
         key: 'student',
         fixed: 'left',
         width: 200,
-        render: (_, row) => <div className="results-student"><strong>{row.first_name} {row.last_name}</strong><small>{row.admission_number}</small></div>,
+        render: (_, row) => <button type="button" className="results-student results-student-button" onClick={() => setBreakdownStudent(row)} aria-label={`View ${row.first_name} ${row.last_name}'s result breakdown`}><strong>{row.first_name} {row.last_name}</strong><small>{row.admission_number}</small></button>,
       },
       ...dynamic,
       {
@@ -146,6 +153,12 @@ export default function ResultsPage() {
         render: (_, row) => row.position === null
           ? <span className="results-missing">—</span>
           : <Tag className="results-position" color={row.position === 1 ? 'gold' : 'blue'}>#{row.position}</Tag>,
+      },
+      {
+        title: '',
+        key: 'breakdown',
+        align: 'right',
+        render: (_, row) => <Button size="small" type="link" icon={<EyeOutlined/>} onClick={() => setBreakdownStudent(row)}>Details</Button>,
       },
       {
         title: '',
@@ -349,6 +362,28 @@ export default function ResultsPage() {
                                   locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No results computed"/> }}/>
           : null}
     </section>
+
+    <Drawer className="result-breakdown-drawer" open={!!breakdownStudent} onClose={() => setBreakdownStudent(null)} width={760}
+            title={<div className="result-drawer-title"><span>STUDENT RESULT BREAKDOWN</span><strong>{breakdownStudent ? `${breakdownStudent.first_name} ${breakdownStudent.last_name}` : ''}</strong></div>}>
+      {breakdownQuery.isLoading ? <div className="results-loading"><Spin/><span>Loading assessment breakdown…</span></div>
+        : breakdownQuery.isError ? <Alert type="error" showIcon message="Could not load this result breakdown" description={formatApiError(breakdownQuery.error)} action={<Button size="small" onClick={() => void breakdownQuery.refetch()}>Retry</Button>}/>
+          : breakdown && <div className="result-breakdown-content">
+            <div className="result-breakdown-context"><span>{breakdown.class_name}</span><i>·</i><span>{breakdown.term_name}</span><i>·</i><span>{breakdown.admission_number}</span></div>
+            <div className="result-breakdown-summary">
+              <div className="result-breakdown-average"><small>TERM AVERAGE</small><strong>{breakdown.aggregate_percent === null ? '—' : `${Number(breakdown.aggregate_percent).toFixed(1)}%`}</strong><span>{breakdown.grading_scale_name ?? 'No grading scale'}</span></div>
+              <div className="result-breakdown-grade"><small>FINAL GRADE</small><strong>{breakdown.grade ?? 'Incomplete'}</strong><span>{breakdown.grade_band ? `${Number(breakdown.grade_band.min_percent)}–${Number(breakdown.grade_band.max_percent)}%${breakdown.grade_band.description ? ` · ${breakdown.grade_band.description}` : ''}` : 'Grade band not assigned'}</span></div>
+              <div className="result-breakdown-position"><small>CLASS POSITION</small><strong>{breakdown.position ? `#${breakdown.position}` : '—'}</strong><span>out of {breakdown.class_size} students</span></div>
+            </div>
+            <Alert type="info" showIcon message="How the term result is calculated" description="Each approved assessment is converted to a percentage and weighted within its subject. Subject totals are then combined using each subject’s assessment weight. The final average is matched to the grading scale shown above." />
+            <Divider>Subject performance</Divider>
+            {breakdown.subjects.length ? <div className="result-subject-breakdowns">{breakdown.subjects.map(subject => <article className="result-subject-breakdown" key={subject.subject_id}>
+              <header><div><h3>{subject.subject_name}</h3><small>{subject.assessments.length} approved assessment{subject.assessments.length === 1 ? '' : 's'} · {Number(subject.total_weight).toFixed(1)}% combined weight</small></div><div className="result-subject-grade"><strong>{subject.weighted_total === null ? 'Incomplete' : `${Number(subject.weighted_total).toFixed(1)}%`}</strong><Tag color={subject.grade ? 'blue' : 'default'}>{subject.grade ?? '—'}</Tag></div></header>
+              {subject.weighted_total !== null && <Progress percent={Math.max(0, Math.min(100, Number(subject.weighted_total)))} showInfo={false} strokeColor="#4d6de5"/>}
+              <div className="result-assessment-table-wrap"><table className="result-assessment-table"><thead><tr><th>ASSESSMENT</th><th>SCORE</th><th>WEIGHT</th><th>SUBJECT CONTRIBUTION</th></tr></thead><tbody>{subject.assessments.map(assessment => <tr key={assessment.id}><td><b>{assessment.title}</b><small>{assessment.category.replaceAll('_', ' ')}</small></td><td>{assessment.score === null ? <Tag>Not scored</Tag> : <><b>{Number(assessment.score).toFixed(1)} / {Number(assessment.max_score).toFixed(1)}</b><small>{Number(assessment.score_percent).toFixed(1)}%</small></>}</td><td>{Number(assessment.weight_percent).toFixed(1)}%</td><td>{assessment.contribution_percent === null ? '—' : `${Number(assessment.contribution_percent).toFixed(2)} pts`}</td></tr>)}</tbody></table></div>
+              {subject.weight_share_percent !== null && <footer>Counts for <b>{Number(subject.weight_share_percent).toFixed(1)}%</b> of the term average{subject.term_contribution_percent !== null ? ` · contributes ${Number(subject.term_contribution_percent).toFixed(2)} points` : ''}</footer>}
+            </article>)}</div> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No approved assessments were found for this student"/>}
+          </div>}
+    </Drawer>
 
     <Modal title="Grading scales" open={scalesOpen} onCancel={() => setScalesOpen(false)} footer={null} width={760} destroyOnClose>
       <div className="scale-form">

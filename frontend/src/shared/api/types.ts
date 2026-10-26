@@ -251,6 +251,23 @@ export type ClassResults = {
   academic_year_id: string; publication: PublicationState
   grading_scale_name: string | null; students: StudentResult[]
 }
+export type StudentAssessmentBreakdown = {
+  id: string; title: string; category: string; score: string | null; max_score: string
+  score_percent: string | null; weight_percent: string; contribution_percent: string | null
+  submission_status: string
+}
+export type StudentSubjectBreakdown = {
+  subject_id: string; subject_name: string; weighted_total: string | null; grade: string | null
+  points: string | null; total_weight: string; weight_share_percent: string | null
+  term_contribution_percent: string | null; assessments: StudentAssessmentBreakdown[]
+}
+export type StudentResultBreakdown = {
+  student_id: string; student_name: string; admission_number: string; class_name: string
+  term_name: string; grading_scale_name: string | null; aggregate_percent: string | null
+  grade: string | null; points: string | null
+  grade_band: { min_percent: string; max_percent: string; description: string | null } | null
+  position: number | null; class_size: number; subjects: StudentSubjectBreakdown[]
+}
 export type ReportCardSubject = {
   subject_id: string; subject_name: string; subject_code: string
   weighted_total: string; grade: string | null; points: string | null

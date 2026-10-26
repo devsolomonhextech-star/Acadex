@@ -112,3 +112,49 @@
   .rc-sheet{border:none!important;border-radius:0!important;box-shadow:none!important;padding:0!important}
   .rc-table tr,.rc-info-cell,.rc-summary-cell{break-inside:avoid}
 }
+
+.results-student-button{width:100%;padding:0;border:0;background:transparent;text-align:left;cursor:pointer}
+.results-student-button strong{color:#385bc7!important}
+.results-student-button:hover strong{text-decoration:underline}
+.results-student-button:focus-visible{outline:2px solid #5775e6;outline-offset:3px;border-radius:4px}
+.result-breakdown-drawer .ant-drawer-title{font-weight:600}
+.result-drawer-title{display:flex;flex-direction:column;gap:4px}
+.result-drawer-title span{color:#8290a5;font-size:10px;letter-spacing:.8px}
+.result-drawer-title strong{color:#263753;font-size:17px}
+.result-breakdown-content{display:flex;flex-direction:column;gap:15px}
+.result-breakdown-context{display:flex;align-items:center;gap:8px;color:#7e8ba1;font-size:12px}
+.result-breakdown-context i{color:#c2cad6;font-style:normal}
+.result-breakdown-summary{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:10px}
+.result-breakdown-summary>div{display:flex;flex-direction:column;gap:5px;min-width:0;padding:13px;border:1px solid #e9edf5;border-radius:10px;background:#fbfcfe}
+.result-breakdown-summary small{color:#8995a8;font-size:10px;font-weight:700;letter-spacing:.55px}
+.result-breakdown-summary strong{color:#233758;font-family:Manrope,sans-serif;font-size:22px;font-weight:800}
+.result-breakdown-summary span{color:#8b96a8;font-size:11px;line-height:1.4}
+.result-breakdown-average{background:linear-gradient(140deg,#f1f5ff,#fbfcff)!important;border-color:#dfe7ff!important}
+.result-breakdown-average strong{color:#3c5ed1}
+.result-breakdown-grade strong{color:#189a70}
+.result-breakdown-position strong{color:#34425e}
+.result-breakdown-content .ant-alert{border-radius:9px}
+.result-breakdown-content .ant-alert-message{font-size:12px}
+.result-breakdown-content .ant-alert-description{font-size:11px;line-height:1.55}
+.result-breakdown-content .ant-divider{margin:1px 0 0;color:#34425e;font-size:13px;font-weight:700}
+.result-subject-breakdowns{display:flex;flex-direction:column;gap:12px}
+.result-subject-breakdown{padding:14px;border:1px solid #e9edf5;border-radius:10px;background:#fff}
+.result-subject-breakdown>header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px}
+.result-subject-breakdown h3{margin:0;color:#2c3c59;font-size:14px}
+.result-subject-breakdown>header small{display:block;margin-top:4px;color:#8995a8;font-size:11px}
+.result-subject-grade{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.result-subject-grade strong{color:#2c3c59;font-size:15px}
+.result-subject-grade .ant-tag{margin:0}
+.result-subject-breakdown>.ant-progress{margin:1px 0 8px;line-height:1}
+.result-assessment-table-wrap{overflow-x:auto}
+.result-assessment-table{width:100%;border-collapse:collapse;min-width:530px}
+.result-assessment-table th{padding:8px 7px;border-bottom:1px solid #edf0f5;color:#929daf;font-size:9px;letter-spacing:.4px;text-align:left;white-space:nowrap}
+.result-assessment-table td{padding:9px 7px;border-bottom:1px solid #f0f2f6;color:#59677e;font-size:11px;white-space:nowrap}
+.result-assessment-table tr:last-child td{border-bottom:0}
+.result-assessment-table td:first-child{white-space:normal}
+.result-assessment-table td:first-child b,.result-assessment-table td:first-child small,.result-assessment-table td:nth-child(2) small{display:block}
+.result-assessment-table td:first-child b,.result-assessment-table td:nth-child(2) b{color:#3b4b66;font-size:11px}
+.result-assessment-table td:first-child small,.result-assessment-table td:nth-child(2) small{margin-top:3px;color:#98a2b2;font-size:10px;text-transform:capitalize}
+.result-subject-breakdown>footer{padding-top:9px;color:#8995a8;font-size:11px}
+.result-subject-breakdown>footer b{color:#4a5f9f}
+@media(max-width:600px){.result-breakdown-summary{grid-template-columns:1fr 1fr}.result-breakdown-average{grid-column:1/-1}.result-subject-breakdown{padding:11px}.result-subject-breakdown>header{align-items:flex-start}}
