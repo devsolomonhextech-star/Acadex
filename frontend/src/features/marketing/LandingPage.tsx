@@ -26,6 +26,7 @@ import {
 
 const navLinks = [
   { label: 'Product', href: '#product' },
+  { label: 'Pricing', href: '#pricing' },
   { label: 'How it works', href: '#how' },
   { label: 'Security', href: '#trust' },
 ]
@@ -161,13 +162,13 @@ const steps = [
   },
   {
     n: '2',
-    title: 'Add your team',
-    copy: 'Invite teachers, staff and administrators to get started.',
+    title: 'Choose your student plan',
+    copy: 'Select the student places you need at GH₵3 per student each month.',
   },
   {
     n: '3',
-    title: 'Start managing',
-    copy: 'Import students or add them manually and begin using Acadex.',
+    title: 'Bring everyone together',
+    copy: 'Invite your team, add students and connect families through the parent portal.',
   },
 ]
 
@@ -183,7 +184,7 @@ const footerColumns = [
     title: 'Product',
     links: [
       { label: 'Features', href: '#product' },
-      { label: 'Pricing', href: '#cta' },
+      { label: 'Pricing', href: '#pricing' },
       { label: 'How it works', href: '#how' },
       { label: 'Integrations', href: '#insights' },
     ],
@@ -305,9 +306,28 @@ function HeroDashboard() {
   )
 }
 
+function ParentMobilePreview() {
+  return <div className="lp-parent-phone" aria-label="Acadex parent portal mobile preview">
+    <div className="lp-parent-phone-shell">
+      <span className="lp-parent-phone-camera" />
+      <div className="lp-parent-phone-screen">
+        <div className="lp-parent-status"><span>9:41</span><span>●●●　◖　▰</span></div>
+        <div className="lp-parent-greeting"><div><small>SAMPLE PORTAL · TERM 2</small><strong>Good morning, Ama</strong></div><span>AM</span></div>
+        <div className="lp-parent-student"><img src="/landing/avatar-student.jpg" alt=""/><div><strong>Esi Mensah</strong><small>Grade 7A · Greenwood Academy</small></div><span>⌄</span></div>
+        <div className="lp-parent-attendance"><span><CalendarOutlined /></span><div><small>ATTENDANCE THIS TERM</small><strong>96% <em>On track</em></strong></div><div className="lp-parent-ring"><b>96</b></div></div>
+        <div className="lp-parent-phone-heading"><strong>School updates</strong><a href="#product">See all</a></div>
+        <article className="lp-parent-update"><span className="lp-parent-update-icon blue"><BookOutlined /></span><div><strong>New assessment result</strong><small>Mathematics · 87% · Today</small></div><i /></article>
+        <article className="lp-parent-update"><span className="lp-parent-update-icon green"><MessageOutlined /></span><div><strong>Class announcement</strong><small>Grade 7A · Yesterday</small></div><i /></article>
+        <div className="lp-parent-phone-nav"><span className="active"><DashboardOutlined />Home</span><span><CalendarOutlined />Progress</span><span><MessageOutlined />Updates</span></div>
+      </div>
+    </div>
+  </div>
+}
+
 export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [perfTab, setPerfTab] = useState<(typeof performanceTabs)[number]['key']>('attendance')
+  const [pricePreviewCapacity, setPricePreviewCapacity] = useState(100)
   const activePerf = performanceTabs.find(tab => tab.key === perfTab) ?? performanceTabs[0]
   const closeMenu = () => setMenuOpen(false)
 
@@ -564,6 +584,41 @@ export default function LandingPage() {
               </li>
             ))}
           </ol>
+        </section>
+
+        {/* --------------------------------------------------------- pricing + families */}
+        <section id="pricing" className="lp-pricing-section">
+          <div className="lp-pricing-layout">
+            <article className="lp-pricing-card">
+              <span className="lp-plan-label">Simple school pricing</span>
+              <h2>School management that fits your budget.</h2>
+              <p>Acadex is designed to make great school tools accessible to institutions of every size.</p>
+              <div className="lp-plan-price"><strong>GH₵3</strong><span>per student<br />each month</span></div>
+              <label className="lp-capacity-label" htmlFor="lp-capacity">Estimate your monthly cost</label>
+              <input id="lp-capacity" type="range" min="50" max="1000" step="50" value={pricePreviewCapacity} onChange={event => setPricePreviewCapacity(Number(event.target.value))} />
+              <div className="lp-capacity-output"><span>{pricePreviewCapacity.toLocaleString()} student places</span><strong>GH₵{(pricePreviewCapacity * 3).toLocaleString()}<small> / month</small></strong></div>
+              <ul className="lp-plan-benefits">
+                <li><CheckCircleFilled /> Choose the number of student places your school needs</li>
+                <li><CheckCircleFilled /> Pay monthly in Ghana cedis</li>
+                <li><CheckCircleFilled /> Add more places as your school grows</li>
+              </ul>
+              <Link to="/register" className="lp-btn lp-btn-primary">Set up your school <ArrowRightOutlined /></Link>
+              <small className="lp-plan-footnote">New student enrollment is available when your school plan is active.</small>
+            </article>
+            <article className="lp-parent-card">
+              <div className="lp-parent-copy">
+                <span className="lp-plan-label">For parents and guardians</span>
+                <h2>School updates, right in your pocket.</h2>
+                <p>Parents can sign in from a phone to stay close to their child’s school life.</p>
+                <ul className="lp-parent-benefits">
+                  <li><CalendarOutlined /><span><strong>Follow attendance</strong><small>See school attendance at a glance.</small></span></li>
+                  <li><BookOutlined /><span><strong>Keep up with learning</strong><small>Check published results and progress.</small></span></li>
+                  <li><MessageOutlined /><span><strong>Stay informed</strong><small>Read announcements and school updates.</small></span></li>
+                </ul>
+              </div>
+              <ParentMobilePreview />
+            </article>
+          </div>
         </section>
 
         {/* ---------------------------------------------------------- security */}

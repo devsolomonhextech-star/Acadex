@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
 from app.db import get_session
-from app.models import AuditEvent, MembershipRole, RefreshSession, School, SchoolMembership, User
+from app.models import AuditEvent, MembershipRole, RefreshSession, School, SchoolMembership, SchoolSubscription, User
 from app.rate_limit import check_login_lockout, clear_login_failures, limit_login, limit_signup, record_login_failure
 from app.schemas import LoginRequest, SchoolRegistration, TokenResponse, UserContextResponse
 from app.security import (
@@ -132,7 +132,10 @@ async def register_school(payload: SchoolRegistration, session: Annotated[AsyncS
     user = User(email=email, display_name=payload.administrator_name.strip(), password_hash=hash_password(payload.password))
     session.add_all([school, user])
     await session.flush()
-    session.add(SchoolMembership(school_id=school.id, user_id=user.id, role=MembershipRole.SCHOOL_ADMIN))
+    session.add_all([
+        SchoolMembership(school_id=school.id, user_id=user.id, role=MembershipRole.SCHOOL_ADMIN),
+        SchoolSubscription(school_id=school.id, student_limit=0, status="inactive"),
+    ])
     session.add(AuditEvent(school_id=school.id, actor_user_id=user.id, action="school.registered", resource_type="school", resource_id=school.id))
     try:
         await session.commit()

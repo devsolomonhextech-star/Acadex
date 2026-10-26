@@ -11,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import TenantContext, require_roles
 from app.api.students import student_roles
+from app.api.subscriptions import subscription_limit_error
 from app.db import get_session
+from app.domain.subscriptions import StudentSubscriptionRequired
 from app.domain.student_import import (
     MAX_UPLOAD_BYTES,
     ImportConflict,
@@ -187,6 +189,8 @@ async def confirm_import(
     job = await _load_job(session, context.school_id, job_id)
     try:
         await commit_import(session, context.school_id, context.user_id, job)
+    except StudentSubscriptionRequired as error:
+        raise subscription_limit_error(error) from None
     except ImportConflict as error:
         raise HTTPException(status_code=409, detail=str(error)) from None
     return job

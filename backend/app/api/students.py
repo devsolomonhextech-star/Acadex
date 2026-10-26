@@ -17,6 +17,8 @@ from app.domain.students import (
     get_student,
     list_students,
 )
+from app.domain.subscriptions import StudentSubscriptionRequired
+from app.api.subscriptions import subscription_limit_error
 from app.models import AcademicYear, ClassGroup, Guardian, MembershipRole, Student, StudentEnrollment, StudentGuardian
 
 router = APIRouter(prefix="/api/v1/students", tags=["students"])
@@ -153,6 +155,8 @@ async def add_student(
                 date_of_birth=payload.date_of_birth,
             ),
         )
+    except StudentSubscriptionRequired as error:
+        raise subscription_limit_error(error) from None
     except DuplicateAdmissionNumber:
         raise HTTPException(
             status_code=409,

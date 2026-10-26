@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AuditEvent, Student
+from app.domain.subscriptions import require_student_capacity
 
 
 @dataclass(frozen=True)

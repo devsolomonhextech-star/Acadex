@@ -14,6 +14,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    Integer,
     Numeric,
     String,
     UniqueConstraint,
@@ -55,6 +56,47 @@ class School(Base):
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     memberships: Mapped[list["SchoolMembership"]] = relationship(back_populates="school")
+
+
+class SchoolSubscription(Base):
+    __tablename__ = "school_subscriptions"
+    __table_args__ = (
+        UniqueConstraint("school_id", name="uq_school_subscriptions_school"),
+        CheckConstraint("student_limit >= 0", name="ck_school_subscriptions_student_limit"),
+        CheckConstraint("status IN ('inactive', 'active')", name="ck_school_subscriptions_status"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    student_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="inactive", server_default="inactive")
+    current_period_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    current_period_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SubscriptionPayment(Base):
+    __tablename__ = "subscription_payments"
+    __table_args__ = (
+        UniqueConstraint("reference", name="uq_subscription_payments_reference"),
+        CheckConstraint("student_limit >= 1", name="ck_subscription_payments_student_limit"),
+        CheckConstraint("amount_pesewas > 0", name="ck_subscription_payments_amount"),
+        CheckConstraint("status IN ('pending', 'paid', 'failed')", name="ck_subscription_payments_status"),
+        Index("ix_subscription_payments_school_created", "school_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    reference: Mapped[str] = mapped_column(String(100), nullable=False)
+    student_limit: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount_pesewas: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="GHS", server_default="GHS")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    checkout_url: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class User(Base):
