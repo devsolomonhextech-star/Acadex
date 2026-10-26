@@ -2,6 +2,7 @@ import os
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db import get_session
@@ -17,6 +18,7 @@ async def client():
         "postgresql+asyncpg://schoolos:schoolos-local-test-only@localhost:5433/schoolos_test",
     )
     engine = create_async_engine(database_url, pool_pre_ping=True)
+    redis = Redis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379/0"))
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all)
         await connection.run_sync(Base.metadata.create_all)
@@ -26,14 +28,22 @@ async def client():
         async with factory() as session:
             yield session
 
-    app.dependency_overrides[get_session] = override_session
     async def allow_test_rate_limit():
         return None
+
+    app.dependency_overrides[get_session] = override_session
     app.dependency_overrides[limit_signup] = allow_test_rate_limit
     app.dependency_overrides[limit_login] = allow_test_rate_limit
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
-    async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.drop_all)
-    await engine.dispose()
+    await redis.flushdb()
+    app.state.redis = redis
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.clear()
+        await redis.flushdb()
+        await redis.aclose()
+        app.state.redis = None
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.drop_all)
+        await engine.dispose()
