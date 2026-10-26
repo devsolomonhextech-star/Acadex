@@ -239,7 +239,7 @@ async def create_term(payload: TermCreate, context: Annotated[TenantContext, Dep
 
 
 @router.get("/classes", response_model=list[ClassResponse])
-async def list_classes(context: Annotated[TenantContext, Depends(require_roles(*roles, MembershipRole.TEACHER))], session: Annotated[AsyncSession, Depends(get_session)], academic_year_id: UUID | None = None):
+async def list_classes(context: Annotated[TenantContext, Depends(require_roles(*roles, MembershipRole.TEACHER))], session: Annotated[AsyncSession, Depends(get_session)], academic_year_id: UUID | None = None, class_teacher_only: bool = False):
     query = select(ClassGroup).where(ClassGroup.school_id == context.school_id)
     if context.role == MembershipRole.TEACHER:
         membership_id = await session.scalar(select(SchoolMembership.id).where(
@@ -248,6 +248,8 @@ async def list_classes(context: Annotated[TenantContext, Depends(require_roles(*
             SchoolMembership.status == "active",
             SchoolMembership.role == MembershipRole.TEACHER,
         ))
+        if membership_id is None:
+            raise HTTPException(status_code=403, detail="Active teacher membership required")
         # Teachers see classes where they teach a subject or own the class.
         teaches_subject = select(ClassSubjectAssignment.class_group_id).where(
             (ClassSubjectAssignment.school_id == ClassGroup.school_id)
@@ -258,6 +260,8 @@ async def list_classes(context: Annotated[TenantContext, Depends(require_roles(*
             teaches_subject.exists(),
             ClassGroup.class_teacher_membership_id == membership_id,
         ))
+        if class_teacher_only:
+            query = query.where(ClassGroup.class_teacher_membership_id == membership_id)
     if academic_year_id:
         query = query.where(ClassGroup.academic_year_id == academic_year_id)
     groups = list((await session.scalars(query.order_by(ClassGroup.grade_level, ClassGroup.name, ClassGroup.stream))).all())

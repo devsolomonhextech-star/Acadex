@@ -30,7 +30,7 @@ export default function AttendancePage() {
   const yearsQuery = useQuery({ queryKey: ['academic-years', user?.school_id], queryFn: () => fetchAcademicYears(accessToken!), enabled: !!accessToken })
   const years = yearsQuery.data ?? []
   const yearId = years.some(year => year.id === periodYearId) ? periodYearId : years[0]?.id ?? ''
-  const classesQuery = useQuery({ queryKey: ['class-groups', user?.school_id, yearId], queryFn: () => fetchClassGroups(accessToken!, yearId), enabled: !!accessToken && !!yearId })
+  const classesQuery = useQuery({ queryKey: ['attendance-classes', user?.school_id, yearId, user?.role], queryFn: () => fetchClassGroups(accessToken!, yearId, user?.role === 'teacher'), enabled: !!accessToken && !!yearId })
   const classes = classesQuery.data ?? []
   const classId = classes.some(group => group.id === selectedClass) ? selectedClass : classes[0]?.id ?? ''
   const sheetQuery = useQuery({
@@ -87,7 +87,7 @@ export default function AttendancePage() {
   return <div className="page-content attendance-page">
     {contextHolder}
     <div className="eyebrow">CLASSROOM OPERATIONS</div>
-    <div className="students-heading"><div><h1>Daily attendance</h1><p>Record and review attendance for the students in each class.</p></div></div>
+    <div className="students-heading"><div><h1>Daily attendance</h1><p>{user?.role === 'teacher' ? 'Only the designated class teacher can record attendance for a class.' : 'Record and review attendance for the students in each class.'}</p></div></div>
     {pageError && <Alert type="error" showIcon message="Could not load the attendance sheet" description={formatApiError(pageError)} className="student-error"/>}
     <section className="attendance-controls panel">
       <div className="attendance-filter"><span>Academic year</span><Select value={yearId || undefined} placeholder="Choose academic year" onChange={value => {
@@ -112,6 +112,6 @@ export default function AttendancePage() {
       <div className="attendance-footnote">Attendance corrections are audit logged with the staff member and time of change.</div>
     </section>}
     {!yearsQuery.isLoading && !years.length && !pageError && <section className="attendance-sheet panel"><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Set up an academic year and enroll students before taking attendance"/></section>}
-    {!!years.length && !classesQuery.isLoading && !classes.length && !pageError && <section className="attendance-sheet panel"><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No classes are available for attendance in this academic year"/></section>}
+    {!!years.length && !classesQuery.isLoading && !classes.length && !pageError && <section className="attendance-sheet panel"><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={user?.role === 'teacher' ? 'You are not assigned as the class teacher of a class in this academic year' : 'No classes are available for attendance in this academic year'}/></section>}
   </div>
 }

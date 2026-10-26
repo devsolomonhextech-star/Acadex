@@ -1,4 +1,4 @@
-"""Daily class attendance with school and teacher-assignment authorization."""
+"""Daily class attendance with designated class-teacher authorization."""
 from datetime import date, datetime
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
@@ -17,7 +17,6 @@ from app.models import (
     AttendanceSession,
     AuditEvent,
     ClassGroup,
-    ClassSubjectAssignment,
     MembershipRole,
     SchoolMembership,
     Student,
@@ -72,13 +71,8 @@ async def _class_access(session: AsyncSession, context: TenantContext, class_gro
             SchoolMembership.school_id == context.school_id, SchoolMembership.user_id == context.user_id,
             SchoolMembership.status == "active", SchoolMembership.role == MembershipRole.TEACHER,
         ))
-        assigned = await session.scalar(select(ClassSubjectAssignment.id).where(
-            ClassSubjectAssignment.school_id == context.school_id,
-            ClassSubjectAssignment.class_group_id == class_group_id,
-            ClassSubjectAssignment.teacher_membership_id == membership_id,
-        ).limit(1))
-        if not assigned:
-            raise HTTPException(status_code=403, detail="Attendance is available only for your assigned classes")
+        if membership_id is None or group.class_teacher_membership_id != membership_id:
+            raise HTTPException(status_code=403, detail="Only the class teacher can record or review this class attendance")
     return group
 
 

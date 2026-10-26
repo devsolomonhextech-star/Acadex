@@ -17,8 +17,10 @@ export function createAcademicTerm(token: string, payload: Omit<AcademicTerm, 'i
   return apiRequest<AcademicTerm>('/academic/terms', { method: 'POST', body: JSON.stringify(payload) }, token)
 }
 
-export function fetchClassGroups(token: string, yearId: string) {
-  return apiRequest<ClassGroup[]>(`/academic/classes?academic_year_id=${encodeURIComponent(yearId)}`, {}, token)
+export function fetchClassGroups(token: string, yearId: string, classTeacherOnly = false) {
+  const params = new URLSearchParams({ academic_year_id: yearId })
+  if (classTeacherOnly) params.set('class_teacher_only', 'true')
+  return apiRequest<ClassGroup[]>(`/academic/classes?${params}`, {}, token)
 }
 
 export function createClassGroup(token: string, payload: Omit<ClassGroup, 'id'>) {
