@@ -167,7 +167,7 @@ const steps = [
   {
     n: '3',
     title: 'Start managing',
-    copy: 'Import students or add them manually and begin using SchoolOS.',
+    copy: 'Import students or add them manually and begin using Acadex.',
   },
 ]
 
@@ -243,8 +243,7 @@ function HeroDashboard() {
     <div className="lp-dash" aria-hidden="true">
       <aside className="lp-dash-side">
         <div className="lp-dash-brand">
-          <span className="lp-mark"><DashboardOutlined /></span>
-          SchoolOS
+          <img src="/brand/acadex-logo.png" alt="" style={{ height: 24, width: 'auto' }} />
         </div>
         <ul>
           {mockNav.map(item => (
@@ -318,9 +317,8 @@ export default function LandingPage() {
 
       <header className="lp-nav">
         <div className="lp-nav-inner">
-          <Link to="/" className="lp-brand" aria-label="SchoolOS home">
-            <span className="lp-mark"><DashboardOutlined /></span>
-            SchoolOS
+          <Link to="/" className="lp-brand" aria-label="Acadex home">
+            <img src="/brand/acadex-logo.png" alt="Acadex" style={{ height: 34, width: 'auto' }} />
           </Link>
 
           <nav className={`lp-links${menuOpen ? ' is-open' : ''}`} aria-label="Primary">
@@ -355,7 +353,7 @@ export default function LandingPage() {
               </span>
               <h1>School operations,<br />kept in one clear place.</h1>
               <p className="lp-lead">
-                SchoolOS brings records, attendance, assessments, results, timetable, and fees into a
+                Acadex brings records, attendance, assessments, results, timetable, and fees into a
                 single private workspace — so the everyday work of your school stays together, and
                 under your control.
               </p>
@@ -382,7 +380,7 @@ export default function LandingPage() {
         </section>
 
         {/* ------------------------------------------------------- stats band */}
-        <section className="lp-stats" aria-label="SchoolOS at a glance">
+        <section className="lp-stats" aria-label="Acadex at a glance">
           <ul>
             {stats.map(stat => (
               <li key={stat.label}>
@@ -431,7 +429,7 @@ export default function LandingPage() {
             <p className="lp-kicker">For teachers &amp; administrators</p>
             <h2>Less paperwork.<br />More time for teaching.</h2>
             <p>
-              SchoolOS removes the routine admin work so teachers and school leaders can focus on
+              Acadex removes the routine admin work so teachers and school leaders can focus on
               what matters most — student success.
             </p>
             <ul className="lp-checks filled">
@@ -611,9 +609,8 @@ export default function LandingPage() {
       <footer className="lp-footer">
         <div className="lp-footer-inner">
           <div className="lp-footer-brand">
-            <Link to="/" className="lp-brand">
-              <span className="lp-mark"><DashboardOutlined /></span>
-              SchoolOS
+            <Link to="/" className="lp-brand" aria-label="Acadex home">
+              <img src="/brand/acadex-logo.png" alt="Acadex" style={{ height: 38, width: 'auto' }} />
             </Link>
             <p>Better schools. Brighter futures.</p>
           </div>
@@ -641,7 +638,7 @@ export default function LandingPage() {
           </div>
         </div>
         <div className="lp-footer-base">
-          <span>© 2026 SchoolOS. All rights reserved.</span>
+          <span>© 2026 Acadex. All rights reserved.</span>
           <div>
             <a href="#trust">Privacy Policy</a>
             <a href="#trust">Terms of Service</a>
