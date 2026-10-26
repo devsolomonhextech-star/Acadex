@@ -29,7 +29,7 @@ const navLinks = [
   { label: 'Product', href: '#product' },
   { label: 'Pricing', href: '#pricing' },
   { label: 'How it works', href: '#how' },
-  { label: 'Security', href: '#trust' },
+  { label: 'Security', href: '#trust' }, { label: 'FAQs', href: '#faq' },
 ]
 
 const heroChecks = [
@@ -180,6 +180,18 @@ const securityChecks = [
   'School records stay within the school workspace',
 ]
 
+const faqItems = [
+  { question: 'Is there a setup fee?', answer: 'No. Installation, configuration and staff training are included at no extra cost.' },
+  { question: 'How long is the free period?', answer: 'Your first three months on Acadex are free, with no card required to get started. The free period includes the software, setup, staff training and access to both Android apps.' },
+  { question: 'When do we start paying?', answer: 'There is no software subscription charge during your first three months. If you choose to continue, Acadex is GH₵3 per enrolled student per month, quoted and billed at the start of each term. Payment processing charges and optional messaging or device arrangements are discussed separately.' },
+  { question: 'What if our student count changes?', answer: 'Your term quote is based on enrollment at the start of the term. New admissions during that term are included at no extra subscription charge.' },
+  { question: 'Is training included?', answer: 'Yes. We provide onboarding and comprehensive training for your staff at no additional cost, along with ongoing support.' },
+  { question: 'Are updates and maintenance included?', answer: 'Software updates and system maintenance are included while your school subscribes. We can also walk you through data exports and backup arrangements during setup.' },
+  { question: 'Is there a minimum contract period?', answer: 'No long-term contract is required. You choose whether to continue term by term.' },
+  { question: 'How do we get technical support?', answer: 'Reach the Acadex team on +233 53 670 2357 by phone or WhatsApp, or by email. We will explain support hours and urgent support arrangements during setup.' },
+  { question: 'Can we get a demo first?', answer: 'Absolutely. We offer free, personalized demos so your team can see how Acadex works for your school.' },
+]
+
 const footerColumns = [
   {
     title: 'Product',
@@ -203,7 +215,7 @@ const footerColumns = [
     title: 'Security',
     links: [
       { label: 'Privacy', href: '#trust' },
-      { label: 'Security', href: '#trust' },
+      { label: 'Security', href: '#trust' }, { label: 'FAQs', href: '#faq' },
       { label: 'Compliance', href: '#trust' },
       { label: 'Trust', href: '#trust' },
     ],
@@ -593,18 +605,18 @@ export default function LandingPage() {
             <article className="lp-pricing-card">
               <span className="lp-plan-label">Simple school pricing</span>
               <h2>School management that fits your budget.</h2>
-              <p>Acadex is designed to make great school tools accessible to institutions of every size.</p>
+              <p>Acadex is designed to make great school tools accessible to institutions of every size.</p><div className="lp-trial-badge"><CheckCircleFilled /><span><strong>3 months free</strong><small>Software, setup and staff training included</small></span></div>
               <div className="lp-plan-price"><strong>GH₵3</strong><span>per student<br />each month</span></div>
-              <label className="lp-capacity-label" htmlFor="lp-capacity">Estimate your monthly cost</label>
+              <label className="lp-capacity-label" htmlFor="lp-capacity">Estimate monthly cost after your free period</label>
               <input id="lp-capacity" type="range" min="50" max="1000" step="50" value={pricePreviewCapacity} onChange={event => setPricePreviewCapacity(Number(event.target.value))} />
               <div className="lp-capacity-output"><span>{pricePreviewCapacity.toLocaleString()} student places</span><strong>GH₵{(pricePreviewCapacity * 3).toLocaleString()}<small> / month</small></strong></div>
               <ul className="lp-plan-benefits">
                 <li><CheckCircleFilled /> Choose the number of student places your school needs</li>
-                <li><CheckCircleFilled /> Pay monthly in Ghana cedis</li>
+                <li><CheckCircleFilled /> Pay at the start of each term</li>
                 <li><CheckCircleFilled /> Add more places as your school grows</li>
               </ul>
               <Link to="/register" className="lp-btn lp-btn-primary">Set up your school <ArrowRightOutlined /></Link>
-              <small className="lp-plan-footnote">New student enrollment is available when your school plan is active.</small>
+              <small className="lp-plan-footnote">If you continue, your term quote is based on enrollment at the start of each term.</small>
               <div className="lp-community-commitment">
                 <span className="lp-community-icon"><HeartFilled /></span>
                 <div><strong>Every subscription gives back</strong><p>Acadex dedicates 10% of subscription revenue to supporting orphanage homes in Ghana. Your school’s tools can help more children access care and learning support.</p></div>
@@ -627,7 +639,42 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ---------------------------------------------------------- security */}
+                {/* ------------------------------------------------------ FAQs + next steps */}
+        <section id="faq" className="lp-section lp-faq-section">
+          <div className="lp-section-head center">
+            <p className="lp-kicker">Frequently asked questions</p>
+            <h2>Clear answers for your school.</h2>
+            <p>Here is what to expect when you bring your school onto Acadex.</p>
+          </div>
+          <div className="lp-faq-grid">
+            {faqItems.map((item, index) => (
+              <details className="lp-faq-item" key={item.question} open={index === 0}>
+                <summary>{item.question}<span aria-hidden="true" /></summary>
+                <p>{item.answer}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+
+        <section className="lp-trial-followup" aria-labelledby="lp-trial-followup-title">
+          <div className="lp-trial-followup-copy">
+            <p className="lp-kicker">After your free three months</p>
+            <h2 id="lp-trial-followup-title">Continue with clear, term-by-term pricing.</h2>
+            <p>If you choose to continue, we will prepare a quote using your school’s enrollment and explain any separate payment processing or optional service costs before you decide.</p>
+            <ul>
+              <li><CheckCircleFilled /> One per-student software subscription</li>
+              <li><CheckCircleFilled /> A quote based on your school’s enrollment</li>
+              <li><CheckCircleFilled /> Pay term by term, with no long-term contract</li>
+            </ul>
+          </div>
+          <div className="lp-trial-followup-actions">
+            <a className="lp-btn lp-btn-primary" href="mailto:hello@acadex.app?subject=Acadex%20school%20quote">Get a quote for my school <ArrowRightOutlined /></a>
+            <a className="lp-btn lp-btn-ghost" href="https://wa.me/233536702357?text=Hello%20Acadex%2C%20I%E2%80%99d%20like%20to%20ask%20about%20a%20school%20quote." target="_blank" rel="noreferrer">Ask on WhatsApp <MessageOutlined /></a>
+            <small>We’ll help you choose the right plan before any paid term begins.</small>
+          </div>
+        </section>
+
+{/* ---------------------------------------------------------- security */}
         <section id="trust" className="lp-security-wrap">
           <div className="lp-security">
             <div className="lp-security-copy">
