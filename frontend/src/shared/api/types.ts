@@ -106,10 +106,10 @@ export type AcademicCalendarEvent = {
   audience: 'all' | 'students' | 'staff' | 'parents' | 'teachers' | 'class'
   starts_on: string; ends_on: string; description: string | null; created_at: string
 }
-export type ClassGroup = { id: string; academic_year_id: string; name: string; grade_level: string; stream: string }
+export type ClassGroup = { id: string; academic_year_id: string; name: string; grade_level: string; stream: string; class_teacher_membership_id?: string | null; class_teacher_name?: string | null }
 export type Enrollment = { id: string; student_id: string; academic_year_id: string; class_group_id: string; enrolled_on: string; status: string }
 export type Subject = { id: string; code: string; name: string; status: string }
-export type Teacher = { membership_id: string; user_id: string; display_name: string; email: string }
+export type Teacher = { membership_id: string; user_id: string; display_name: string; email: string; class_teacher_of?: string | null; classes_taught?: number; subjects_taught?: number }
 export type OverviewTerm = { name: string; academic_year: string; ordinal: number; starts_on: string; ends_on: string }
 export type OverviewAttendance = {
   date: string; lessons_today: number; sessions_submitted: number; records_total: number
@@ -161,7 +161,7 @@ export type DemoSeedResult = {
   invoices_created: number; payments_created: number
   attendance_records_created: number; results_created: number
   profiles_filled: number; guardians_created: number; teachers_created: number
-  subject_assignments_created: number; timetable_created: number
+  subject_assignments_created: number; class_teachers_set: number; timetable_created: number
   behavior_created: number; documents_created: number
   history_year_created: boolean; history_results_created: number
   history_invoices_created: number; history_payments_created: number
@@ -173,6 +173,18 @@ export type Overview = {
   students_total: number; teachers_total: number; classes_total: number
   attendance: OverviewAttendance | null; finance: OverviewFinance | null
   lessons_today: OverviewLesson[]; attention: OverviewAttention[]; activity: OverviewActivity[]
+}
+export type TeacherClassDashboard = {
+  id: string; name: string; grade_level: string; stream: string; is_class_teacher: boolean
+  subjects: string[]; students_total: number; present: number; late: number; absent: number
+  unmarked: number; attendance_rate: number | null; upcoming_assessments: number
+  overdue_submissions: number; recent_behavior_records: number
+}
+export type TeacherDashboard = {
+  generated_at: string; academic_year: string | null; current_term: OverviewTerm | null
+  students_total: number; attendance_marked: number; attendance_total: number
+  upcoming_assessments: number; overdue_submissions: number; recent_behavior_records: number
+  classes: TeacherClassDashboard[]; lessons_today: OverviewLesson[]; timetable: OverviewLesson[]
 }
 export type AdminTeacher = {
   membership_id: string; user_id: string; display_name: string; email: string

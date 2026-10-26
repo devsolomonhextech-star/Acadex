@@ -171,6 +171,12 @@ async def test_demo_seed_creates_real_fees_attendance_and_results(client):
     # Every weekday in the term window gets a marked sheet for both students.
     assert result["attendance_records_created"] >= 20, result
     assert result["results_created"] == 2, result
+    # The demo class is given a form teacher from the seeded staff.
+    assert result["class_teachers_set"] == 1, result
+    class_rows = (await client.get(
+        f"/api/v1/academic/classes?academic_year_id={year_id}", headers=headers
+    )).json()
+    assert all(row["class_teacher_name"] for row in class_rows), class_rows
     # Profile depth: demographics, portal guardians, behaviour, documents.
     assert result["profiles_filled"] == 2, result
     assert result["guardians_created"] == 4, result

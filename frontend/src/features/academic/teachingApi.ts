@@ -1,5 +1,5 @@
 import { apiRequest } from '../../shared/api/client'
-import type { Subject, Teacher, TeachingAssignment } from '../../shared/api/types'
+import type { ClassGroup, Subject, Teacher, TeachingAssignment } from '../../shared/api/types'
 
 export function fetchSubjects(token: string) {
   return apiRequest<Subject[]>('/academic/subjects', {}, token)
@@ -19,6 +19,12 @@ export function fetchTeachingAssignments(token: string, yearId: string) {
 
 export function createTeachingAssignment(token: string, payload: Pick<TeachingAssignment, 'class_group_id' | 'subject_id' | 'teacher_membership_id'>) {
   return apiRequest<TeachingAssignment>('/academic/teaching-assignments', { method: 'POST', body: JSON.stringify(payload) }, token)
+}
+
+export function setClassTeacher(token: string, classGroupId: string, teacherMembershipId: string | null) {
+  return apiRequest<ClassGroup>(`/academic/classes/${encodeURIComponent(classGroupId)}/class-teacher`, {
+    method: 'PUT', body: JSON.stringify({ teacher_membership_id: teacherMembershipId }),
+  }, token)
 }
 
 export function inviteTeacher(token: string, payload: { email: string; display_name: string }) {

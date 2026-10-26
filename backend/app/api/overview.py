@@ -11,7 +11,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import TenantContext, current_tenant
@@ -20,8 +20,10 @@ from app.models import (
     AcademicTerm,
     AcademicYear,
     Assessment,
+    AssessmentScore,
     AttendanceRecord,
     AttendanceSession,
+    BehaviorRecord,
     ClassGroup,
     ClassSubjectAssignment,
     MembershipRole,
@@ -117,6 +119,39 @@ class OverviewResponse(BaseModel):
     lessons_today: list[LessonFigures]
     attention: list[AttentionItem]
     activity: list[ActivityPoint]
+
+
+class TeacherClassSummary(BaseModel):
+    id: UUID
+    name: str
+    grade_level: str
+    stream: str
+    is_class_teacher: bool
+    subjects: list[str]
+    students_total: int
+    present: int
+    late: int
+    absent: int
+    unmarked: int
+    attendance_rate: float | None
+    upcoming_assessments: int
+    overdue_submissions: int
+    recent_behavior_records: int
+
+
+class TeacherDashboardResponse(BaseModel):
+    generated_at: datetime
+    academic_year: str | None
+    current_term: TermInfo | None
+    students_total: int
+    attendance_marked: int
+    attendance_total: int
+    upcoming_assessments: int
+    overdue_submissions: int
+    recent_behavior_records: int
+    classes: list[TeacherClassSummary]
+    lessons_today: list[LessonFigures]
+    timetable: list[LessonFigures]
 
 
 def _week_start(day: date) -> date:
@@ -495,3 +530,200 @@ async def overview(
         attendance=attendance, finance=finance,
     lessons_today=lessons_today, attention=attention, activity=activity,
 )
+
+
+@router.get("/teacher", response_model=TeacherDashboardResponse)
+async def teacher_dashboard(
+    context: Annotated[TenantContext, Depends(current_tenant)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    academic_year_id: UUID | None = None,
+    term_id: UUID | None = None,
+) -> TeacherDashboardResponse:
+    """Return class-scoped live figures and timetable for the signed-in teacher."""
+    if context.role != MembershipRole.TEACHER:
+        raise HTTPException(status_code=403, detail="Teacher dashboard is available to teachers only")
+
+    membership_id = await session.scalar(select(SchoolMembership.id).where(
+        SchoolMembership.school_id == context.school_id,
+        SchoolMembership.user_id == context.user_id,
+        SchoolMembership.role == MembershipRole.TEACHER,
+        SchoolMembership.status == "active",
+    ))
+    if membership_id is None:
+        raise HTTPException(status_code=403, detail="Active teacher membership required")
+
+    if term_id is not None:
+        selected_term = await session.scalar(select(AcademicTerm).where(
+            AcademicTerm.id == term_id, AcademicTerm.school_id == context.school_id,
+        ))
+        if selected_term is None:
+            raise HTTPException(status_code=404, detail="Academic term not found")
+        if academic_year_id is not None and selected_term.academic_year_id != academic_year_id:
+            raise HTTPException(status_code=422, detail="The selected term does not belong to the selected academic year")
+        academic_year_id = selected_term.academic_year_id
+
+    year_id = academic_year_id or await session.scalar(
+        select(AcademicYear.id).where(AcademicYear.school_id == context.school_id)
+        .order_by(AcademicYear.starts_on.desc()).limit(1)
+    )
+    year = await session.scalar(select(AcademicYear).where(
+        AcademicYear.id == year_id, AcademicYear.school_id == context.school_id,
+    )) if year_id else None
+    if academic_year_id is not None and year is None:
+        raise HTTPException(status_code=404, detail="Academic year not found")
+
+    groups: list[ClassGroup] = []
+    if year is not None:
+        teaches_class = select(ClassSubjectAssignment.id).where(
+            ClassSubjectAssignment.school_id == context.school_id,
+            ClassSubjectAssignment.class_group_id == ClassGroup.id,
+            ClassSubjectAssignment.teacher_membership_id == membership_id,
+        ).exists()
+        groups = list((await session.scalars(
+            select(ClassGroup).where(
+                ClassGroup.school_id == context.school_id,
+                ClassGroup.academic_year_id == year.id,
+                or_(teaches_class, ClassGroup.class_teacher_membership_id == membership_id),
+            ).order_by(ClassGroup.grade_level, ClassGroup.name, ClassGroup.stream)
+        )).all())
+
+    today = date.today()
+    week_end = today + timedelta(days=7)
+    class_summaries: list[TeacherClassSummary] = []
+    lesson_rows: list[LessonFigures] = []
+    for group in groups:
+        assigned = (await session.execute(
+            select(Subject.id, Subject.name)
+            .join(ClassSubjectAssignment, (ClassSubjectAssignment.subject_id == Subject.id)
+                  & (ClassSubjectAssignment.school_id == Subject.school_id))
+            .where(
+                ClassSubjectAssignment.school_id == context.school_id,
+                ClassSubjectAssignment.class_group_id == group.id,
+                ClassSubjectAssignment.teacher_membership_id == membership_id,
+            ).order_by(Subject.name)
+        )).all()
+        subject_ids = [row[0] for row in assigned]
+        subject_names = [row[1] for row in assigned]
+
+        students_total = int(await session.scalar(
+            select(func.count()).select_from(StudentEnrollment)
+            .join(Student, (Student.id == StudentEnrollment.student_id)
+                  & (Student.school_id == StudentEnrollment.school_id))
+            .where(
+                StudentEnrollment.school_id == context.school_id,
+                StudentEnrollment.academic_year_id == year.id,
+                StudentEnrollment.class_group_id == group.id,
+                StudentEnrollment.status == "active", Student.status == "active",
+            )
+        ) or 0)
+
+        attendance_rows = (await session.execute(
+            select(AttendanceRecord.status, func.count())
+            .join(AttendanceSession, (AttendanceSession.id == AttendanceRecord.session_id)
+                  & (AttendanceSession.school_id == AttendanceRecord.school_id))
+            .where(
+                AttendanceRecord.school_id == context.school_id,
+                AttendanceSession.class_group_id == group.id,
+                AttendanceSession.attendance_date == today,
+            ).group_by(AttendanceRecord.status)
+        )).all()
+        attendance_by_status = dict(attendance_rows)
+        present = int(attendance_by_status.get("present", 0))
+        late = int(attendance_by_status.get("late", 0))
+        absent = int(attendance_by_status.get("absent", 0))
+        marked = present + late + absent + int(attendance_by_status.get("excused", 0))
+        attendance_rate = round((present + late) * 100 / marked, 1) if marked else None
+
+        assessment_filter = [
+            Assessment.school_id == context.school_id,
+            Assessment.academic_year_id == year.id,
+            Assessment.class_group_id == group.id,
+            Assessment.subject_id.in_(subject_ids) if subject_ids else Assessment.id.is_(None),
+        ]
+        if term_id is not None:
+            assessment_filter.append(Assessment.term_id == term_id)
+        upcoming_assessments = int(await session.scalar(
+            select(func.count()).select_from(Assessment).where(
+                *assessment_filter,
+                Assessment.status.in_(("open", "returned")),
+                Assessment.due_on >= today, Assessment.due_on <= week_end,
+            )
+        ) or 0)
+        overdue_assessments = list((await session.scalars(
+            select(Assessment).where(
+                *assessment_filter,
+                Assessment.status.in_(("open", "returned")),
+                Assessment.due_on.is_not(None), Assessment.due_on < today,
+            )
+        )).all())
+        overdue_submissions = 0
+        for assessment in overdue_assessments:
+            submitted = int(await session.scalar(
+                select(func.count()).select_from(AssessmentScore).where(
+                    AssessmentScore.school_id == context.school_id,
+                    AssessmentScore.assessment_id == assessment.id,
+                    AssessmentScore.submission_status.in_(("submitted", "excused")),
+                )
+            ) or 0)
+            overdue_submissions += max(students_total - submitted, 0)
+
+        recent_behavior_records = int(await session.scalar(
+            select(func.count()).select_from(BehaviorRecord)
+            .join(StudentEnrollment, (StudentEnrollment.student_id == BehaviorRecord.student_id)
+                  & (StudentEnrollment.school_id == BehaviorRecord.school_id))
+            .where(
+                BehaviorRecord.school_id == context.school_id,
+                BehaviorRecord.occurred_on >= today - timedelta(days=14),
+                StudentEnrollment.academic_year_id == year.id,
+                StudentEnrollment.class_group_id == group.id,
+                StudentEnrollment.status == "active",
+            )
+        ) or 0)
+
+        class_summaries.append(TeacherClassSummary(
+            id=group.id, name=group.name, grade_level=group.grade_level, stream=group.stream,
+            is_class_teacher=group.class_teacher_membership_id == membership_id,
+            subjects=subject_names, students_total=students_total,
+            present=present, late=late, absent=absent,
+            unmarked=max(students_total - marked, 0), attendance_rate=attendance_rate,
+            upcoming_assessments=upcoming_assessments,
+            overdue_submissions=overdue_submissions,
+            recent_behavior_records=recent_behavior_records,
+        ))
+
+    timetable_query = (
+        select(TimetableSlot, ClassGroup, Subject)
+        .join(ClassGroup, (ClassGroup.id == TimetableSlot.class_group_id)
+              & (ClassGroup.school_id == TimetableSlot.school_id))
+        .join(Subject, (Subject.id == TimetableSlot.subject_id)
+              & (Subject.school_id == TimetableSlot.school_id))
+        .where(
+            TimetableSlot.school_id == context.school_id,
+            TimetableSlot.teacher_membership_id == membership_id,
+            *([TimetableSlot.academic_year_id == year.id] if year else []),
+        )
+    )
+    rows = (await session.execute(timetable_query.order_by(
+        TimetableSlot.day_of_week, TimetableSlot.starts_at,
+    ))).all()
+    teacher = await session.get(User, context.user_id)
+    timetable = [LessonFigures(
+        id=slot.id, starts_at=slot.starts_at.strftime("%H:%M"), ends_at=slot.ends_at.strftime("%H:%M"),
+        subject_code=subject.code, subject_name=subject.name, class_name=group.name,
+        teacher_name=teacher.display_name if teacher else "Teacher", room=slot.room,
+    ) for slot, group, subject in rows]
+    today_index = datetime.now(UTC).weekday()
+    lessons_today = [lesson for (slot, _group, _subject), lesson in zip(rows, timetable) if slot.day_of_week == today_index]
+
+    attend_total = sum(item.students_total for item in class_summaries)
+    attend_marked = sum(item.students_total - item.unmarked for item in class_summaries)
+    return TeacherDashboardResponse(
+        generated_at=datetime.now(UTC), academic_year=year.name if year else None,
+        current_term=await _current_term(session, context.school_id, term_id),
+        students_total=sum(item.students_total for item in class_summaries),
+        attendance_marked=attend_marked, attendance_total=attend_total,
+        upcoming_assessments=sum(item.upcoming_assessments for item in class_summaries),
+        overdue_submissions=sum(item.overdue_submissions for item in class_summaries),
+        recent_behavior_records=sum(item.recent_behavior_records for item in class_summaries),
+        classes=class_summaries, lessons_today=lessons_today, timetable=timetable,
+    )

@@ -9,6 +9,7 @@ import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 import type { Overview, SchoolUser } from '../../shared/api/types'
 import { fetchOverview, seedDemoFees } from './overviewApi'
 import { fetchStudentSupport } from '../student-support/studentSupportApi'
+import TeacherDashboard from './TeacherDashboard'
 
 const REFRESH_MS = 60_000
 
@@ -57,6 +58,10 @@ function minutesOf(time: string) {
 }
 
 export default function Overview({ user }: { user: SchoolUser }) {
+  return user.role === 'teacher' ? <TeacherDashboard user={user} /> : <AdminOverview user={user} />
+}
+
+function AdminOverview({ user }: { user: SchoolUser }) {
   const { accessToken } = useAuth()
   const { yearId, termId, loading: periodLoading } = useAcademicPeriod()
   const [now, setNow] = useState(() => new Date())
@@ -90,6 +95,7 @@ export default function Overview({ user }: { user: SchoolUser }) {
       if (result.payments_created) parts.push(`${result.payments_created} payment${result.payments_created === 1 ? '' : 's'}`)
       if (result.attendance_records_created) parts.push(`${result.attendance_records_created} attendance records`)
       if (result.results_created) parts.push(`${result.results_created} term results`)
+      if (result.class_teachers_set) parts.push(`${result.class_teachers_set} class teacher assignment${result.class_teachers_set === 1 ? '' : 's'}`)
       if (result.calendar_events_created) parts.push(`${result.calendar_events_created} academic calendar events`)
       if (parts.length) message.success(`Demo data created: ${parts.join(', ')}`)
       else message.info('Demo data is already generated')

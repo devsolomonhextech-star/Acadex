@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -90,6 +90,8 @@ class ClassResponse(BaseModel):
     name: str
     grade_level: str
     stream: str
+    class_teacher_membership_id: UUID | None = None
+    class_teacher_name: str | None = None
 
 
 class EnrollmentResponse(BaseModel):
@@ -144,6 +146,15 @@ class TeacherResponse(BaseModel):
     user_id: UUID
     display_name: str
     email: str
+    class_teacher_of: str | None = None
+    classes_taught: int = 0
+    subjects_taught: int = 0
+
+
+class ClassTeacherRequest(BaseModel):
+    """Assign a class teacher, or clear the role with ``null``."""
+
+    teacher_membership_id: UUID | None = None
 
 
 async def _audit(session: AsyncSession, context: TenantContext, action: str, kind: str, resource_id: UUID) -> None:
@@ -157,6 +168,27 @@ async def _commit_or_conflict(session: AsyncSession, message: str) -> None:
     except IntegrityError:
         await session.rollback()
         raise HTTPException(status_code=409, detail=message) from None
+
+
+async def _class_responses(
+    session: AsyncSession, school_id: UUID, groups: list[ClassGroup],
+) -> list[ClassResponse]:
+    """Build class payloads enriched with the class teacher's display name."""
+    if not groups:
+        return []
+    teacher_names = dict((await session.execute(
+        select(ClassGroup.id, User.display_name)
+        .join(SchoolMembership, SchoolMembership.id == ClassGroup.class_teacher_membership_id)
+        .join(User, User.id == SchoolMembership.user_id)
+        .where(ClassGroup.school_id == school_id,
+               ClassGroup.id.in_([group.id for group in groups]))
+    )).all())
+    return [ClassResponse(
+        id=group.id, academic_year_id=group.academic_year_id, name=group.name,
+        grade_level=group.grade_level, stream=group.stream,
+        class_teacher_membership_id=group.class_teacher_membership_id,
+        class_teacher_name=teacher_names.get(group.id),
+    ) for group in groups]
 
 
 @router.get("/years", response_model=list[YearResponse])
@@ -201,16 +233,25 @@ async def list_classes(context: Annotated[TenantContext, Depends(require_roles(*
     query = select(ClassGroup).where(ClassGroup.school_id == context.school_id)
     if context.role == MembershipRole.TEACHER:
         membership_id = await session.scalar(select(SchoolMembership.id).where(
-            SchoolMembership.school_id == context.school_id, SchoolMembership.user_id == context.user_id,
-            SchoolMembership.status == "active", SchoolMembership.role == MembershipRole.TEACHER,
+            SchoolMembership.school_id == context.school_id,
+            SchoolMembership.user_id == context.user_id,
+            SchoolMembership.status == "active",
+            SchoolMembership.role == MembershipRole.TEACHER,
         ))
-        query = query.join(ClassSubjectAssignment, (
+        # Teachers see classes where they teach a subject or own the class.
+        teaches_subject = select(ClassSubjectAssignment.class_group_id).where(
             (ClassSubjectAssignment.school_id == ClassGroup.school_id)
             & (ClassSubjectAssignment.class_group_id == ClassGroup.id)
-        )).where(ClassSubjectAssignment.teacher_membership_id == membership_id).distinct()
+            & (ClassSubjectAssignment.teacher_membership_id == membership_id)
+        )
+        query = query.where(or_(
+            teaches_subject.exists(),
+            ClassGroup.class_teacher_membership_id == membership_id,
+        ))
     if academic_year_id:
         query = query.where(ClassGroup.academic_year_id == academic_year_id)
-    return list((await session.scalars(query.order_by(ClassGroup.grade_level, ClassGroup.name, ClassGroup.stream))).all())
+    groups = list((await session.scalars(query.order_by(ClassGroup.grade_level, ClassGroup.name, ClassGroup.stream))).all())
+    return await _class_responses(session, context.school_id, groups)
 
 
 @router.post("/classes", response_model=ClassResponse, status_code=status.HTTP_201_CREATED)
@@ -278,6 +319,23 @@ async def create_subject(payload: SubjectCreate, context: Annotated[TenantContex
 
 @router.get("/teachers", response_model=list[TeacherResponse])
 async def list_teachers(context: Annotated[TenantContext, Depends(require_roles(*roles))], session: Annotated[AsyncSession, Depends(get_session)]):
+    loads = {
+        membership_id: (classes_count, subjects_count)
+        for membership_id, classes_count, subjects_count in (await session.execute(
+            select(
+                ClassSubjectAssignment.teacher_membership_id,
+                func.count(func.distinct(ClassSubjectAssignment.class_group_id)),
+                func.count(func.distinct(ClassSubjectAssignment.subject_id)),
+            )
+            .where(ClassSubjectAssignment.school_id == context.school_id)
+            .group_by(ClassSubjectAssignment.teacher_membership_id)
+        )).all()
+    }
+    owned_classes = dict((await session.execute(
+        select(ClassGroup.class_teacher_membership_id, ClassGroup.name)
+        .where(ClassGroup.school_id == context.school_id,
+               ClassGroup.class_teacher_membership_id.is_not(None))
+    )).all())
     result = await session.execute(
         select(SchoolMembership.id, User.id, User.display_name, User.email)
         .join(User, SchoolMembership.user_id == User.id)
@@ -285,7 +343,12 @@ async def list_teachers(context: Annotated[TenantContext, Depends(require_roles(
                SchoolMembership.status == "active", User.status == "active")
         .order_by(User.display_name)
     )
-    return [TeacherResponse(membership_id=row[0], user_id=row[1], display_name=row[2], email=row[3]) for row in result.all()]
+    return [TeacherResponse(
+        membership_id=row[0], user_id=row[1], display_name=row[2], email=row[3],
+        class_teacher_of=owned_classes.get(row[0]),
+        classes_taught=loads.get(row[0], (0, 0))[0],
+        subjects_taught=loads.get(row[0], (0, 0))[1],
+    ) for row in result.all()]
 
 
 @router.get("/teaching-assignments", response_model=list[AssignmentResponse])
@@ -349,3 +412,51 @@ async def create_teaching_assignment(
         subject_id=subject.id, subject_name=subject.name, subject_code=subject.code,
         teacher_membership_id=membership.id, teacher_name=user.display_name, teacher_email=user.email,
     )
+
+
+@router.put("/classes/{class_group_id}/class-teacher", response_model=ClassResponse)
+async def set_class_teacher(
+    class_group_id: UUID,
+    payload: ClassTeacherRequest,
+    context: Annotated[TenantContext, Depends(require_roles(*writers))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Assign, change, or clear a class's class teacher.
+
+    A teacher may only be the class teacher of one class at a time; subject
+    assignments stay independent, so a teacher can teach many classes.
+    """
+    group = await session.scalar(select(ClassGroup).where(
+        ClassGroup.id == class_group_id, ClassGroup.school_id == context.school_id,
+    ))
+    if group is None:
+        raise HTTPException(status_code=404, detail="Class group not found")
+    if payload.teacher_membership_id is None:
+        group.class_teacher_membership_id = None
+        await _audit(session, context, "teacher.cleared_as_class_teacher", "class_group", group.id)
+        await _commit_or_conflict(session, "Could not clear the class teacher. Reload and try again")
+        return (await _class_responses(session, context.school_id, [group]))[0]
+    teacher = (await session.execute(
+        select(SchoolMembership, User).join(User, SchoolMembership.user_id == User.id).where(
+            SchoolMembership.id == payload.teacher_membership_id,
+            SchoolMembership.school_id == context.school_id,
+            SchoolMembership.role == MembershipRole.TEACHER,
+            SchoolMembership.status == "active", User.status == "active",
+        )
+    )).one_or_none()
+    if teacher is None:
+        raise HTTPException(status_code=404, detail="Active teacher not found")
+    other = await session.scalar(select(ClassGroup).where(
+        ClassGroup.school_id == context.school_id,
+        ClassGroup.class_teacher_membership_id == payload.teacher_membership_id,
+        ClassGroup.id != group.id,
+    ))
+    if other is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"That teacher is already the class teacher of {other.name}. Clear that class first.",
+        )
+    group.class_teacher_membership_id = payload.teacher_membership_id
+    await _audit(session, context, "teacher.assigned_as_class_teacher", "class_group", group.id)
+    await _commit_or_conflict(session, "That teacher was assigned to another class at the same moment")
+    return (await _class_responses(session, context.school_id, [group]))[0]

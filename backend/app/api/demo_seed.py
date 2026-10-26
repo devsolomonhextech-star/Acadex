@@ -130,6 +130,7 @@ class DemoSeedResponse(BaseModel):
     guardians_created: int
     teachers_created: int
     subject_assignments_created: int
+    class_teachers_set: int
     timetable_created: int
     behavior_created: int
     documents_created: int
@@ -566,6 +567,22 @@ async def seed_demo_data(
         if subject_assignments_created:
             await session.commit()
 
+    # ------------------------------------------------------ class teachers
+    # Every demo class gets a form teacher from the existing staff, so the
+    # class-teacher views start populated. Idempotent: owned classes are kept.
+    class_teachers_set = 0
+    if teachers:
+        for group_index, group in enumerate(groups):
+            if group.class_teacher_membership_id is not None:
+                continue
+            teacher = teachers[group_index % len(teachers)]
+            if teacher.status != "active" or teacher.role != MembershipRole.TEACHER:
+                continue
+            group.class_teacher_membership_id = teacher.id
+            class_teachers_set += 1
+        if class_teachers_set:
+            await session.commit()
+
     # ------------------------------------------------------------ timetable
     # A full Monday–Friday week, five lessons a day, placed only where
     # neither the class nor the teacher is already busy — so the seeded week
@@ -862,7 +879,7 @@ async def seed_demo_data(
     total_created = (
         invoices_created + payments_created + attendance_records_created + results_created
         + profiles_filled + guardians_created + teachers_created
-        + subject_assignments_created + timetable_created + behavior_created
+        + subject_assignments_created + class_teachers_set + timetable_created + behavior_created
         + documents_created + history_results_created + history_invoices_created
         + history_payments_created + calendar_events_created + (1 if history_year_created else 0)
     )
@@ -882,6 +899,7 @@ async def seed_demo_data(
         profiles_filled=profiles_filled, guardians_created=guardians_created,
         teachers_created=teachers_created,
         subject_assignments_created=subject_assignments_created,
+        class_teachers_set=class_teachers_set,
         timetable_created=timetable_created, behavior_created=behavior_created,
         documents_created=documents_created,
         history_year_created=history_year_created,

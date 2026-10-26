@@ -259,6 +259,14 @@ class ClassGroup(Base):
         UniqueConstraint("school_id", "academic_year_id", "id", name="uq_class_groups_school_year_id"),
         UniqueConstraint("school_id", "academic_year_id", "name", "stream", name="uq_class_groups_year_name_stream"),
         Index("ix_class_groups_school_year", "school_id", "academic_year_id"),
+        # A teacher is the class teacher of at most one class at a time.
+        Index(
+            "uq_class_groups_class_teacher",
+            "school_id",
+            "class_teacher_membership_id",
+            unique=True,
+            postgresql_where=text("class_teacher_membership_id IS NOT NULL"),
+        ),
     )
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
@@ -266,6 +274,9 @@ class ClassGroup(Base):
     name: Mapped[str] = mapped_column(String(80), nullable=False)
     grade_level: Mapped[str] = mapped_column(String(40), nullable=False)
     stream: Mapped[str] = mapped_column(String(40), nullable=False, default="", server_default="")
+    class_teacher_membership_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("school_memberships.id", ondelete="RESTRICT"),
+    )
 
 
 class StudentEnrollment(Base):
