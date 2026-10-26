@@ -311,3 +311,12 @@
   .lp-footer-inner{grid-template-columns:1fr;padding:40px 18px 30px;gap:28px}
   .lp-footer-base{padding:16px 18px 32px}
 }
+
+
+/* ------------------------------------------------ community commitment */
+.lp-community-commitment{display:grid;grid-template-columns:40px 1fr auto;align-items:start;gap:12px;margin-top:22px;padding:16px;border:1px solid #dce5ff;border-radius:13px;background:linear-gradient(120deg,#f5f7ff,#fff 72%)}
+.lp-community-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:#fff0f1;color:#db5870;font-size:16px}
+.lp-community-commitment strong{display:block;margin:1px 0 5px;color:var(--lp-ink);font-size:13px;font-weight:800}
+.lp-community-commitment p{font-size:12.5px;line-height:1.65}
+.lp-community-share{padding:5px 9px;border-radius:999px;background:#e8f7ef;color:#18875d;font-size:13px;font-weight:800}
+@media(max-width:560px){.lp-community-commitment{grid-template-columns:36px 1fr;gap:10px;padding:14px}.lp-community-icon{width:34px;height:34px}.lp-community-share{grid-column:2;justify-self:start;margin-top:-4px}}
