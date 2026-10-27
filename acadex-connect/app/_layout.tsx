@@ -1,10 +1,12 @@
 import "react-native-reanimated";
+import "../global.css";
 import "../src/services/queryLifecycle";
 import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { PortalHost } from "@rn-primitives/portal";
 import { AuthProvider, useAuth } from "../src/services/auth";
 import { colors } from "../src/theme/tokens";
 
@@ -21,7 +23,8 @@ function RouteGuard() {
   useEffect(() => {
     if (loading) return;
     const inAuth = segments[0] === "(auth)";
-    if (!parent && !inAuth) router.replace("/(auth)/login");
+    const atIndex = !segments.length || segments.join("/") === "index";
+    if (!parent && !inAuth && !atIndex) router.replace("/(auth)/login");
     if (parent && inAuth) router.replace("/(parent)/(tabs)/home");
   }, [loading, parent, router, segments]);
   if (loading)
@@ -55,7 +58,10 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <RouteGuard />
+          <>
+            <RouteGuard />
+            <PortalHost />
+          </>
         </AuthProvider>
       </QueryClientProvider>
     </SafeAreaProvider>
