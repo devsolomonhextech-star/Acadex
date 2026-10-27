@@ -130,8 +130,8 @@ const performanceTabs = [
 const progressSubjects = [
   { name: 'Mathematics', pct: 92, color: '#425bcf' },
   { name: 'English', pct: 88, color: '#e0645c' },
-  { name: 'Science', pct: 85, color: '#dc9852' },
-  { name: 'Social Studies', pct: 90, color: '#22a06b' },
+  { name: 'Science', pct: 85, color: '#8fa7ff' },
+  { name: 'Social Studies', pct: 90, color: '#5570e6' },
 ]
 
 const payments = [
