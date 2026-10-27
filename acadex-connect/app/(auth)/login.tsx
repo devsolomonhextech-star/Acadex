@@ -14,6 +14,8 @@ import {
   View,
 } from "react-native";
 import {
+  Building2,
+  GraduationCap,
   Eye,
   EyeOff,
   LockKeyhole,
@@ -91,23 +93,21 @@ export default function LoginScreen() {
             style={styles.logo}
             resizeMode="contain"
           />
-          <View style={styles.brandPill}>
-            <View style={styles.dot} />
-            <Text style={styles.brandText}>PARENT ACCESS</Text>
-          </View>
         </View>
         <View style={styles.body}>
-          <Text style={styles.eyebrow}>ACADEX CONNECT</Text>
+          <Text style={styles.tagline}>Smarter schools. Brighter futures.</Text>
+          <Text style={styles.eyebrow}>ACADEX CONNECT · PARENT PORTAL</Text>
           <Text style={styles.title}>
             {challenge
               ? "Verify it’s you"
-              : "Your child’s school life, connected."}
+              : "Stay close to your child’s learning journey."}
           </Text>
           <Text style={styles.subtitle}>
             {challenge
               ? "Enter the 6-digit code from your authenticator app."
               : "Sign in to see updates and records shared by your school."}
           </Text>
+          {!challenge ? <SchoolIllustration /> : null}
           <Card style={styles.form}>
             {challenge ? (
               <View style={styles.field}>
@@ -291,11 +291,18 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   top: {
-    flexDirection: "row",
+    flexDirection: "column",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
   },
-  logo: { width: 132, height: 44 },
+  logo: { width: 150, height: 48 },
+  tagline: {
+    color: colors.ink,
+    textAlign: "center",
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
   brandPill: {
     borderColor: colors.border,
     borderWidth: 1,
@@ -322,7 +329,7 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 460,
     alignSelf: "center",
-    marginTop: 44,
+    marginTop: 27,
     gap: 13,
   },
   eyebrow: {
@@ -333,8 +340,8 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.ink,
-    fontSize: 31,
-    lineHeight: 38,
+    fontSize: 27,
+    lineHeight: 33,
     fontWeight: "800",
     letterSpacing: -0.6,
   },
@@ -344,7 +351,7 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     marginBottom: 10,
   },
-  form: { padding: 20, gap: 15 },
+  form: { padding: 18, gap: 13 },
   field: { gap: 7 },
   label: { fontSize: 13, color: colors.ink, fontWeight: "700" },
   inputWrap: {
@@ -388,5 +395,131 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.mutedLight,
     paddingVertical: 16,
+  },
+});
+
+function SchoolIllustration() {
+  return (
+    <View style={illustration.container} accessibilityElementsHidden>
+      <View style={illustration.cloudOne} />
+      <View style={illustration.cloudTwo} />
+      <View style={illustration.treeLeft}>
+        <View style={illustration.treeTop} />
+        <View style={illustration.treeTrunk} />
+      </View>
+      <View style={illustration.treeRight}>
+        <View style={illustration.treeTop} />
+        <View style={illustration.treeTrunk} />
+      </View>
+      <View style={illustration.school}>
+        <View style={illustration.roof}>
+          <GraduationCap color="#fff" size={24} />
+        </View>
+        <View style={illustration.facade}>
+          <Building2 color={colors.blue} size={20} />
+          <View style={illustration.windows}>
+            {[0, 1, 2].map((item) => (
+              <View key={item} style={illustration.window} />
+            ))}
+          </View>
+          <View style={illustration.door} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const illustration = StyleSheet.create({
+  container: {
+    height: 132,
+    width: "100%",
+    backgroundColor: "#EEF5FF",
+    borderRadius: 22,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    marginBottom: 1,
+  },
+  cloudOne: {
+    position: "absolute",
+    width: 76,
+    height: 25,
+    borderRadius: 20,
+    backgroundColor: "#D9E8FF",
+    top: 27,
+    left: 44,
+  },
+  cloudTwo: {
+    position: "absolute",
+    width: 62,
+    height: 20,
+    borderRadius: 18,
+    backgroundColor: "#D9E8FF",
+    top: 43,
+    right: 46,
+  },
+  school: { width: 196, alignItems: "center" },
+  roof: {
+    width: 186,
+    height: 40,
+    borderTopLeftRadius: 45,
+    borderTopRightRadius: 45,
+    backgroundColor: colors.blue,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  facade: {
+    width: 166,
+    height: 57,
+    backgroundColor: "#fff",
+    borderTopWidth: 3,
+    borderTopColor: "#BBD4FF",
+    borderLeftWidth: 2,
+    borderRightWidth: 2,
+    borderColor: "#D6E5FF",
+    alignItems: "center",
+    justifyContent: "space-evenly",
+  },
+  windows: { flexDirection: "row", gap: 13 },
+  window: {
+    width: 17,
+    height: 18,
+    backgroundColor: "#D9E8FF",
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: "#B8D1FF",
+  },
+  door: {
+    position: "absolute",
+    bottom: 0,
+    width: 22,
+    height: 29,
+    backgroundColor: "#B8D1FF",
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+  },
+  treeLeft: {
+    position: "absolute",
+    left: 54,
+    bottom: 13,
+    alignItems: "center",
+  },
+  treeRight: {
+    position: "absolute",
+    right: 54,
+    bottom: 13,
+    alignItems: "center",
+  },
+  treeTop: {
+    width: 26,
+    height: 34,
+    borderRadius: 16,
+    backgroundColor: "#8CB6FF",
+  },
+  treeTrunk: {
+    width: 5,
+    height: 12,
+    backgroundColor: "#608BDD",
+    marginTop: -1,
   },
 });

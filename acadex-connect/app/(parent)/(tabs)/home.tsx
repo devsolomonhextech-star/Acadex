@@ -2,40 +2,43 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
 import {
+  ArrowRight,
+  Bell,
+  BookOpenCheck,
   CalendarDays,
+  Check,
   ChevronRight,
-  ClipboardList,
+  CircleDollarSign,
+  Clock3,
   CreditCard,
   Megaphone,
+  Menu,
   ShieldCheck,
-  UsersRound,
+  UserRound,
 } from "lucide-react-native";
 import {
+  Image,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { apiErrorMessage } from "../../../src/api/client";
-import {
-  Card,
-  EmptyState,
-  Heading,
-  LoadingState,
-  Screen,
-} from "../../../src/components/ui";
-import { ChildPicker } from "../../../src/components/ChildPicker";
+import { EmptyState, LoadingState, Screen } from "../../../src/components/ui";
 import { communicationsApi } from "../../../src/features/communicationsApi";
 import { familyApi } from "../../../src/features/familyApi";
 import { useAuth } from "../../../src/services/auth";
 import { useChildren } from "../../../src/services/parentData";
-import { colors, radius } from "../../../src/theme/tokens";
+import { colors } from "../../../src/theme/tokens";
+
+const logo = require("../../../assets/images/acadex-logo.png");
 
 export default function HomeScreen() {
   const router = useRouter();
   const { parent } = useAuth();
-  const { selectedChild } = useChildren();
+  const { children, selectedChild, selectChild } = useChildren();
   const reports = useQuery({
     queryKey: ["reports", selectedChild?.id],
     queryFn: ({ signal }) => familyApi.reports(selectedChild!.id, signal),
@@ -75,9 +78,21 @@ export default function HomeScreen() {
   const term = reports.data?.[0];
   const latestAnnouncement = announcements.data?.[0];
   const latestNotification = notifications.data?.[0];
+  const unread =
+    notifications.data?.filter((item) => !item.read_at).length ?? 0;
+  const presentCount = attendance.data?.counts.present ?? 0;
+  const recordedCount = attendance.data?.total_recorded ?? 0;
+  const formattedPaid = fees.data
+    ? `${fees.data.currency ?? ""} ${Number(fees.data.paid_total).toLocaleString()}`.trim()
+    : "—";
+  const averageGrade =
+    term?.aggregate_percent != null
+      ? `${Math.round(Number(term.aggregate_percent))}%`
+      : (term?.grade ?? "—");
 
   return (
     <Screen
+      contentStyle={styles.screen}
       refreshControl={
         <RefreshControl
           refreshing={
@@ -93,292 +108,287 @@ export default function HomeScreen() {
         />
       }
     >
+      <View style={styles.topbar}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open profile and settings"
+          onPress={() => router.push("/(parent)/(tabs)/profile")}
+          style={styles.topbarButton}
+        >
+          <Menu color={colors.ink} size={22} />
+        </Pressable>
+        <Image source={logo} resizeMode="contain" style={styles.logo} />
+        <View style={styles.topbarRight}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${unread} unread updates`}
+            onPress={() => router.push("/(parent)/(tabs)/notifications")}
+            style={styles.bellButton}
+          >
+            <Bell color={colors.ink} size={20} />
+            {unread > 0 ? <View style={styles.bellDot} /> : null}
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+            onPress={() => router.push("/(parent)/(tabs)/profile")}
+            style={styles.avatar}
+          >
+            <Text style={styles.avatarText}>
+              {initials(parent?.display_name)}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+
       <View style={styles.welcome}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.school}>{parent?.school_name}</Text>
-          <Text style={styles.greeting}>
-            Good day, {parent?.display_name.split(" ")[0]}.
-          </Text>
-          <Text style={styles.caption}>
-            {new Date().toLocaleDateString(undefined, {
-              weekday: "long",
-              month: "long",
-              day: "numeric",
-            })}{" "}
-            · Here’s what’s happening with your family.
-          </Text>
-        </View>
-        <View style={styles.profile}>
-          <Text style={styles.profileText}>
-            {parent?.display_name
-              .split(" ")
-              .map((part) => part[0])
-              .slice(0, 2)
-              .join("")
-              .toUpperCase()}
-          </Text>
-        </View>
+        <Text style={styles.greeting}>Good {dayGreeting()},</Text>
+        <Text style={styles.parentName}>
+          {parent?.display_name.split(" ")[0] ?? "there"} 👋
+        </Text>
+        <Text style={styles.caption}>
+          Here’s an overview of your child’s progress.
+        </Text>
       </View>
-      <View style={styles.section}>
-        <Heading
-          title="Your children"
-          subtitle="Choose a child to see their school information."
-        />
-        <ChildPicker />
-      </View>
+
+      {children.length ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.childPickerRow}
+        >
+          {children.map((child) => {
+            const active = child.id === selectedChild?.id;
+            return (
+              <Pressable
+                key={child.id}
+                accessibilityRole="button"
+                accessibilityLabel={`View ${child.first_name} ${child.last_name}`}
+                onPress={() => selectChild(child.id)}
+                style={[styles.childCard, active && styles.childCardActive]}
+              >
+                <View style={styles.childAvatar}>
+                  <UserRound color={colors.blue} size={25} strokeWidth={2.2} />
+                </View>
+                <View style={styles.childInfo}>
+                  <View style={styles.childNameRow}>
+                    <Text style={styles.childName} numberOfLines={1}>
+                      {child.first_name} {child.last_name}
+                    </Text>
+                    {child.class_name ? (
+                      <Text style={styles.classPill}>{child.class_name}</Text>
+                    ) : null}
+                  </View>
+                  <Text style={styles.schoolName} numberOfLines={1}>
+                    {parent?.school_name ?? "Acadex school"}
+                  </Text>
+                </View>
+                <ChevronRight size={20} color={colors.mutedLight} />
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      ) : null}
+
       {selectedChild ? (
         <>
-          <View style={styles.quickGrid}>
-            <QuickAction
-              icon={<CalendarDays color={colors.blue} size={20} />}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.metricsRow}
+          >
+            <MetricCard
+              icon={<CalendarDays color={colors.blue} size={19} />}
               title="Attendance"
-              detail="Daily record"
+              value={
+                attendance.isLoading
+                  ? "…"
+                  : recordedCount
+                    ? `${presentCount}/${recordedCount}`
+                    : "—"
+              }
+              detail="Present"
               onPress={() => router.push("/(parent)/attendance")}
             />
-            <QuickAction
-              icon={<CreditCard color={colors.blue} size={20} />}
-              title="Fees"
-              detail="Balances & receipts"
+            <MetricCard
+              icon={<BookOpenCheck color={colors.blue} size={19} />}
+              title="Average grade"
+              value={reports.isLoading ? "…" : averageGrade}
+              detail={term?.term_name ?? "Latest report"}
+              onPress={() => router.push("/(parent)/(tabs)/academics")}
+            />
+            <MetricCard
+              icon={<CircleDollarSign color={colors.blue} size={19} />}
+              title="Fees paid"
+              value={fees.isLoading ? "…" : formattedPaid}
+              detail="All recorded"
               onPress={() => router.push("/(parent)/fees")}
             />
-            <QuickAction
-              icon={<ClipboardList color={colors.blue} size={20} />}
-              title="Timetable"
-              detail="Weekly lessons"
+            <MetricCard
+              icon={<CalendarDays color={colors.blue} size={19} />}
+              title="Upcoming"
+              value={events.isLoading ? "…" : String(events.data?.length ?? 0)}
+              detail="School events"
               onPress={() => router.push("/(parent)/timetable")}
             />
-            <QuickAction
-              icon={<UsersRound color={colors.blue} size={20} />}
-              title="School updates"
-              detail="News & notices"
-              onPress={() => router.push("/(parent)/announcements")}
-            />
-          </View>
-          <Card style={styles.summary}>
-            <View style={styles.sectionHead}>
-              <View>
-                <Text style={styles.sectionTitle}>Latest report</Text>
-                <Text style={styles.sectionCaption}>
-                  {selectedChild.first_name} {selectedChild.last_name}
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => router.push("/(parent)/(tabs)/academics")}
-              >
-                <ChevronRight size={20} color={colors.blue} />
-              </Pressable>
-            </View>
-            {reports.isLoading ? (
-              <LoadingState />
-            ) : reports.error ? (
-              <Text style={styles.notice}>
-                {apiErrorMessage(reports.error)}
-              </Text>
-            ) : term ? (
-              <View style={styles.reportRow}>
-                <View style={styles.scoreBadge}>
-                  <Text style={styles.score}>
-                    {term.grade ??
-                      (term.aggregate_percent != null
-                        ? `${Math.round(Number(term.aggregate_percent))}%`
-                        : "—")}
-                  </Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.reportTerm}>
-                    {term.term_name} · {term.academic_year_name}
-                  </Text>
-                  <Text style={styles.reportCaption}>
-                    {term.published_at
-                      ? "Published by the school"
-                      : "Publication date unavailable"}
-                  </Text>
-                </View>
-              </View>
-            ) : (
-              <Text style={styles.notice}>
-                No published report is available for this child yet.
-              </Text>
-            )}
-          </Card>
-          <Card style={styles.balance}>
-            <View style={styles.balanceIcon}>
-              <CreditCard size={18} color={colors.blue} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.balanceLabel}>Outstanding fees</Text>
-              <Text style={styles.balanceValue}>
-                {fees.isLoading
-                  ? "Loading…"
-                  : fees.data
-                    ? `${fees.data.currency ?? ""} ${Number(fees.data.outstanding_total).toLocaleString()}`.trim()
-                    : "Unavailable"}
-              </Text>
-            </View>
-            <Pressable onPress={() => router.push("/(parent)/fees")}>
-              <ChevronRight size={19} color={colors.blue} />
+          </ScrollView>
+
+          <View style={styles.sectionHeading}>
+            <Text style={styles.sectionTitle}>Recent attendance</Text>
+            <Pressable onPress={() => router.push("/(parent)/attendance")}>
+              <Text style={styles.viewAll}>View all</Text>
             </Pressable>
-          </Card>
-          <Card style={styles.summary}>
-            <View style={styles.sectionHead}>
-              <View>
-                <Text style={styles.sectionTitle}>Attendance</Text>
-                <Text style={styles.sectionCaption}>
-                  School-recorded entries
-                </Text>
-              </View>
-              <Pressable onPress={() => router.push("/(parent)/attendance")}>
-                <ChevronRight size={20} color={colors.blue} />
-              </Pressable>
-            </View>
+          </View>
+          <View style={styles.attendanceCard}>
             {attendance.isLoading ? (
-              <Text style={styles.notice}>Loading attendance…</Text>
+              <LoadingState />
             ) : attendance.error ? (
-              <Text style={styles.notice}>
+              <Text style={styles.mutedText}>
                 Attendance is unavailable right now.
               </Text>
-            ) : attendance.data?.total_recorded ? (
-              <View style={styles.attendanceTotals}>
-                <Text style={styles.attendanceValue}>
-                  <Text style={{ color: colors.success }}>
-                    {attendance.data.counts.present}
-                  </Text>{" "}
-                  present
-                </Text>
-                <Text style={styles.attendanceValue}>
-                  <Text style={{ color: colors.danger }}>
-                    {attendance.data.counts.absent}
-                  </Text>{" "}
-                  absent
-                </Text>
-                <Text style={styles.attendanceValue}>
-                  <Text style={{ color: colors.warning }}>
-                    {attendance.data.counts.late}
-                  </Text>{" "}
-                  late
-                </Text>
+            ) : attendance.data?.records.length ? (
+              <View style={styles.weekStrip}>
+                {attendance.data.records.slice(0, 5).map((record) => (
+                  <View
+                    key={`${record.date}-${record.status}`}
+                    style={styles.dayItem}
+                  >
+                    <Text style={styles.dayName}>
+                      {new Date(`${record.date}T00:00:00`).toLocaleDateString(
+                        undefined,
+                        { weekday: "short" },
+                      )}
+                    </Text>
+                    <Text style={styles.dayNumber}>
+                      {new Date(`${record.date}T00:00:00`).getDate()}
+                    </Text>
+                    <Text style={styles.dayMonth}>
+                      {new Date(`${record.date}T00:00:00`).toLocaleDateString(
+                        undefined,
+                        { month: "short" },
+                      )}
+                    </Text>
+                    <View
+                      style={[
+                        styles.attendanceMark,
+                        record.status === "present"
+                          ? styles.attendancePresent
+                          : record.status === "late"
+                            ? styles.attendanceLate
+                            : styles.attendanceAbsent,
+                      ]}
+                    >
+                      {record.status === "present" ? (
+                        <Check color="#fff" size={13} strokeWidth={3} />
+                      ) : (
+                        <Text style={styles.markText}>
+                          {record.status === "late" ? "–" : "×"}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                ))}
               </View>
             ) : (
-              <Text style={styles.notice}>No attendance records yet.</Text>
+              <Text style={styles.mutedText}>No attendance records yet.</Text>
             )}
-          </Card>
-        </>
-      ) : null}
-      <View style={styles.section}>
-        <Heading title="Coming up" />
-        {events.isLoading ? (
-          <LoadingState />
-        ) : events.error ? (
-          <EmptyState
-            title="Calendar unavailable"
-            body={apiErrorMessage(events.error)}
-            retry={() => void events.refetch()}
-          />
-        ) : events.data?.length ? (
-          events.data.slice(0, 2).map((event) => (
-            <Card key={event.id} style={styles.event}>
-              <View style={styles.eventDate}>
-                <Text style={styles.eventDay}>
-                  {new Date(`${event.starts_on}T00:00:00`).getDate()}
-                </Text>
-                <Text style={styles.eventMonth}>
-                  {new Date(`${event.starts_on}T00:00:00`)
-                    .toLocaleDateString(undefined, { month: "short" })
-                    .toUpperCase()}
-                </Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.eventTitle}>{event.title}</Text>
-                <Text style={styles.eventMeta}>
-                  {new Date(`${event.starts_on}T00:00:00`).toLocaleDateString(
-                    undefined,
-                    { weekday: "long", month: "long", day: "numeric" },
-                  )}{" "}
-                  · {event.category}
-                </Text>
-              </View>
-            </Card>
-          ))
-        ) : (
-          <Text style={styles.notice}>
-            No upcoming school events have been shared for this child.
-          </Text>
-        )}
-      </View>
-      <View style={styles.section}>
-        <Heading
-          title="Recent notification"
-          action={
-            <Pressable
-              onPress={() => router.push("/(parent)/(tabs)/notifications")}
-            >
-              <Text style={styles.viewAll}>All updates</Text>
-            </Pressable>
-          }
-        />
-        {notifications.isLoading ? (
-          <LoadingState />
-        ) : notifications.error ? (
-          <Text style={styles.notice}>
-            Notifications are unavailable right now.
-          </Text>
-        ) : latestNotification ? (
-          <Card>
-            <Text style={styles.announcementTitle}>
-              {latestNotification.title}
-            </Text>
-            <Text style={styles.announcementBody} numberOfLines={2}>
-              {latestNotification.body}
-            </Text>
-            <Text style={styles.announcementDate}>
-              {new Date(latestNotification.created_at).toLocaleString()}
-            </Text>
-          </Card>
-        ) : (
-          <Text style={styles.notice}>No recent account notifications.</Text>
-        )}
-      </View>
-      <View style={styles.section}>
-        <Heading
-          title="School announcements"
-          action={
+          </View>
+
+          <View style={styles.sectionHeading}>
+            <Text style={styles.sectionTitle}>Latest announcement</Text>
             <Pressable onPress={() => router.push("/(parent)/announcements")}>
               <Text style={styles.viewAll}>View all</Text>
             </Pressable>
-          }
-        />
-        {announcements.isLoading ? (
-          <LoadingState />
-        ) : announcements.error ? (
-          <EmptyState
-            title="Updates are unavailable"
-            body={apiErrorMessage(announcements.error)}
-            retry={() => void announcements.refetch()}
-          />
-        ) : latestAnnouncement ? (
-          <Card>
-            <View style={styles.announcementHead}>
-              <Megaphone color={colors.blue} size={18} />
-              <Text style={styles.announcementDate}>
-                {new Date(latestAnnouncement.published_at).toLocaleDateString()}
+          </View>
+          {announcements.isLoading ? (
+            <LoadingState />
+          ) : announcements.error ? (
+            <EmptyState
+              title="Updates unavailable"
+              body={apiErrorMessage(announcements.error)}
+              retry={() => void announcements.refetch()}
+            />
+          ) : latestAnnouncement ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push("/(parent)/announcements")}
+              style={styles.announcementCard}
+            >
+              <View style={styles.announcementIcon}>
+                <Megaphone color={colors.blue} size={20} />
+              </View>
+              <View style={styles.announcementInfo}>
+                <View style={styles.announcementTitleRow}>
+                  <Text style={styles.announcementTitle} numberOfLines={1}>
+                    {latestAnnouncement.title}
+                  </Text>
+                  <Text style={styles.newPill}>New</Text>
+                </View>
+                <Text style={styles.announcementBody} numberOfLines={1}>
+                  {latestAnnouncement.body}
+                </Text>
+                <Text style={styles.announcementDate}>
+                  {new Date(
+                    latestAnnouncement.published_at,
+                  ).toLocaleDateString()}
+                </Text>
+              </View>
+              <ChevronRight color={colors.mutedLight} size={19} />
+            </Pressable>
+          ) : (
+            <View style={styles.announcementCard}>
+              <View style={styles.announcementIcon}>
+                <Megaphone color={colors.blue} size={20} />
+              </View>
+              <Text style={styles.mutedText}>
+                School announcements will appear here.
               </Text>
             </View>
-            <Text style={styles.announcementTitle}>
-              {latestAnnouncement.title}
-            </Text>
-            <Text style={styles.announcementBody} numberOfLines={3}>
-              {latestAnnouncement.body}
-            </Text>
-          </Card>
-        ) : (
-          <EmptyState
-            title="No announcements yet"
-            body="School notices shared with your family will appear here."
-          />
-        )}
-      </View>
+          )}
+
+          <View style={styles.sectionHeading}>
+            <Text style={styles.sectionTitle}>Quick actions</Text>
+          </View>
+          <View style={styles.quickGrid}>
+            <QuickAction
+              icon={<BookOpenCheck color={colors.blue} size={19} />}
+              title="View grades"
+              onPress={() => router.push("/(parent)/(tabs)/academics")}
+            />
+            <QuickAction
+              icon={<CreditCard color={colors.blue} size={19} />}
+              title="Fees"
+              onPress={() => router.push("/(parent)/fees")}
+            />
+            <QuickAction
+              icon={<CalendarDays color={colors.blue} size={19} />}
+              title="Attendance"
+              onPress={() => router.push("/(parent)/attendance")}
+            />
+            <QuickAction
+              icon={<Bell color={colors.blue} size={19} />}
+              title="Updates"
+              onPress={() => router.push("/(parent)/(tabs)/notifications")}
+            />
+          </View>
+
+          {latestNotification ? (
+            <Pressable
+              onPress={() => router.push("/(parent)/(tabs)/notifications")}
+              style={styles.notificationHint}
+            >
+              <Clock3 color={colors.blue} size={17} />
+              <Text style={styles.notificationHintText} numberOfLines={1}>
+                {latestNotification.title}
+              </Text>
+              <ArrowRight color={colors.blue} size={16} />
+            </Pressable>
+          ) : null}
+        </>
+      ) : null}
+
       <View style={styles.privacy}>
-        <ShieldCheck size={16} color={colors.success} />
+        <ShieldCheck size={15} color={colors.blue} />
         <Text style={styles.privacyText}>
           Your child’s records are private to your verified family account.
         </Text>
@@ -387,14 +397,16 @@ export default function HomeScreen() {
   );
 }
 
-function QuickAction({
+function MetricCard({
   icon,
   title,
+  value,
   detail,
   onPress,
 }: {
   icon: ReactNode;
   title: string;
+  value: string;
   detail: string;
   onPress: () => void;
 }) {
@@ -402,151 +414,314 @@ function QuickAction({
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => [styles.quick, pressed && { opacity: 0.8 }]}
+      style={styles.metricCard}
     >
-      <View style={styles.quickIcon}>{icon}</View>
-      <Text style={styles.quickTitle}>{title}</Text>
-      <Text style={styles.quickDetail}>{detail}</Text>
-      <ChevronRight
-        size={15}
-        color={colors.mutedLight}
-        style={styles.quickArrow}
-      />
+      <View style={styles.metricIcon}>{icon}</View>
+      <Text style={styles.metricTitle} numberOfLines={1}>
+        {title}
+      </Text>
+      <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit>
+        {value}
+      </Text>
+      <Text style={styles.metricDetail} numberOfLines={1}>
+        {detail}
+      </Text>
     </Pressable>
   );
 }
+
+function QuickAction({
+  icon,
+  title,
+  onPress,
+}: {
+  icon: ReactNode;
+  title: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={styles.quickAction}
+    >
+      <View style={styles.quickIcon}>{icon}</View>
+      <Text style={styles.quickTitle}>{title}</Text>
+    </Pressable>
+  );
+}
+
+function initials(name?: string) {
+  return (name ?? "A")
+    .split(" ")
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+function dayGreeting() {
+  const hour = new Date().getHours();
+  return hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+}
+
 const styles = StyleSheet.create({
-  welcome: {
+  screen: { paddingHorizontal: 17, paddingTop: 9, paddingBottom: 26, gap: 13 },
+  topbar: { flexDirection: "row", alignItems: "center", height: 43, gap: 8 },
+  topbarButton: { width: 34, height: 38, justifyContent: "center" },
+  logo: { width: 94, height: 30 },
+  topbarRight: {
+    marginLeft: "auto",
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    marginBottom: 4,
+    gap: 15,
   },
-  school: { color: colors.blue, fontSize: 12, fontWeight: "700" },
+  bellButton: {
+    width: 30,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bellDot: {
+    position: "absolute",
+    right: 2,
+    top: 3,
+    width: 8,
+    height: 8,
+    borderRadius: 5,
+    backgroundColor: colors.blue,
+    borderWidth: 1,
+    borderColor: "#fff",
+  },
+  avatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 22,
+    backgroundColor: colors.blueSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#D5E4FF",
+  },
+  avatarText: { color: colors.blue, fontSize: 12, fontWeight: "800" },
+  welcome: { paddingTop: 6, gap: 0 },
   greeting: {
     color: colors.ink,
-    fontSize: 26,
-    lineHeight: 32,
-    fontWeight: "800",
-    letterSpacing: -0.6,
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: "600",
   },
-  caption: { color: colors.muted, fontSize: 13, marginTop: 3 },
-  profile: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.pill,
+  parentName: {
+    color: colors.ink,
+    fontSize: 22,
+    lineHeight: 27,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+  },
+  caption: { color: colors.muted, fontSize: 12, marginTop: 6 },
+  childPickerRow: { gap: 8 },
+  childCard: {
+    width: 320,
+    minHeight: 76,
+    borderRadius: 17,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 10,
+  },
+  childCardActive: { borderColor: "#D8E6FF" },
+  childAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 27,
+    backgroundColor: colors.blueSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#F2F7FF",
+  },
+  childInfo: { flex: 1, gap: 5 },
+  childNameRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  childName: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "700",
+    flexShrink: 1,
+  },
+  classPill: {
+    color: colors.blue,
+    backgroundColor: colors.blueSoft,
+    borderRadius: 9,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    fontSize: 9,
+    fontWeight: "700",
+    overflow: "hidden",
+  },
+  schoolName: { color: colors.muted, fontSize: 10 },
+  metricsRow: { gap: 9, paddingRight: 4 },
+  metricCard: {
+    width: 82,
+    minHeight: 127,
+    borderRadius: 15,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    paddingHorizontal: 7,
+    paddingVertical: 10,
+  },
+  metricIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 20,
+    backgroundColor: colors.blueSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 7,
+  },
+  metricTitle: {
+    color: colors.muted,
+    fontSize: 9,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  metricValue: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 7,
+    maxWidth: "100%",
+  },
+  metricDetail: {
+    color: colors.blue,
+    fontSize: 9,
+    fontWeight: "600",
+    textAlign: "center",
+    marginTop: 4,
+  },
+  sectionHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 1,
+  },
+  sectionTitle: { color: colors.ink, fontSize: 14, fontWeight: "700" },
+  viewAll: { color: colors.blue, fontSize: 11, fontWeight: "600" },
+  attendanceCard: {
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 9,
+    paddingVertical: 13,
+    minHeight: 94,
+    justifyContent: "center",
+  },
+  weekStrip: { flexDirection: "row", justifyContent: "space-between", gap: 4 },
+  dayItem: { alignItems: "center", minWidth: 42, gap: 1 },
+  dayName: { color: colors.muted, fontSize: 9 },
+  dayNumber: { color: colors.ink, fontSize: 12, fontWeight: "700" },
+  dayMonth: { color: colors.mutedLight, fontSize: 9 },
+  attendanceMark: {
+    width: 19,
+    height: 19,
+    borderRadius: 10,
+    marginTop: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  attendancePresent: { backgroundColor: colors.blue },
+  attendanceLate: { backgroundColor: "#DCEAFF" },
+  attendanceAbsent: { backgroundColor: "#EFF3F9" },
+  markText: {
+    color: colors.blueDeep,
+    fontWeight: "800",
+    fontSize: 13,
+    lineHeight: 15,
+  },
+  mutedText: { color: colors.muted, fontSize: 11, lineHeight: 17 },
+  announcementCard: {
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 74,
+  },
+  announcementIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
     backgroundColor: colors.blueSoft,
     alignItems: "center",
     justifyContent: "center",
   },
-  profileText: { fontWeight: "800", color: colors.blue, fontSize: 13 },
-  section: { gap: 8, marginTop: 6 },
-  quickGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  quick: {
-    width: "48%",
-    flexGrow: 1,
-    minHeight: 128,
+  announcementInfo: { flex: 1, gap: 4 },
+  announcementTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  announcementTitle: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "700",
+    flexShrink: 1,
+  },
+  newPill: {
+    color: colors.blue,
+    backgroundColor: colors.blueSoft,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    fontSize: 8,
+    fontWeight: "700",
+    overflow: "hidden",
+  },
+  announcementBody: { color: colors.muted, fontSize: 10 },
+  announcementDate: { color: colors.mutedLight, fontSize: 9 },
+  quickGrid: { flexDirection: "row", gap: 8 },
+  quickAction: {
+    flex: 1,
+    minHeight: 77,
+    padding: 8,
+    borderRadius: 14,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: 14,
-    gap: 7,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
   },
   quickIcon: {
     width: 34,
     height: 34,
-    borderRadius: 11,
-    backgroundColor: colors.blueSoft,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-  },
-  quickTitle: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: "700",
-    marginTop: 3,
-  },
-  quickDetail: { color: colors.muted, fontSize: 11 },
-  quickArrow: { position: "absolute", right: 12, top: 15 },
-  summary: { padding: 16 },
-  sectionHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  sectionTitle: { color: colors.ink, fontSize: 15, fontWeight: "700" },
-  sectionCaption: { color: colors.muted, fontSize: 12, marginTop: 2 },
-  reportRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingTop: 13,
-  },
-  scoreBadge: {
-    width: 50,
-    height: 50,
-    borderRadius: 15,
     backgroundColor: colors.blueSoft,
-    alignItems: "center",
-    justifyContent: "center",
   },
-  score: { color: colors.blueDeep, fontSize: 16, fontWeight: "800" },
-  reportTerm: { color: colors.ink, fontWeight: "700", fontSize: 13 },
-  reportCaption: { color: colors.muted, fontSize: 11, marginTop: 4 },
-  notice: { color: colors.muted, fontSize: 13, lineHeight: 20, paddingTop: 8 },
-  event: { flexDirection: "row", alignItems: "center", gap: 12, padding: 13 },
-  eventDate: {
-    width: 44,
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: colors.blueSoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  eventDay: { color: colors.blueDeep, fontSize: 17, fontWeight: "800" },
-  eventMonth: { color: colors.blue, fontSize: 9, fontWeight: "800" },
-  eventTitle: { color: colors.ink, fontSize: 13, fontWeight: "700" },
-  eventMeta: {
-    color: colors.muted,
-    fontSize: 10,
-    marginTop: 4,
-    textTransform: "capitalize",
-  },
-  balance: { flexDirection: "row", alignItems: "center", padding: 14 },
-  attendanceTotals: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 14,
-    paddingTop: 12,
-  },
-  attendanceValue: { color: colors.muted, fontSize: 12, fontWeight: "600" },
-  balanceIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: colors.blueSoft,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  balanceLabel: { color: colors.muted, fontSize: 12 },
-  balanceValue: {
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: "800",
-    marginTop: 3,
-  },
-  viewAll: { color: colors.blue, fontSize: 12, fontWeight: "700" },
-  announcementHead: { flexDirection: "row", alignItems: "center", gap: 8 },
-  announcementDate: { color: colors.muted, fontSize: 11 },
-  announcementTitle: { color: colors.ink, fontWeight: "700", fontSize: 15 },
-  announcementBody: { color: colors.muted, fontSize: 13, lineHeight: 20 },
-  privacy: {
+  quickTitle: { color: colors.ink, fontSize: 9, fontWeight: "600" },
+  notificationHint: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingVertical: 4,
+    borderRadius: 13,
+    backgroundColor: "#EEF5FF",
+    borderWidth: 1,
+    borderColor: "#DDEAFF",
+    padding: 11,
   },
-  privacyText: { flex: 1, color: colors.muted, fontSize: 11, lineHeight: 16 },
+  notificationHintText: { color: colors.ink, fontSize: 10, flex: 1 },
+  privacy: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingVertical: 3,
+    marginTop: 1,
+  },
+  privacyText: { flex: 1, color: colors.muted, fontSize: 9, lineHeight: 14 },
 });
