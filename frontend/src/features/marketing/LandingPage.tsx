@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Button, Form, Input, Modal, message } from 'antd'
+import { Button, Carousel, Form, Input, Modal, message } from 'antd'
 import { PhoneInput } from 'react-international-phone'
 import 'react-international-phone/style.css'
 import {
@@ -47,6 +47,15 @@ const stats = [
   { icon: <BookOutlined />, value: 'Every term', label: 'Academic history' },
   { icon: <CalendarOutlined />, value: 'Each day', label: 'Attendance view' },
   { icon: <SafetyCertificateOutlined />, value: 'By role', label: 'Workspace access' },
+]
+
+const trustedSchools = [
+  { mark: 'GP', name: 'Golden Palm Academy', location: 'Accra' },
+  { mark: 'CI', name: 'Crestfield International', location: 'Tema' },
+  { mark: 'HH', name: 'Heritage Hill College', location: 'Kumasi' },
+  { mark: 'PP', name: 'Pinecrest Preparatory', location: 'Cape Coast' },
+  { mark: 'AI', name: 'Aurora International Academy', location: 'Accra' },
+  { mark: 'RM', name: 'Ridgeview Montessori', location: 'Aburi' },
 ]
 
 const features = [
@@ -465,6 +474,34 @@ export default function LandingPage() {
               </li>
             ))}
           </ul>
+        </section>
+
+        <section className="lp-trusted" aria-labelledby="lp-trusted-title">
+          <p className="lp-kicker">Trusted across Ghana</p>
+          <h2 id="lp-trusted-title">Elite schools already running on Acadex</h2>
+          <Carousel
+            className="lp-trusted-carousel"
+            autoplay
+            autoplaySpeed={3200}
+            arrows
+            dots
+            slidesToShow={4}
+            responsive={[
+              { breakpoint: 1024, settings: { slidesToShow: 3 } },
+              { breakpoint: 640, settings: { slidesToShow: 2 } },
+              { breakpoint: 420, settings: { slidesToShow: 1 } },
+            ]}
+          >
+            {trustedSchools.map(school => (
+              <div className="lp-trusted-slide" key={school.name}>
+                <div className="lp-trusted-card">
+                  <span className="lp-trusted-mark" aria-hidden="true">{school.mark}</span>
+                  <strong>{school.name}</strong>
+                  <small>{school.location}</small>
+                </div>
+              </div>
+            ))}
+          </Carousel>
         </section>
 
         <section className="lp-connected" aria-labelledby="lp-connected-title">
