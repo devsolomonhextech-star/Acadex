@@ -162,18 +162,18 @@ const mockNav = [
 const steps = [
   {
     n: '1',
-    title: 'Create your account',
-    copy: 'Sign up in minutes and set up your school workspace.',
+    title: 'Walk through it with us',
+    copy: 'Tell us how your school works. We’ll show you the features that matter to your office and teaching staff.',
   },
   {
     n: '2',
-    title: 'Choose your student plan',
-    copy: 'Select the student places you need at GH₵3 per student each month.',
+    title: 'Bring your records together',
+    copy: 'We help import your students, classes and fee records, then configure Acadex for your school.',
   },
   {
     n: '3',
-    title: 'Bring everyone together',
-    copy: 'Invite your team, add students and connect families through the parent portal.',
+    title: 'Get your team comfortable',
+    copy: 'Staff training and local support are included. Use your first three months to settle into a new routine.',
   },
 ]
 
@@ -654,26 +654,21 @@ export default function LandingPage() {
         </section>
 
         {/* -------------------------------------------------------------- how */}
-        <section id="how" className="lp-section">
-          <div className="lp-section-head center">
-            <p className="lp-kicker">How it works</p>
-            <h2>Get started in three steps.</h2>
-            <p>Set up your school, invite your team and start managing — it’s that simple.</p>
+        <section id="how" className="lp-setup-section" aria-labelledby="lp-setup-title">
+          <div className="lp-setup-inner">
+            <div className="lp-setup-heading">
+              <h2 id="lp-setup-title">Start with your school.<br/>We’ll help with the setup.</h2>
+              <p>You don’t need to figure it out alone. Our team helps bring your records across and gets your staff ready to use Acadex.</p>
+            </div>
+            <ol className="lp-setup-steps">
+              {steps.map(step => <li key={step.n}>
+                <span className="lp-setup-number">{step.n}</span>
+                <h3>{step.title}</h3>
+                <p>{step.copy}</p>
+              </li>)}
+            </ol>
+            <div className="lp-setup-footer"><p>Already have your records in Excel? We can help you move them.</p><button type="button" onClick={openDemo}>Arrange a walkthrough <ArrowRightOutlined/></button></div>
           </div>
-          <ol className="lp-steps">
-            {steps.map((step, index) => (
-              <li key={step.n}>
-                <span className="lp-step-num">{step.n}</span>
-                <div>
-                  <h3>{step.title}</h3>
-                  <p>{step.copy}</p>
-                </div>
-                {index < steps.length - 1 && (
-                  <ArrowRightOutlined className="lp-step-arrow" aria-hidden="true" />
-                )}
-              </li>
-            ))}
-          </ol>
         </section>
 
         {/* --------------------------------------------------------- pricing + families */}
