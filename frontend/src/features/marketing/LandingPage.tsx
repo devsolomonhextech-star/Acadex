@@ -476,6 +476,34 @@ export default function LandingPage() {
           <div className="lp-connected-offer"><p><strong>Your first 3 months are free.</strong><span>Try the full Acadex system with your school. No card required.</span></p><a href="#pricing">See how pricing works <ArrowRightOutlined/></a></div>
         </section>
 
+        <section className="lp-school-overview" aria-labelledby="lp-school-overview-title">
+          <div className="lp-school-types" aria-label="Acadex is designed for different kinds of schools">
+            <span className="lp-school-types-title">Made for schools of every size</span>
+            <div>{['Basic schools', 'Academies', 'Junior high', 'Senior high', 'Montessori'].map((type, index) => <span className="lp-school-type" key={type}><i aria-hidden="true">{['B', 'A', 'J', 'S', 'M'][index]}</i>{type}</span>)}</div>
+          </div>
+          <div className="lp-school-overview-main">
+            <div className="lp-school-overview-intro">
+              <h2 id="lp-school-overview-title">A shared place for the whole school.</h2>
+              <p>The office, classroom and home all depend on the same information. Keep it connected, without another spreadsheet to update.</p>
+              <a href="#product">See all features <ArrowRightOutlined/></a>
+            </div>
+            <div className="lp-school-benefits">
+              <article>
+                <WalletOutlined className="lp-school-benefit-icon"/>
+                <div><h3>Know what’s been paid. See what’s still due.</h3><p>Bring term bills, discounts, receipts and arrears into one student account. Give parents online payment options and let authorised cashiers record collections from a phone.</p><div className="lp-school-benefit-links"><a href="#product">Student records</a><a href="#pricing">Fees and payments</a></div></div>
+              </article>
+              <article>
+                <BookOutlined className="lp-school-benefit-icon"/>
+                <div><h3>From the lesson to the term report.</h3><p>Keep lessons, assessments and results connected. Teachers can manage class work, review student progress and prepare term reports without entering the same scores again.</p><div className="lp-school-benefit-links"><a href="#product">Lessons and exams</a><a href="#insights">Assessment and reports</a></div></div>
+              </article>
+              <article>
+                <MessageOutlined className="lp-school-benefit-icon"/>
+                <div><h3>Answers for parents, without another office visit.</h3><p>Families can check their children’s balances, attendance and published reports from their phone. School announcements, messages and payment history stay within reach.</p><div className="lp-school-benefit-links"><a href="#product">Explore the parent portal</a></div></div>
+              </article>
+            </div>
+          </div>
+        </section>
+
         {/* ---------------------------------------------------------- features */}
         <section id="product" className="lp-section">
           <div className="lp-section-head center">
