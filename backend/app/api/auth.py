@@ -7,20 +7,34 @@ from uuid import UUID, uuid4
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select, update
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, Field
 
 from app.db import get_session
 from app.domain.subscriptions import trial_end_for
-from app.models import AuditEvent, MembershipRole, RefreshSession, School, SchoolMembership, SchoolSubscription, User
-from app.rate_limit import check_login_lockout, clear_login_failures, limit_login, limit_signup, record_login_failure
+from app.models import (
+    AuditEvent,
+    MembershipRole,
+    RefreshSession,
+    School,
+    SchoolMembership,
+    SchoolSubscription,
+    User,
+)
+from app.rate_limit import (
+    check_login_lockout,
+    clear_login_failures,
+    limit_login,
+    limit_signup,
+    record_login_failure,
+)
 from app.schemas import LoginRequest, SchoolRegistration, TokenResponse, UserContextResponse
 from app.security import (
-    create_access_token,
     authenticator_qr_svg,
     authenticator_uri,
+    create_access_token,
     decode_access_token,
     decrypt_totp_secret,
     encrypt_totp_secret,
@@ -153,9 +167,11 @@ async def register_school(payload: SchoolRegistration, session: Annotated[AsyncS
 @router.post("/auth/login", response_model=LoginResponse, dependencies=[Depends(check_login_lockout), Depends(limit_login)])
 async def login(payload: LoginRequest, request: Request, response: Response,
                 session: Annotated[AsyncSession, Depends(get_session)]) -> LoginResponse:
-    school_result = await session.execute(select(School).where(School.slug == payload.school_slug))
+    school_slug = payload.school_slug.strip().lower()
+    email = str(payload.email).strip().lower()
+    school_result = await session.execute(select(School).where(School.slug == school_slug))
     school = school_result.scalar_one_or_none()
-    user_result = await session.execute(select(User).where(User.email == str(payload.email)))
+    user_result = await session.execute(select(User).where(func.lower(User.email) == email))
     user = user_result.scalar_one_or_none()
     # Verify a fixed-cost dummy hash on unknown users to reduce account enumeration timing.
     valid_password = verify_password(payload.password, user.password_hash if user else _dummy_password_hash())

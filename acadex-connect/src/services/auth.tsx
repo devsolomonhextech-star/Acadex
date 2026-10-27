@@ -103,8 +103,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
         requires_two_factor?: boolean;
         challenge_token?: string;
       }>("/auth/login", {
-        school_slug: school.trim(),
-        email: email.trim(),
+        school_slug: school.trim().toLowerCase(),
+        email: email.trim().toLowerCase(),
         password,
       });
       if (data.requires_two_factor && data.challenge_token)
