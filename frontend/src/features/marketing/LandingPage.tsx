@@ -177,6 +177,15 @@ const steps = [
   },
 ]
 
+const mobileBenefits = [
+  { icon: <PhoneOutlined />, title: 'One view of your children', copy: 'Guardians can switch between their linked children and open the school records available to their family account.' },
+  { icon: <MessageOutlined />, title: 'School updates within reach', copy: 'Read school announcements and account notifications from a phone, wherever the day takes you.' },
+  { icon: <TrophyOutlined />, title: 'Reports when you need them', copy: 'Open published term results and download a clear report card to keep or print.' },
+  { icon: <CalendarOutlined />, title: 'A clear view of the school day', copy: 'Teachers can check their timetable and see lessons, classes and rooms from their phone.' },
+  { icon: <CheckCircleFilled />, title: 'Attendance with accountability', copy: 'The assigned class teacher can record attendance for their class and keep the register up to date.' },
+  { icon: <SafetyCertificateOutlined />, title: 'Access for the right role', copy: 'Staff tools follow assigned permissions. Guardians only see students linked to their account.' },
+]
+
 const securityChecks = [
   'Each school works in its own workspace',
   'Staff access follows assigned roles',
@@ -668,6 +677,19 @@ export default function LandingPage() {
               </li>)}
             </ol>
             <div className="lp-setup-footer"><p>Already have your records in Excel? We can help you move them.</p><button type="button" onClick={openDemo}>Arrange a walkthrough <ArrowRightOutlined/></button></div>
+          </div>
+        </section>
+
+        <section className="lp-mobile-benefits" aria-labelledby="lp-mobile-benefits-title">
+          <div className="lp-mobile-benefits-inner">
+            <div className="lp-mobile-benefits-heading"><span><HeartFilled/> Benefits</span><h2 id="lp-mobile-benefits-title">Why mobile access matters</h2><p>Keep school, teachers and families connected when they’re away from a desk.</p></div>
+            <div className="lp-mobile-benefits-grid">
+              {mobileBenefits.map(benefit => <article key={benefit.title}>
+                <span className="lp-mobile-benefit-icon">{benefit.icon}</span>
+                <h3>{benefit.title}</h3>
+                <p>{benefit.copy}</p>
+              </article>)}
+            </div>
           </div>
         </section>
 
