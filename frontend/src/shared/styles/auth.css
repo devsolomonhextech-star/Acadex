@@ -4,3 +4,29 @@
 .login-lockout-copy{display:flex;flex-direction:column;gap:10px;color:#5f6b83;font-size:14px;line-height:1.6}.login-lockout-copy p{margin:0}.login-lockout-copy span{color:#7c879b;font-size:13px}.login-lockout-copy strong{font:700 25px Manrope,sans-serif;letter-spacing:.04em;color:#c14c58;font-variant-numeric:tabular-nums}
 
 .auth-brand{width:max-content;max-width:100%;padding:8px 12px;border-radius:11px;background:#fff;box-shadow:0 8px 24px #121e4a2b}.auth-brand img{display:block;width:174px;max-width:100%;height:auto}.auth-mobile-brand{width:max-content;max-width:100%;padding:7px 10px;border:1px solid #e8ebf2;border-radius:10px;background:#fff}.auth-mobile-brand img{display:block;width:154px;max-width:100%;height:auto}
+
+/* ========================================= Acadex auth — landing visual pass
+   Figtree type, pill submit buttons, 12px inputs, tinted kicker badge and a
+   handwritten accent on the brand headline — same language as the landing. */
+.auth-layout,.auth-main,.auth-card,.auth-brand-panel,.auth-loading{font-family:'Figtree Variable',Figtree,'DM Sans',sans-serif}
+.auth-card h2{font-family:'Figtree Variable',Figtree,sans-serif;font-weight:800;letter-spacing:-.03em;font-size:27px;color:#0f1c3f}
+.brand-copy h1{font-family:'Figtree Variable',Figtree,sans-serif;font-weight:800;letter-spacing:-.03em}
+.auth-script{font-family:'Gochi Hand',cursive;font-style:normal;font-weight:400;color:#aebcff;font-size:1.14em;letter-spacing:0;padding-bottom:.04em}
+.auth-card-kicker{display:inline-flex;margin-bottom:12px;padding:6px 13px;border-radius:999px;background:#eef3ff;color:#1c3aa8;font-size:11px;font-weight:800;letter-spacing:.13em}
+.auth-form>label,.password-label label,.register-field>label{color:#3d4763;font-size:12.5px;font-weight:600}
+.auth-form .ant-input-affix-wrapper,.auth-form>.ant-input-affix-wrapper,.register-field .ant-input-affix-wrapper,.register-field>.ant-input-affix-wrapper{min-height:44px;border-radius:12px;border-color:#e2e7f4}
+.auth-form>.ant-input,.register-field>.ant-input{min-height:44px;border-radius:12px}
+.auth-form .ant-input-affix-wrapper-focused,.register-field .ant-input-affix-wrapper-focused{border-color:#3d63ea;box-shadow:0 0 0 3px rgba(61,99,234,.14)}
+.auth-submit{height:46px!important;margin-top:12px;border-radius:999px!important;font-size:14.5px!important;font-weight:700!important;background:linear-gradient(135deg,#3d63ea,#2f52d8)!important;border:0!important;box-shadow:0 14px 28px -16px rgba(47,91,224,.8)!important;transition:transform .16s,box-shadow .16s,background .16s}
+.auth-submit:hover,.auth-submit:focus{background:linear-gradient(135deg,#3559dd,#2848c6)!important;color:#fff!important;transform:translateY(-2px)}
+.auth-submit:active{transform:translateY(0)}
+.quiet-link{color:#2f5be0}
+.create-account{color:#2f5be0;font-size:13px;font-weight:700}
+.auth-security .anticon{color:#2f5be0}
+.auth-alert{border-radius:12px}
+.auth-divider{color:#9aa3b8}
+.register-form .ant-input-group-addon{border-radius:12px 0 0 12px;border-color:#e2e7f4}
+.register-form .ant-input-group .ant-input-affix-wrapper{border-radius:0 12px 12px 0!important}
+.register-card .back-link{color:#6b7490;font-weight:600}
+.auth-footer a{color:#2f5be0}
+@media(max-width:480px){.auth-card h2{font-size:23px}.auth-submit{height:44px!important}}

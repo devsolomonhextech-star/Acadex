@@ -19,10 +19,7 @@ import {
   MenuOutlined,
   MessageOutlined,
   PhoneOutlined,
-  ReadOutlined,
   SafetyCertificateOutlined,
-  SearchOutlined,
-  SettingOutlined,
   TeamOutlined,
   TrophyOutlined,
   WalletOutlined,
@@ -149,25 +146,6 @@ const payments = [
   { name: 'Esi Boateng', amount: 'GHS 1,200', status: 'Pending' },
 ]
 
-const activityRows = [
-  { student: 'Kwame Mensah', cls: 'Grade 7A', event: 'Attendance · Present', time: '08:04 AM' },
-  { student: 'Abena Osei', cls: 'Grade 8B', event: 'Assessment · 82%', time: '08:20 AM' },
-  { student: 'Kofi Agyemang', cls: 'Grade 6A', event: 'Fee payment', time: '07:54 AM' },
-  { student: 'Esi Boateng', cls: 'Grade 9C', event: 'Attendance · Present', time: '07:48 AM' },
-]
-
-const mockNav = [
-  { icon: <DashboardOutlined />, label: 'Overview', active: true },
-  { icon: <TeamOutlined />, label: 'Students' },
-  { icon: <CalendarOutlined />, label: 'Attendance' },
-  { icon: <ReadOutlined />, label: 'Assessments' },
-  { icon: <TrophyOutlined />, label: 'Results' },
-  { icon: <WalletOutlined />, label: 'Fees' },
-  { icon: <ClockCircleOutlined />, label: 'Timetable' },
-  { icon: <MessageOutlined />, label: 'Communication' },
-  { icon: <SettingOutlined />, label: 'Settings' },
-]
-
 const steps = [
   {
     n: '1',
@@ -274,73 +252,6 @@ function PerformanceChart({ points }: { points: readonly number[] }) {
   )
 }
 
-function HeroDashboard() {
-  return (
-    <div className="lp-dash" aria-hidden="true">
-      <aside className="lp-dash-side">
-        <div className="lp-dash-brand">
-          <img src="/brand/acadex-logo.png" alt="" style={{ height: 24, width: 'auto' }} />
-        </div>
-        <ul>
-          {mockNav.map(item => (
-            <li key={item.label} className={item.active ? 'on' : undefined}>
-              {item.icon}{item.label}
-            </li>
-          ))}
-        </ul>
-      </aside>
-      <div className="lp-dash-main">
-        <div className="lp-dash-top">
-          <div>
-            <strong>Good morning, Ama</strong>
-            <small>Sample school · Week 6 · Term 2</small>
-          </div>
-          <div className="lp-dash-search"><SearchOutlined /> Search students, classes…</div>
-        </div>
-        <div className="lp-dash-stats">
-          <article>
-            <span className="lp-chip blue"><TeamOutlined /></span>
-            <small>Students</small>
-            <strong>428</strong>
-            <em>+12 this term</em>
-          </article>
-          <article>
-            <span className="lp-chip green"><CalendarOutlined /></span>
-            <small>Attendance</small>
-            <strong>96%</strong>
-            <em>+3.5% this week</em>
-          </article>
-          <article>
-            <span className="lp-chip gold"><WalletOutlined /></span>
-            <small>Fees collected</small>
-            <strong>GHS 84k</strong>
-            <em>Term 2 to date</em>
-          </article>
-          <article>
-            <span className="lp-chip red"><ClockCircleOutlined /></span>
-            <small>Missed payments</small>
-            <strong>18</strong>
-            <em>+4 vs last term</em>
-          </article>
-        </div>
-        <div className="lp-dash-activity">
-          <header>Recent activity</header>
-          <div className="lp-dash-table">
-            <div className="lp-dash-row head">
-              <span>Student</span><span>Class</span><span>Event</span><span>Time</span>
-            </div>
-            {activityRows.map(row => (
-              <div key={row.student} className="lp-dash-row">
-                <span>{row.student}</span><span>{row.cls}</span><span>{row.event}</span><span>{row.time}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function ParentMobilePreview() {
   return <div className="lp-parent-phone" aria-label="Acadex parent portal mobile preview">
     <div className="lp-parent-phone-shell">
@@ -401,6 +312,11 @@ export default function LandingPage() {
       <a className="lp-skip" href="#main">Skip to content</a>
 
       <header className="lp-nav">
+        <div className="lp-nav-top">
+          <a href="https://wa.me/233536702357" target="_blank" rel="noreferrer">
+            Call/WhatsApp <PhoneOutlined /> +233 53 670 2357
+          </a>
+        </div>
         <div className="lp-nav-inner">
           <Link to="/" className="lp-brand" aria-label="Acadex home">
             <img src="/brand/acadex-logo.png" alt="Acadex" style={{ height: 34, width: 'auto' }} />
@@ -433,7 +349,7 @@ export default function LandingPage() {
               <span className="lp-badge">
                 <CheckCircleFilled /> Private workspace for every school
               </span>
-              <h1>School operations,<br />kept in one clear place.</h1>
+              <h1>School operations,<br />kept in <em className="lp-script">one clear place.</em></h1>
               <p className="lp-lead">
                 Acadex brings records, attendance, assessments, results, timetable, and fees into a
                 single private workspace — so the everyday work of your school stays together, and
@@ -453,10 +369,21 @@ export default function LandingPage() {
             </div>
 
             <div className="lp-hero-visual">
-              <div className="lp-hero-photo">
+              <div className="lp-hero-card">
+                <span className="lp-hero-blob blue" aria-hidden="true" />
+                <span className="lp-hero-blob violet" aria-hidden="true" />
+                <span className="lp-hero-blob green" aria-hidden="true" />
+                <div className="lp-hero-photo">
                   <img src="/landing/teacher-laptop.jpg" alt="A Ghanaian headmistress standing with her pupils" />
+                </div>
+                <div className="lp-hero-chip card">
+                  <span className="lp-hero-chip-icon"><TeamOutlined /></span>
+                  <div><strong>One place</strong><small>School-wide records</small></div>
+                </div>
+                <div className="lp-hero-chip pill"><CheckCircleFilled /> 96% attendance</div>
+                <span className="lp-hero-orb orb-shield" aria-hidden="true"><SafetyCertificateOutlined /></span>
+                <span className="lp-hero-orb orb-wallet" aria-hidden="true"><WalletOutlined /></span>
               </div>
-              <HeroDashboard />
             </div>
           </div>
         </section>
@@ -507,7 +434,7 @@ export default function LandingPage() {
         <section className="lp-connected" aria-labelledby="lp-connected-title">
           <div className="lp-connected-main">
             <div className="lp-connected-copy">
-              <h2 id="lp-connected-title">One school.<br/>Everyone connected.</h2>
+              <h2 id="lp-connected-title">One school.<br/>Everyone <em className="lp-script">connected.</em></h2>
               <p>Give the office, teachers and families a shared place to stay up to date.</p>
             </div>
             <div className="lp-connected-network" aria-label="Acadex connects the office, teachers and families">
@@ -554,7 +481,7 @@ export default function LandingPage() {
         <section id="product" className="lp-section">
           <div className="lp-section-head center">
             <p className="lp-kicker">Features</p>
-            <h2>Everything your school needs.<br />Nothing you don’t.</h2>
+            <h2>Everything your school needs.<br /><em className="lp-script">Nothing you don’t.</em></h2>
             <p>
               Powerful, easy-to-use tools designed for modern schools. From student records to
               parent communication, everything works together.
@@ -569,7 +496,8 @@ export default function LandingPage() {
                   <p>{feature.copy}</p>
                 </div>
                 <div className="lp-feature-photo">
-                    <img src={feature.img} alt={feature.alt} loading="lazy" />
+                  <img src={feature.img} alt={feature.alt} loading="lazy" />
+                  <span className="lp-feature-float"><CheckOutlined />{feature.title}</span>
                 </div>
               </article>
             ))}
@@ -583,7 +511,7 @@ export default function LandingPage() {
           </div>
           <div className="lp-split-copy">
             <p className="lp-kicker">For teachers &amp; administrators</p>
-            <h2>Less paperwork.<br />More time for teaching.</h2>
+            <h2>Less paperwork.<br />More time for <em className="lp-script">teaching.</em></h2>
             <p>
               Acadex removes the routine admin work so teachers and school leaders can focus on
               what matters most — student success.
@@ -703,12 +631,12 @@ export default function LandingPage() {
         <section id="how" className="lp-setup-section" aria-labelledby="lp-setup-title">
           <div className="lp-setup-inner">
             <div className="lp-setup-heading">
-              <h2 id="lp-setup-title">Start with your school.<br/>We’ll help with the setup.</h2>
+              <h2 id="lp-setup-title">Start with your school.<br/>We’ll help with <em className="lp-script">the setup.</em></h2>
               <p>You don’t need to figure it out alone. Our team helps bring your records across and gets your staff ready to use Acadex.</p>
             </div>
             <ol className="lp-setup-steps">
               {steps.map(step => <li key={step.n}>
-                <span className="lp-setup-number">{step.n}</span>
+                <span className="lp-step-script">Step {step.n}</span>
                 <h3>{step.title}</h3>
                 <p>{step.copy}</p>
               </li>)}
@@ -832,7 +760,7 @@ export default function LandingPage() {
         <section id="cta" className="lp-cta-band">
           <div>
             <p className="lp-cta-kicker">Ready to get started?</p>
-            <h2>Bring your school’s work together.</h2>
+            <h2>Bring your school’s work <em className="lp-script">together.</em></h2>
             <p>
               Give your school a clearer way to organize records, support students and keep your
               team aligned.
