@@ -19,6 +19,7 @@ from app.api.family import router as family_router
 from app.api.finance import router as finance_router
 from app.api.grading import router as grading_router
 from app.api.guardians import router as guardians_router
+from app.api.mobile import router as mobile_router
 from app.api.overview import router as overview_router
 from app.api.results import router as results_router
 from app.api.staff import router as staff_router
@@ -75,6 +76,7 @@ app.include_router(overview_router)
 app.include_router(student_support_router)
 app.include_router(subscriptions_router)
 app.include_router(tasks_router)
+app.include_router(mobile_router)
 app.include_router(demo_seed_router)
 
 

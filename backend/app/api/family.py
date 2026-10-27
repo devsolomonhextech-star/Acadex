@@ -1,15 +1,16 @@
 """Parent-facing access to linked students and published academic reports."""
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import models
 from app.api.auth import TenantContext, require_roles
-from app.db import get_session
 from app.api.students import StudentResponse
+from app.db import get_session
 
 router = APIRouter(prefix="/api/v1/family", tags=["family"])
 
@@ -131,3 +132,151 @@ async def view_child_results(
     from app.api.results import get_report_card
     card = await get_report_card(student_id, term_id, context, session)
     return card.model_dump(mode="json")
+
+
+@router.get("/attendance/{student_id}")
+async def child_attendance(
+    student_id: UUID,
+    context: Annotated[TenantContext, Depends(require_roles(models.MembershipRole.PARENT))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    """Return only attendance rows for a student linked to this guardian."""
+    await _guardian_for_child(session, context, student_id)
+    rows = (await session.execute(
+        select(models.AttendanceRecord, models.AttendanceSession.attendance_date)
+        .join(models.AttendanceSession,
+              (models.AttendanceSession.id == models.AttendanceRecord.session_id)
+              & (models.AttendanceSession.school_id == models.AttendanceRecord.school_id))
+        .where(models.AttendanceRecord.school_id == context.school_id,
+               models.AttendanceRecord.student_id == student_id)
+        .order_by(models.AttendanceSession.attendance_date.desc())
+        .limit(180)
+    )).all()
+    records = [{"date": attendance_date, "status": record.status, "note": record.note}
+               for record, attendance_date in rows]
+    counts = {key: sum(1 for record in records if record["status"] == key)
+              for key in ("present", "absent", "late", "excused")}
+    return {"records": records, "counts": counts, "total_recorded": len(records)}
+
+
+@router.get("/fees/{student_id}")
+async def child_fees(
+    student_id: UUID,
+    context: Annotated[TenantContext, Depends(require_roles(models.MembershipRole.PARENT))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    """Return the linked student's issued invoices and recorded payments."""
+    await _guardian_for_child(session, context, student_id)
+    invoices = (await session.execute(
+        select(models.StudentInvoice, models.AcademicTerm.name, models.AcademicYear.name)
+        .join(models.AcademicTerm,
+              (models.AcademicTerm.id == models.StudentInvoice.term_id)
+              & (models.AcademicTerm.school_id == models.StudentInvoice.school_id))
+        .join(models.AcademicYear,
+              (models.AcademicYear.id == models.StudentInvoice.academic_year_id)
+              & (models.AcademicYear.school_id == models.StudentInvoice.school_id))
+        .where(models.StudentInvoice.school_id == context.school_id,
+               models.StudentInvoice.student_id == student_id,
+               models.StudentInvoice.status != "void")
+        .order_by(models.StudentInvoice.issued_on.desc())
+    )).all()
+    payments = (await session.scalars(
+        select(models.Payment)
+        .where(models.Payment.school_id == context.school_id,
+               models.Payment.student_id == student_id,
+               models.Payment.status == "recorded")
+        .order_by(models.Payment.payment_date.desc(), models.Payment.created_at.desc())
+    )).all()
+    invoice_rows = [{
+        "id": invoice.id, "invoice_number": invoice.invoice_number,
+        "term_name": term_name, "academic_year_name": year_name,
+        "issued_on": invoice.issued_on, "status": invoice.status,
+        "total_amount": invoice.total_amount, "paid_amount": invoice.paid_amount,
+        "balance": max(invoice.total_amount - invoice.paid_amount, 0),
+    } for invoice, term_name, year_name in invoices]
+    payment_rows = [{
+        "id": payment.id, "receipt_number": payment.receipt_number,
+        "amount": payment.amount, "method": payment.method,
+        "reference": payment.reference, "payment_date": payment.payment_date,
+        "status": payment.status,
+    } for payment in payments]
+    return {
+        "currency": None,
+        "invoices": invoice_rows,
+        "payments": payment_rows,
+        "invoiced_total": sum((row["total_amount"] for row in invoice_rows), 0),
+        "paid_total": sum((row["paid_amount"] for row in invoice_rows), 0),
+        "outstanding_total": sum((row["balance"] for row in invoice_rows), 0),
+    }
+
+
+@router.get("/timetable/{student_id}")
+async def child_timetable(
+    student_id: UUID,
+    context: Annotated[TenantContext, Depends(require_roles(models.MembershipRole.PARENT))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> list[dict]:
+    """Return the schedule for the student's current active enrollment."""
+    await _guardian_for_child(session, context, student_id)
+    enrollment = await session.scalar(
+        select(models.StudentEnrollment)
+        .join(models.AcademicYear,
+              (models.AcademicYear.id == models.StudentEnrollment.academic_year_id)
+              & (models.AcademicYear.school_id == models.StudentEnrollment.school_id))
+        .where(models.StudentEnrollment.school_id == context.school_id,
+               models.StudentEnrollment.student_id == student_id,
+               models.StudentEnrollment.status == "active")
+        .order_by(models.AcademicYear.starts_on.desc())
+    )
+    if enrollment is None:
+        return []
+    rows = (await session.execute(
+        select(models.TimetableSlot, models.Subject, models.SchoolMembership, models.User)
+        .join(models.Subject,
+              (models.Subject.id == models.TimetableSlot.subject_id)
+              & (models.Subject.school_id == models.TimetableSlot.school_id))
+        .join(models.SchoolMembership,
+              (models.SchoolMembership.id == models.TimetableSlot.teacher_membership_id)
+              & (models.SchoolMembership.school_id == models.TimetableSlot.school_id))
+        .join(models.User, models.User.id == models.SchoolMembership.user_id)
+        .where(models.TimetableSlot.school_id == context.school_id,
+               models.TimetableSlot.academic_year_id == enrollment.academic_year_id,
+               models.TimetableSlot.class_group_id == enrollment.class_group_id)
+        .order_by(models.TimetableSlot.day_of_week, models.TimetableSlot.starts_at)
+    )).all()
+    day_names = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+    return [{
+        "id": slot.id, "day_of_week": slot.day_of_week,
+        "day_name": day_names[slot.day_of_week], "subject_name": subject.name,
+        "teacher_name": teacher.display_name,
+        "starts_at": slot.starts_at.strftime("%H:%M"),
+        "ends_at": slot.ends_at.strftime("%H:%M"), "room": slot.room,
+    } for slot, subject, _membership, teacher in rows]
+
+
+@router.get("/events/{student_id}")
+async def child_events(
+    student_id: UUID,
+    context: Annotated[TenantContext, Depends(require_roles(models.MembershipRole.PARENT))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> list[dict]:
+    """Return future school-wide and current-class events for a linked child."""
+    await _guardian_for_child(session, context, student_id)
+    class_ids = select(models.StudentEnrollment.class_group_id).where(
+        models.StudentEnrollment.school_id == context.school_id,
+        models.StudentEnrollment.student_id == student_id,
+        models.StudentEnrollment.status == "active",
+    )
+    events = (await session.scalars(
+        select(models.AcademicCalendarEvent)
+        .where(models.AcademicCalendarEvent.school_id == context.school_id,
+               models.AcademicCalendarEvent.ends_on >= date.today(),
+               or_(models.AcademicCalendarEvent.audience.in_(("all", "students", "parents")),
+                   (models.AcademicCalendarEvent.audience == "class")
+                   & models.AcademicCalendarEvent.class_group_id.in_(class_ids)))
+        .order_by(models.AcademicCalendarEvent.starts_on)
+        .limit(30)
+    )).all()
+    return [{"id": event.id, "title": event.title, "category": event.category,
+             "starts_on": event.starts_on, "ends_on": event.ends_on,
+             "description": event.description} for event in events]
