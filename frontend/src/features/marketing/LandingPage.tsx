@@ -5,6 +5,7 @@ import { PhoneInput } from 'react-international-phone'
 import 'react-international-phone/style.css'
 import {
   ArrowRightOutlined,
+  BankOutlined,
   BarChartOutlined,
   BookOutlined,
   CalendarOutlined,
@@ -26,6 +27,7 @@ import {
   TrophyOutlined,
   WalletOutlined,
   HeartFilled,
+  HomeOutlined,
 } from '@ant-design/icons'
 
 const navLinks = [
@@ -456,16 +458,22 @@ export default function LandingPage() {
           </ul>
         </section>
 
-        <section className="lp-free-trial" aria-labelledby="lp-free-trial-title">
-          <div className="lp-free-trial-copy">
-            <span className="lp-free-trial-tag"><CheckCircleFilled /> No setup fee · No card required</span>
-            <h2 id="lp-free-trial-title">Your first 3 months are free.</h2>
-            <p>Try Acadex with your team for a full term, with setup and staff training included. If you continue, pay per enrolled student, per term. Get a quote for your school and the services you need.</p>
+        <section className="lp-connected" aria-labelledby="lp-connected-title">
+          <div className="lp-connected-main">
+            <div className="lp-connected-copy">
+              <h2 id="lp-connected-title">One school.<br/>Everyone connected.</h2>
+              <p>Give the office, teachers and families a shared place to stay up to date.</p>
+            </div>
+            <div className="lp-connected-network" aria-label="Acadex connects the office, teachers and families">
+              <div className="lp-connected-hub"><BankOutlined/><strong>Acadex</strong></div>
+              <div className="lp-connected-branches">
+                <article><span className="lp-connected-node"><BankOutlined/></span><strong>The office</strong><small>Admissions &amp; fees</small></article>
+                <article><span className="lp-connected-node"><TeamOutlined/></span><strong>Teachers</strong><small>Attendance &amp; learning</small></article>
+                <article><span className="lp-connected-node"><HomeOutlined/></span><strong>Families</strong><small>Updates &amp; reports</small></article>
+              </div>
+            </div>
           </div>
-          <div className="lp-free-trial-actions">
-            <button type="button" className="lp-btn lp-btn-primary" onClick={openDemo}>Request a demo <ArrowRightOutlined /></button>
-            <a className="lp-btn lp-btn-ghost" href="https://wa.me/233536702357?text=Hello%20Acadex%2C%20I%E2%80%99d%20like%20a%20quote%20for%20my%20school." target="_blank" rel="noreferrer">Get a school quote <MessageOutlined /></a>
-          </div>
+          <div className="lp-connected-offer"><p><strong>Your first 3 months are free.</strong><span>Try the full Acadex system with your school. No card required.</span></p><a href="#pricing">See how pricing works <ArrowRightOutlined/></a></div>
         </section>
 
         {/* ---------------------------------------------------------- features */}
