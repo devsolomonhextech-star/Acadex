@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Controller, useForm, type Control } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import Svg, { Circle, Path, Rect } from "react-native-svg";
 import {
+  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -14,8 +16,6 @@ import {
   View,
 } from "react-native";
 import {
-  Building2,
-  GraduationCap,
   Eye,
   EyeOff,
   LockKeyhole,
@@ -93,20 +93,21 @@ export default function LoginScreen() {
             style={styles.logo}
             resizeMode="contain"
           />
+          <Text style={styles.tagline}>Smarter Schools. Brighter Futures.</Text>
+          <Text style={styles.parentCaption}>
+            Parent portal — stay connected with your child’s learning journey.
+          </Text>
         </View>
         <View style={styles.body}>
-          <Text style={styles.tagline}>Smarter schools. Brighter futures.</Text>
-          <Text style={styles.eyebrow}>ACADEX CONNECT · PARENT PORTAL</Text>
-          <Text style={styles.title}>
-            {challenge
-              ? "Verify it’s you"
-              : "Stay close to your child’s learning journey."}
-          </Text>
-          <Text style={styles.subtitle}>
-            {challenge
-              ? "Enter the 6-digit code from your authenticator app."
-              : "Sign in to see updates and records shared by your school."}
-          </Text>
+          {challenge ? (
+            <>
+              <Text style={styles.eyebrow}>ACADEX CONNECT</Text>
+              <Text style={styles.title}>Verify it’s you</Text>
+              <Text style={styles.subtitle}>
+                Enter the 6-digit code from your authenticator app.
+              </Text>
+            </>
+          ) : null}
           {!challenge ? <SchoolIllustration /> : null}
           <Card style={styles.form}>
             {challenge ? (
@@ -193,7 +194,7 @@ export default function LoginScreen() {
               </View>
             ) : null}
             <PrimaryButton
-              title={challenge ? "Verify and continue" : "Sign in securely"}
+              title={challenge ? "Verify and continue" : "Login"}
               onPress={challenge ? submitCode : () => void submit()}
               busy={busy}
               disabled={challenge ? code.length !== 6 : false}
@@ -212,19 +213,30 @@ export default function LoginScreen() {
             ) : null}
           </Card>
           <View style={styles.security}>
-            <ShieldCheck size={16} color={colors.success} />
+            <ShieldCheck size={16} color={colors.blue} />
             <Text style={styles.securityText}>
               Your school controls what information is shared with your account.
             </Text>
           </View>
           {!challenge ? (
-            <Text style={styles.forgot}>
-              Forgot your password? Contact your school administrator for help
-              signing in.
-            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                Alert.alert(
+                  "Need help signing in?",
+                  "Contact your school administrator to reset your password or confirm your school workspace.",
+                )
+              }
+            >
+              <Text style={styles.forgot}>
+                Forgot password? Contact your school.
+              </Text>
+            </Pressable>
           ) : null}
         </View>
-        <Text style={styles.footer}>Acadex Connect · Secure family access</Text>
+        <Text style={styles.footer}>
+          Don’t have an account? Contact your school.
+        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -287,21 +299,30 @@ const styles = StyleSheet.create({
   page: {
     flexGrow: 1,
     paddingHorizontal: space.xl,
-    paddingTop: 44,
-    paddingBottom: 12,
+    paddingTop: 62,
+    paddingBottom: 8,
   },
   top: {
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
+    gap: 3,
   },
-  logo: { width: 150, height: 48 },
+  logo: { width: 138, height: 42 },
   tagline: {
     color: colors.ink,
     textAlign: "center",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
-    marginBottom: 2,
+    marginTop: 5,
+  },
+  parentCaption: {
+    color: colors.muted,
+    textAlign: "center",
+    fontSize: 11,
+    lineHeight: 16,
+    maxWidth: 270,
+    marginTop: 2,
   },
   brandPill: {
     borderColor: colors.border,
@@ -329,8 +350,8 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 460,
     alignSelf: "center",
-    marginTop: 27,
-    gap: 13,
+    marginTop: 15,
+    gap: 9,
   },
   eyebrow: {
     color: colors.blue,
@@ -340,32 +361,32 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.ink,
-    fontSize: 27,
-    lineHeight: 33,
+    fontSize: 22,
+    lineHeight: 28,
     fontWeight: "800",
     letterSpacing: -0.6,
   },
   subtitle: {
     color: colors.muted,
-    fontSize: 15,
-    lineHeight: 23,
+    fontSize: 12,
+    lineHeight: 18,
     marginBottom: 10,
   },
-  form: { padding: 18, gap: 13 },
-  field: { gap: 7 },
-  label: { fontSize: 13, color: colors.ink, fontWeight: "700" },
+  form: { padding: 15, gap: 9 },
+  field: { gap: 4 },
+  label: { fontSize: 11, color: colors.ink, fontWeight: "700" },
   inputWrap: {
-    minHeight: 50,
+    minHeight: 43,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.sm,
     backgroundColor: "#FBFCFE",
-    paddingHorizontal: 13,
+    paddingHorizontal: 11,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
   },
-  input: { flex: 1, color: colors.ink, fontSize: 15, paddingVertical: 12 },
+  input: { flex: 1, color: colors.ink, fontSize: 13, paddingVertical: 9 },
   fieldError: { fontSize: 12, color: colors.danger },
   errorBox: {
     padding: 12,
@@ -376,150 +397,122 @@ const styles = StyleSheet.create({
   back: { paddingVertical: 8, alignItems: "center" },
   link: { color: colors.blue, fontSize: 14, fontWeight: "700" },
   security: {
-    marginTop: 18,
+    marginTop: 5,
     flexDirection: "row",
     gap: 8,
     alignItems: "center",
     justifyContent: "center",
   },
-  securityText: { flex: 1, fontSize: 12, lineHeight: 18, color: colors.muted },
+  securityText: { flex: 1, fontSize: 10, lineHeight: 15, color: colors.muted },
   forgot: {
     textAlign: "center",
-    fontSize: 12,
+    fontSize: 10,
     color: colors.muted,
-    lineHeight: 18,
+    lineHeight: 15,
   },
   footer: {
     marginTop: "auto",
     textAlign: "center",
-    fontSize: 11,
+    fontSize: 10,
     color: colors.mutedLight,
-    paddingVertical: 16,
+    paddingVertical: 9,
   },
 });
 
 function SchoolIllustration() {
   return (
     <View style={illustration.container} accessibilityElementsHidden>
-      <View style={illustration.cloudOne} />
-      <View style={illustration.cloudTwo} />
-      <View style={illustration.treeLeft}>
-        <View style={illustration.treeTop} />
-        <View style={illustration.treeTrunk} />
-      </View>
-      <View style={illustration.treeRight}>
-        <View style={illustration.treeTop} />
-        <View style={illustration.treeTrunk} />
-      </View>
-      <View style={illustration.school}>
-        <View style={illustration.roof}>
-          <GraduationCap color="#fff" size={24} />
-        </View>
-        <View style={illustration.facade}>
-          <Building2 color={colors.blue} size={20} />
-          <View style={illustration.windows}>
-            {[0, 1, 2].map((item) => (
-              <View key={item} style={illustration.window} />
-            ))}
-          </View>
-          <View style={illustration.door} />
-        </View>
-      </View>
+      <Svg width="100%" height="100%" viewBox="0 0 360 132">
+        <Circle cx="56" cy="36" r="17" fill="#DCEAFF" />
+        <Circle cx="76" cy="39" r="21" fill="#DCEAFF" />
+        <Circle cx="99" cy="37" r="16" fill="#DCEAFF" />
+        <Circle cx="269" cy="33" r="15" fill="#DCEAFF" />
+        <Circle cx="288" cy="36" r="20" fill="#DCEAFF" />
+        <Circle cx="309" cy="35" r="14" fill="#DCEAFF" />
+        <Rect x="45" y="87" width="7" height="33" rx="3" fill="#6F95E2" />
+        <Circle cx="49" cy="76" r="22" fill="#83A9EF" />
+        <Circle cx="40" cy="65" r="14" fill="#A6C4F8" />
+        <Circle cx="60" cy="65" r="14" fill="#A6C4F8" />
+        <Rect x="308" y="87" width="7" height="33" rx="3" fill="#6F95E2" />
+        <Circle cx="312" cy="76" r="22" fill="#83A9EF" />
+        <Circle cx="303" cy="65" r="14" fill="#A6C4F8" />
+        <Circle cx="323" cy="65" r="14" fill="#A6C4F8" />
+        <Rect
+          x="86"
+          y="57"
+          width="188"
+          height="73"
+          rx="3"
+          fill="#FFFFFF"
+          stroke="#BCD3FA"
+          strokeWidth="2"
+        />
+        <Path d="M72 60 180 10l108 50H72Z" fill="#2563EB" />
+        <Rect x="158" y="35" width="44" height="38" rx="2" fill="#4E83F0" />
+        <Circle cx="180" cy="52" r="8" fill="#EAF2FF" />
+        <Path
+          d="M202 20v-14"
+          stroke="#164BB7"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+        <Path d="M203 7h19l-7 6h-12Z" fill="#74A1F8" />
+        <Rect
+          x="101"
+          y="75"
+          width="24"
+          height="21"
+          rx="3"
+          fill="#D7E6FF"
+          stroke="#9DBCF5"
+        />
+        <Rect
+          x="135"
+          y="75"
+          width="24"
+          height="21"
+          rx="3"
+          fill="#D7E6FF"
+          stroke="#9DBCF5"
+        />
+        <Rect
+          x="201"
+          y="75"
+          width="24"
+          height="21"
+          rx="3"
+          fill="#D7E6FF"
+          stroke="#9DBCF5"
+        />
+        <Rect
+          x="235"
+          y="75"
+          width="24"
+          height="21"
+          rx="3"
+          fill="#D7E6FF"
+          stroke="#9DBCF5"
+        />
+        <Path
+          d="M113 75v21M147 75v21M213 75v21M247 75v21"
+          stroke="#A9C5F4"
+          strokeWidth="1"
+        />
+        <Rect x="164" y="94" width="32" height="36" rx="15" fill="#B8D0F8" />
+        <Path d="M86 129h188" stroke="#AFC9F5" strokeWidth="3" />
+      </Svg>
     </View>
   );
 }
 
 const illustration = StyleSheet.create({
   container: {
-    height: 132,
+    height: 126,
     width: "100%",
     backgroundColor: "#EEF5FF",
-    borderRadius: 22,
+    borderRadius: 18,
     overflow: "hidden",
     alignItems: "center",
-    justifyContent: "flex-end",
-    marginBottom: 1,
-  },
-  cloudOne: {
-    position: "absolute",
-    width: 76,
-    height: 25,
-    borderRadius: 20,
-    backgroundColor: "#D9E8FF",
-    top: 27,
-    left: 44,
-  },
-  cloudTwo: {
-    position: "absolute",
-    width: 62,
-    height: 20,
-    borderRadius: 18,
-    backgroundColor: "#D9E8FF",
-    top: 43,
-    right: 46,
-  },
-  school: { width: 196, alignItems: "center" },
-  roof: {
-    width: 186,
-    height: 40,
-    borderTopLeftRadius: 45,
-    borderTopRightRadius: 45,
-    backgroundColor: colors.blue,
-    alignItems: "center",
     justifyContent: "center",
-  },
-  facade: {
-    width: 166,
-    height: 57,
-    backgroundColor: "#fff",
-    borderTopWidth: 3,
-    borderTopColor: "#BBD4FF",
-    borderLeftWidth: 2,
-    borderRightWidth: 2,
-    borderColor: "#D6E5FF",
-    alignItems: "center",
-    justifyContent: "space-evenly",
-  },
-  windows: { flexDirection: "row", gap: 13 },
-  window: {
-    width: 17,
-    height: 18,
-    backgroundColor: "#D9E8FF",
-    borderRadius: 3,
-    borderWidth: 1,
-    borderColor: "#B8D1FF",
-  },
-  door: {
-    position: "absolute",
-    bottom: 0,
-    width: 22,
-    height: 29,
-    backgroundColor: "#B8D1FF",
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
-  },
-  treeLeft: {
-    position: "absolute",
-    left: 54,
-    bottom: 13,
-    alignItems: "center",
-  },
-  treeRight: {
-    position: "absolute",
-    right: 54,
-    bottom: 13,
-    alignItems: "center",
-  },
-  treeTop: {
-    width: 26,
-    height: 34,
-    borderRadius: 16,
-    backgroundColor: "#8CB6FF",
-  },
-  treeTrunk: {
-    width: 5,
-    height: 12,
-    backgroundColor: "#608BDD",
-    marginTop: -1,
   },
 });
