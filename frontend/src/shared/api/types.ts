@@ -167,6 +167,8 @@ export type DemoSeedResult = {
   history_year_created: boolean; history_results_created: number
   history_invoices_created: number; history_payments_created: number
   calendar_events_created: number; tasks_created: number
+  demo_parent_email: string | null; demo_parent_students_linked: number
+  demo_announcements_created: number; demo_notifications_created: number
   invoiced_total: string; paid_total: string
 }
 export type Overview = {

@@ -99,8 +99,13 @@ function AdminOverview({ user }: { user: SchoolUser }) {
       if (result.class_teachers_set) parts.push(`${result.class_teachers_set} class teacher assignment${result.class_teachers_set === 1 ? '' : 's'}`)
       if (result.calendar_events_created) parts.push(`${result.calendar_events_created} academic calendar events`)
       if (result.tasks_created) parts.push(`${result.tasks_created} staff tasks`)
+      if (result.demo_parent_students_linked) parts.push(`${result.demo_parent_students_linked} students linked to the demo parent app account`)
+      if (result.demo_announcements_created) parts.push(`${result.demo_announcements_created} parent announcements`)
+      if (result.demo_notifications_created) parts.push(`${result.demo_notifications_created} parent notifications`)
       if (parts.length) message.success(`Demo data created: ${parts.join(', ')}`)
       else message.info('Demo data is already generated')
+      if (result.demo_parent_email) message.info(`Parent app login: ${result.demo_parent_email} · Parent-demo-2026`, 12)
+      else message.warning('The demo parent login needs at least five active students in this school.')
       void query.refetch()
     },
     onError: error => message.error(formatApiError(error)),

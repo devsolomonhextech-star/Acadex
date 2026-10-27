@@ -20,11 +20,11 @@ from app.api.auth import TenantContext, require_roles
 from app.db import get_session
 from app.domain.finance import FinanceError, generate_invoices, quantize, record_payment
 from app.domain.results import active_default_scale, grade_for, load_bands
-from app.security import hash_password
 from app.models import (
+    AcademicCalendarEvent,
     AcademicTerm,
     AcademicYear,
-    AcademicCalendarEvent,
+    Announcement,
     AttendanceRecord,
     AttendanceSession,
     AuditEvent,
@@ -37,6 +37,7 @@ from app.models import (
     GradingScale,
     Guardian,
     MembershipRole,
+    Notification,
     Payment,
     ResultPublication,
     School,
@@ -46,12 +47,13 @@ from app.models import (
     StudentEnrollment,
     StudentGuardian,
     StudentInvoice,
-    Task,
     Subject,
+    Task,
     TermResult,
     TimetableSlot,
     User,
 )
+from app.security import hash_password
 
 router = APIRouter(prefix="/api/v1/overview", tags=["overview"])
 
@@ -75,6 +77,8 @@ DEMO_GRADE_BANDS = (
 )
 # Profile depth: portal logins, a full week timetable, behaviour, documents.
 DEMO_PARENT_PASSWORD = "Parent-demo-2026"
+DEMO_SHARED_PARENT_EMAIL_LOCAL = "parent.family"
+DEMO_SHARED_PARENT_NAME = "Ama Mensah"
 DEMO_TEACHER_PASSWORD = "Teacher-demo-2026"
 DEMO_EXTRA_TEACHERS = ("Nii Armah", "Adjoa Quaye", "Yao Asare", "Comfort Baidoo")
 DEMO_MOTHER_NAMES = ("Akua", "Abena", "Ama", "Efua", "Adwoa", "Naa", "Yaa", "Esi", "Akosua", "Dzidzor")
@@ -141,6 +145,10 @@ class DemoSeedResponse(BaseModel):
     history_payments_created: int
     calendar_events_created: int
     tasks_created: int
+    demo_parent_email: str | None = None
+    demo_parent_students_linked: int = 0
+    demo_announcements_created: int = 0
+    demo_notifications_created: int = 0
     invoiced_total: Decimal
     paid_total: Decimal
 
@@ -500,6 +508,162 @@ async def seed_demo_data(
             ))
             guardians_created += 1
     if guardians_created:
+        await session.commit()
+
+    # A single family account lets the parent app preview child switching with
+    # five students. Keep it out of small test schools and never replace a
+    # non-parent account that happens to use the reserved demo address.
+    demo_parent_email: str | None = None
+    demo_parent_students_linked = 0
+    demo_notifications_created = 0
+    demo_family_user: User | None = None
+    demo_family_guardian: Guardian | None = None
+    if len(students_all) >= 5:
+        suffix = 1
+        while demo_family_user is None:
+            local = DEMO_SHARED_PARENT_EMAIL_LOCAL
+            if suffix > 1:
+                local = f"{local}{suffix}"
+            candidate_email = f"{local}@{school_slug}.school.example.com"
+            candidate_user = await session.scalar(
+                select(User).where(User.email == candidate_email)
+            )
+            if candidate_user is None:
+                candidate_user = User(
+                    email=candidate_email,
+                    display_name=DEMO_SHARED_PARENT_NAME,
+                    password_hash=hash_password(DEMO_PARENT_PASSWORD),
+                )
+                session.add(candidate_user)
+                await session.flush()
+                candidate_membership = None
+                candidate_guardian = None
+            else:
+                candidate_membership = await session.scalar(
+                    select(SchoolMembership).where(
+                        SchoolMembership.school_id == school_id,
+                        SchoolMembership.user_id == candidate_user.id,
+                    )
+                )
+                candidate_guardian = await session.scalar(
+                    select(Guardian).where(Guardian.user_id == candidate_user.id)
+                )
+                if (
+                    candidate_membership is not None
+                    and candidate_membership.role != MembershipRole.PARENT
+                ) or (
+                    candidate_guardian is not None
+                    and candidate_guardian.school_id != school_id
+                ):
+                    suffix += 1
+                    continue
+                candidate_user.display_name = DEMO_SHARED_PARENT_NAME
+                candidate_user.password_hash = hash_password(DEMO_PARENT_PASSWORD)
+                candidate_user.status = "active"
+
+            if candidate_membership is None:
+                session.add(SchoolMembership(
+                    school_id=school_id,
+                    user_id=candidate_user.id,
+                    role=MembershipRole.PARENT,
+                ))
+            if candidate_guardian is None:
+                candidate_guardian = Guardian(
+                    school_id=school_id,
+                    user_id=candidate_user.id,
+                    first_name="Ama",
+                    last_name="Mensah",
+                    relationship="Parent",
+                    email=candidate_email,
+                    phone="+233 20 000 0000",
+                )
+                session.add(candidate_guardian)
+                await session.flush()
+
+            demo_parent_email = candidate_email
+            demo_family_user = candidate_user
+            demo_family_guardian = candidate_guardian
+
+        existing_family_links = set(await session.scalars(
+            select(StudentGuardian.student_id).where(
+                StudentGuardian.school_id == school_id,
+                StudentGuardian.guardian_id == demo_family_guardian.id,
+            )
+        ))
+        for student in students_all[:5]:
+            if student.id in existing_family_links:
+                continue
+            session.add(StudentGuardian(
+                school_id=school_id,
+                student_id=student.id,
+                guardian_id=demo_family_guardian.id,
+                is_primary=False,
+            ))
+            demo_parent_students_linked += 1
+        await session.commit()
+
+        # Parent-visible sample communications fill the announcement and
+        # notification areas in Acadex Connect without inventing transactions.
+        demo_notification_rows = (
+            (
+                "Welcome to Acadex Connect",
+                "Your family account is ready. Switch between your linked children to view their school updates and records.",
+                "info",
+                None,
+            ),
+            (
+                "School fees and receipts",
+                "Review current balances and confirmed payment receipts in Fees & Payments.",
+                "finance",
+                "fees",
+            ),
+        )
+        for title, body, notification_type, link in demo_notification_rows:
+            exists = await session.scalar(select(Notification.id).where(
+                Notification.school_id == school_id,
+                Notification.user_id == demo_family_user.id,
+                Notification.title == title,
+            ))
+            if exists is not None:
+                continue
+            session.add(Notification(
+                school_id=school_id,
+                user_id=demo_family_user.id,
+                title=title,
+                body=body,
+                type=notification_type,
+                link=link,
+            ))
+            demo_notifications_created += 1
+        await session.commit()
+
+    demo_announcements_created = 0
+    demo_announcements = (
+        (
+            "Demo: Welcome to the parent portal",
+            "Welcome to Acadex Connect. You can switch between linked children to review attendance, published reports, invoices, and school updates.",
+        ),
+        (
+            "Demo: Parent-teacher check-in",
+            "Please review each child’s latest report and contact the school office if you would like to arrange a conversation with their teacher.",
+        ),
+    )
+    for title, body in demo_announcements:
+        exists = await session.scalar(select(Announcement.id).where(
+            Announcement.school_id == school_id,
+            Announcement.title == title,
+        ))
+        if exists is not None:
+            continue
+        session.add(Announcement(
+            school_id=school_id,
+            title=title,
+            body=body,
+            audience="parents",
+            published_by_user_id=context.user_id,
+        ))
+        demo_announcements_created += 1
+    if demo_announcements_created:
         await session.commit()
 
     # ------------------------------------ teachers and subject assignments
@@ -891,13 +1055,13 @@ async def seed_demo_data(
             )
         await session.commit()
 
-        history_invoices = list((await session.scalars(
+        history_invoices = list(await session.scalars(
             select(StudentInvoice).where(
                 StudentInvoice.school_id == school_id,
                 StudentInvoice.academic_year_id == history_year.id,
                 StudentInvoice.status.in_(("issued", "partially_paid")),
             ).order_by(StudentInvoice.issued_on, StudentInvoice.created_at, StudentInvoice.id)
-        )))
+        ))
         history_methods = ("mobile_money", "cash", "bank_transfer")
         for payment_index, invoice in enumerate(history_invoices):
             balance = invoice.total_amount - invoice.paid_amount
@@ -923,7 +1087,8 @@ async def seed_demo_data(
         + subject_assignments_created + class_teachers_set + timetable_created + behavior_created
         + documents_created + history_results_created + history_invoices_created
         + history_payments_created + calendar_events_created + (1 if history_year_created else 0)
-        + tasks_created
+        + tasks_created + demo_parent_students_linked + demo_notifications_created
+        + demo_announcements_created
     )
     if total_created:
         session.add(AuditEvent(
@@ -950,5 +1115,9 @@ async def seed_demo_data(
         history_payments_created=history_payments_created,
         calendar_events_created=calendar_events_created,
         tasks_created=tasks_created,
+        demo_parent_email=demo_parent_email,
+        demo_parent_students_linked=demo_parent_students_linked,
+        demo_announcements_created=demo_announcements_created,
+        demo_notifications_created=demo_notifications_created,
         invoiced_total=invoiced, paid_total=paid,
     )
