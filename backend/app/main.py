@@ -10,23 +10,24 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.api.academic import router as academic_router
 from app.api.academic_calendar import router as academic_calendar_router
 from app.api.assessments import router as assessments_router
-from app.api.exams import router as exams_router
 from app.api.attendance import router as attendance_router
 from app.api.auth import router as identity_router
 from app.api.communications import router as communications_router
 from app.api.demo_seed import router as demo_seed_router
+from app.api.exams import router as exams_router
 from app.api.family import router as family_router
 from app.api.finance import router as finance_router
 from app.api.grading import router as grading_router
 from app.api.guardians import router as guardians_router
 from app.api.overview import router as overview_router
-from app.api.student_support import router as student_support_router
-from app.api.subscriptions import router as subscriptions_router
 from app.api.results import router as results_router
 from app.api.staff import router as staff_router
 from app.api.student_imports import router as student_imports_router
 from app.api.student_profile import router as student_profile_router
+from app.api.student_support import router as student_support_router
 from app.api.students import router as students_router
+from app.api.subscriptions import router as subscriptions_router
+from app.api.tasks import router as tasks_router
 from app.api.timetable import router as timetable_router
 from app.db import engine
 from app.settings import get_settings
@@ -73,6 +74,7 @@ app.include_router(family_router)
 app.include_router(overview_router)
 app.include_router(student_support_router)
 app.include_router(subscriptions_router)
+app.include_router(tasks_router)
 app.include_router(demo_seed_router)
 
 

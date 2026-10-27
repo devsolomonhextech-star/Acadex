@@ -5,24 +5,24 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
     Enum,
-    Time,
-    Boolean,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
     String,
+    Text,
+    Time,
     UniqueConstraint,
     Uuid,
     func,
     text,
-    Text,
-    BigInteger,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -1102,3 +1102,38 @@ class Notification(Base):
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     link: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Task(Base):
+    """A school-owned action item assigned to one staff member.
+
+    REA mapping: Task is the resource acted upon; status transitions are events;
+    the assignee and assigner are agents.
+    """
+
+    __tablename__ = "tasks"
+    __table_args__ = (
+        UniqueConstraint("school_id", "id", name="uq_tasks_school_id"),
+        ForeignKeyConstraint(["school_id", "assigned_to_membership_id"], ["school_memberships.school_id", "school_memberships.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["school_id", "assigned_by_membership_id"], ["school_memberships.school_id", "school_memberships.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["school_id", "completed_by_membership_id"], ["school_memberships.school_id", "school_memberships.id"], ondelete="RESTRICT"),
+        CheckConstraint("status IN ('open', 'in_progress', 'completed', 'cancelled')", name="ck_tasks_status"),
+        CheckConstraint("priority IN ('low', 'medium', 'high')", name="ck_tasks_priority"),
+        Index("ix_tasks_school_assigned", "school_id", "assigned_to_membership_id"),
+        Index("ix_tasks_school_status", "school_id", "status"),
+        Index("ix_tasks_school_due", "school_id", "due_on"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open", server_default="open")
+    priority: Mapped[str] = mapped_column(String(16), nullable=False, default="medium", server_default="medium")
+    due_on: Mapped[date | None] = mapped_column(Date)
+    assigned_to_membership_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    assigned_by_membership_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_by_membership_id: Mapped[UUID | None] = mapped_column(Uuid)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=utcnow)

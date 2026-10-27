@@ -25,6 +25,7 @@ const TeacherSettingsPage = lazy(() => import('../features/settings/TeacherSetti
 const AdmissionsPage = lazy(() => import('../features/admissions/AdmissionsPage'))
 const ReportsPage = lazy(() => import('../features/reports/ReportsPage'))
 const StudentSupportPage = lazy(() => import('../features/student-support/StudentSupportPage'))
+const TasksPage = lazy(() => import('../features/tasks/TasksPage'))
 const AcceptInvitationPage = lazy(() => import('../features/staff/AcceptInvitationPage'))
 const LoginPage = lazy(() => import('../features/auth/AuthPages').then(module => ({ default: module.LoginPage })))
 const RegisterPage = lazy(() => import('../features/auth/AuthPages').then(module => ({ default: module.RegisterPage })))
@@ -75,6 +76,7 @@ function AppRoutes() {
       <Route path="/results" element={user && ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><ResultsPage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/report-card" element={user && ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><ReportCardPage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/assessments" element={user && ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><AssessmentsPage /></Suspense> : <Navigate to="/" replace />} />
+      <Route path="/tasks" element={user && ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><TasksPage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/student/exams" element={user?.role === 'student' ? <Suspense fallback={<LoadingPage />}><StudentExamsPage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/finance" element={user && ['school_admin', 'principal', 'finance'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><FinancePage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/academic-calendar" element={user && ['school_admin', 'principal', 'registrar', 'teacher', 'finance', 'staff'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><AcademicCalendarPage /></Suspense> : <Navigate to="/" replace />} />

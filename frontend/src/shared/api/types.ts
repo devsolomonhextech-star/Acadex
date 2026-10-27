@@ -166,7 +166,7 @@ export type DemoSeedResult = {
   behavior_created: number; documents_created: number
   history_year_created: boolean; history_results_created: number
   history_invoices_created: number; history_payments_created: number
-  calendar_events_created: number
+  calendar_events_created: number; tasks_created: number
   invoiced_total: string; paid_total: string
 }
 export type Overview = {
@@ -401,3 +401,30 @@ export interface Guardian {
   relationship: string | null
   is_primary: boolean
 }
+
+export type TaskStatus = 'open' | 'in_progress' | 'completed' | 'cancelled'
+export type TaskPriority = 'low' | 'medium' | 'high'
+export type Task = {
+  id: string
+  title: string
+  description: string | null
+  status: TaskStatus
+  priority: TaskPriority
+  due_on: string | null
+  assigned_to_membership_id: string
+  assigned_to_name: string
+  assigned_to_email: string
+  assigned_by_membership_id: string
+  completed_at: string | null
+  completed_by_membership_id: string | null
+  created_at: string
+  updated_at: string
+}
+export type TaskCreate = {
+  title: string
+  description: string | null
+  priority: TaskPriority
+  due_on: string | null
+  assigned_to_membership_id: string
+}
+export type TaskStatusUpdate = { status: TaskStatus }

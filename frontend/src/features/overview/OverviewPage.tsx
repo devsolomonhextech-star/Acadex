@@ -98,6 +98,7 @@ function AdminOverview({ user }: { user: SchoolUser }) {
       if (result.results_created) parts.push(`${result.results_created} term results`)
       if (result.class_teachers_set) parts.push(`${result.class_teachers_set} class teacher assignment${result.class_teachers_set === 1 ? '' : 's'}`)
       if (result.calendar_events_created) parts.push(`${result.calendar_events_created} academic calendar events`)
+      if (result.tasks_created) parts.push(`${result.tasks_created} staff tasks`)
       if (parts.length) message.success(`Demo data created: ${parts.join(', ')}`)
       else message.info('Demo data is already generated')
       void query.refetch()

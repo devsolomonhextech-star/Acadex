@@ -46,6 +46,7 @@ from app.models import (
     StudentEnrollment,
     StudentGuardian,
     StudentInvoice,
+    Task,
     Subject,
     TermResult,
     TimetableSlot,
@@ -139,6 +140,7 @@ class DemoSeedResponse(BaseModel):
     history_invoices_created: int
     history_payments_created: int
     calendar_events_created: int
+    tasks_created: int
     invoiced_total: Decimal
     paid_total: Decimal
 
@@ -679,6 +681,45 @@ async def seed_demo_data(
         if behavior_created:
             await session.commit()
 
+    # ------------------------------------------------------------ staff tasks
+    # Seed one realistic, school-scoped task board. The fixed sample titles
+    # make this section idempotent without changing or duplicating real tasks.
+    tasks_created = 0
+    if actor_membership_id and teachers:
+        sample_tasks = (
+            ("Prepare next week's lesson plans", "Upload lesson plans for the upcoming week and share any resource needs with the office.", "open", "high", 4),
+            ("Review outstanding attendance registers", "Check this term's class registers and follow up on any incomplete attendance submissions.", "open", "medium", 3),
+            ("Complete student progress comments", "Add concise learning progress comments for students before the parent update is prepared.", "in_progress", "medium", 2),
+            ("Organise classroom learning materials", "Confirm the materials needed for the next practical and return shared items after use.", "in_progress", "low", 5),
+            ("Submit this week's assessment marks", "Enter and save marks for the latest class assessment in the gradebook.", "completed", "high", -1),
+            ("Share the class timetable update", "Check the current timetable and let the class know about this week's lesson changes.", "completed", "low", -3),
+        )
+        for index, (title, description, task_status, priority, due_offset) in enumerate(sample_tasks):
+            sample_title = f"[Demo] {title}"
+            exists = await session.scalar(select(Task.id).where(
+                Task.school_id == school_id,
+                Task.title == sample_title,
+            ))
+            if exists:
+                continue
+            assignee = teachers[index % len(teachers)]
+            completed_at = datetime.now(UTC) - timedelta(days=1) if task_status == "completed" else None
+            session.add(Task(
+                school_id=school_id,
+                title=sample_title,
+                description=description,
+                status=task_status,
+                priority=priority,
+                due_on=today + timedelta(days=due_offset),
+                assigned_to_membership_id=assignee.id,
+                assigned_by_membership_id=actor_membership_id,
+                completed_at=completed_at,
+                completed_by_membership_id=assignee.id if completed_at else None,
+            ))
+            tasks_created += 1
+        if tasks_created:
+            await session.commit()
+
     # ------------------------------------------------------- document trail
     # Five core documents per learner so the Documents tab is never empty.
     documents_created = 0
@@ -882,6 +923,7 @@ async def seed_demo_data(
         + subject_assignments_created + class_teachers_set + timetable_created + behavior_created
         + documents_created + history_results_created + history_invoices_created
         + history_payments_created + calendar_events_created + (1 if history_year_created else 0)
+        + tasks_created
     )
     if total_created:
         session.add(AuditEvent(
@@ -907,5 +949,6 @@ async def seed_demo_data(
         history_invoices_created=history_invoices_created,
         history_payments_created=history_payments_created,
         calendar_events_created=calendar_events_created,
+        tasks_created=tasks_created,
         invoiced_total=invoiced, paid_total=paid,
     )
