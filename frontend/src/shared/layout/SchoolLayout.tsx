@@ -105,7 +105,7 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
     </div>}
     <aside className={`sidebar ${open ? 'sidebar-open' : ''}`}>
       <div className="brand"><img className="brand-logo" src="/brand/acadex-logo.png" alt="Acadex"/><button className="mobile-close" onClick={() => setOpen(false)} aria-label="Close menu">×</button></div>
-      <div className="school-switch"><div className="school-emblem">{user.school_name.slice(0, 1).toUpperCase()}</div><div className="school-name"><strong>{user.school_name}</strong><span>{user.school_slug}</span></div><span className="chevron">⌄</span></div>
+      <div className="school-switch"><div className="school-emblem">{user.school_name.slice(0, 1).toUpperCase()}</div><div className="school-name"><strong title={user.school_name}>{user.school_name}</strong><span>{user.school_slug}</span></div><span className="chevron">⌄</span></div>
       <button type="button" className="nav-caption nav-section-toggle" aria-expanded={!collapsedSections.workspace}
         aria-controls="sidebar-workspace" onClick={() => toggleSection('workspace')}>
         <span>WORKSPACE</span><span className="section-chevron" aria-hidden="true">⌄</span>
@@ -121,7 +121,7 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
       <div className="sidebar-bottom"><div className="help-card"><div className="help-icon">✳</div><strong>Need a hand?</strong><p>Visit the help center for tips and guides.</p><button disabled>Help center coming soon</button></div><div className="profile"><Avatar size={36} style={{ backgroundColor: '#e5e9ff', color: '#384ec2', fontWeight: 700 }}>{initials(user.display_name)}</Avatar><div><strong>{user.display_name}</strong><span>{user.role.replaceAll('_', ' ')}</span></div><button className="logout-button" onClick={onLogout} title="Sign out" aria-label="Sign out">↗</button></div></div>
     </aside>
     {open && <button className="scrim" onClick={() => setOpen(false)} aria-label="Close navigation" />}
-    <main className="main-area"><header className="topbar"><Button className="menu-button" type="text" icon={<MenuOutlined />} onClick={() => setOpen(true)} aria-label="Open menu"/><div className="breadcrumbs">School <span>/</span> <strong>{currentPage}</strong></div>{['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role) && <div className="top-period-picker" aria-label="Academic period">
+    <main className="main-area"><header className="topbar"><Button className="menu-button" type="text" icon={<MenuOutlined />} onClick={() => setOpen(true)} aria-label="Open menu"/><img className="topbar-brand-mark" src="/brand/acadex-emblem.png" alt="Acadex"/><div className="breadcrumbs">School <span>/</span> <strong>{currentPage}</strong></div>{['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role) && <div className="top-period-picker" aria-label="Academic period">
       <Select aria-label="Academic year context" value={yearId || undefined} loading={periodLoading} placeholder="Academic year"
         options={years.map(year => ({ value: year.id, label: year.name }))} onChange={setYearId} />
       <Select aria-label="Term context" value={termId || undefined} loading={periodLoading} placeholder="Term"
