@@ -6,6 +6,7 @@ import { colors } from "../../src/theme/tokens";
 import { ParentDataProvider } from "../../src/services/parentData";
 import { registerPushToken } from "../../src/services/pushNotifications";
 import { OfflineBanner } from "../../src/components/ui";
+import { ParentAppTour } from "../../src/components/ParentAppTour";
 export default function ParentLayout() {
   const { parent, loading } = useAuth();
   const router = useRouter();
@@ -59,6 +60,7 @@ export default function ParentLayout() {
           options={{ title: "Term report" }}
         />
       </Stack>
+      <ParentAppTour />
     </ParentDataProvider>
   );
 }
