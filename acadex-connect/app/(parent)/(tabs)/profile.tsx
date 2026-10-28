@@ -12,7 +12,6 @@ import {
 } from "lucide-react-native";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeInUp } from "react-native-reanimated";
-import { ParentPageHeader } from "../../../src/components/ParentPageHeader";
 import { Card, Screen } from "../../../src/components/ui";
 import { useAuth } from "../../../src/services/auth";
 import { colors, radius } from "../../../src/theme/tokens";
@@ -75,13 +74,16 @@ export default function ProfileScreen() {
 
   return (
     <Screen contentStyle={styles.screen} safeAreaTop>
-      <ParentPageHeader title="Parent profile" />
       <Animated.View entering={FadeInUp.duration(300)} style={styles.identity}>
-        <View style={styles.avatar}>
-          <Text style={styles.initials}>{initials}</Text>
+        <View style={styles.avatarRing}>
+          <View style={styles.avatar}>
+            <Text style={styles.initials}>{initials}</Text>
+          </View>
         </View>
         <Text style={styles.name}>{parent?.display_name}</Text>
-        <Text style={styles.role}>Parent account</Text>
+        <View style={styles.rolePill}>
+          <Text style={styles.role}>Parent account</Text>
+        </View>
       </Animated.View>
 
       <View style={styles.sectionHeading}>
@@ -111,7 +113,7 @@ export default function ProfileScreen() {
       <Text style={styles.sectionTitle}>Account settings</Text>
       <Card style={styles.settingsCard}>
         {settings.map(({ title, icon: Icon, action, detail }, index) => (
-          <View key={title}>
+          <View key={title} style={styles.rowWrapper}>
             {index > 0 ? <View style={styles.rowDivider} /> : null}
             <Pressable
               accessibilityRole="button"
@@ -121,12 +123,15 @@ export default function ProfileScreen() {
                 pressed && styles.pressed,
               ]}
             >
-              <Icon size={20} color={colors.blue} strokeWidth={1.9} />
+              <View style={styles.infoIcon}>
+                <Icon size={18} color={colors.blue} strokeWidth={2} />
+              </View>
               <Text style={styles.settingTitle}>{title}</Text>
               {detail ? (
                 <Text style={styles.settingDetail}>{detail}</Text>
               ) : null}
-              <ChevronRight size={19} color={colors.muted} />
+              
+            
             </Pressable>
           </View>
         ))}
@@ -148,11 +153,13 @@ export default function ProfileScreen() {
             ],
           )
         }
-        style={({ pressed }) => [styles.logout, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.logoutCard, pressed && styles.pressed]}
       >
-        <LogOut size={19} color={colors.danger} />
+        <View style={styles.logoutIconWrap}>
+          <LogOut size={18} color={colors.danger} strokeWidth={2} />
+        </View>
         <Text style={styles.logoutText}>Sign out</Text>
-        <ChevronRight size={19} color={colors.danger} />
+        <ChevronRight size={19} color={colors.danger} strokeWidth={2} />
       </Pressable>
       <Text style={styles.version}>Acadex Connect · Parent access</Text>
     </Screen>
@@ -184,16 +191,24 @@ function InfoRow({
 }
 
 const styles = StyleSheet.create({
-  screen: { paddingHorizontal: 20, paddingTop: 12, gap: 14, paddingBottom: 30 },
-  identity: { alignItems: "center", paddingTop: 2, paddingBottom: 8 },
+  screen: { paddingHorizontal: 20, paddingTop: 20, gap: 16, paddingBottom: 32 },
+  identity: { alignItems: "center", paddingTop: 8, paddingBottom: 4 },
+  avatarRing: {
+    width: 92,
+    height: 92,
+    borderRadius: radius.pill,
+    backgroundColor: colors.blueSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
   avatar: {
-    width: 78,
-    height: 78,
+    width: 76,
+    height: 76,
     borderRadius: radius.pill,
     backgroundColor: colors.blue,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 10,
   },
   initials: {
     color: "#fff",
@@ -203,24 +218,40 @@ const styles = StyleSheet.create({
   },
   name: {
     color: colors.ink,
-    fontSize: 20,
-    lineHeight: 26,
+    fontSize: 21,
+    lineHeight: 27,
     fontWeight: "800",
     textAlign: "center",
   },
-  role: { color: colors.muted, fontSize: 13, marginTop: 3 },
+  rolePill: {
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.blueSoft,
+  },
+  role: { color: colors.blue, fontSize: 12, fontWeight: "600" },
+
   sectionHeading: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    paddingHorizontal: 4,
   },
-  sectionTitle: { color: colors.ink, fontSize: 16, fontWeight: "800" },
-  managed: { color: colors.muted, fontSize: 11 },
+  sectionTitle: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: "800",
+    paddingHorizontal: 4,
+  },
+  managed: { color: colors.muted, fontSize: 11, fontWeight: "500" },
+
+  // Contact card
   contactCard: {
     paddingHorizontal: 15,
     paddingVertical: 7,
-    gap: 0,
     borderRadius: 19,
+    alignItems: "stretch",
   },
   infoRow: {
     minHeight: 61,
@@ -240,31 +271,61 @@ const styles = StyleSheet.create({
   infoLabel: { color: colors.muted, fontSize: 11 },
   infoValue: { color: colors.ink, fontSize: 13, fontWeight: "600" },
   divider: { height: 1, backgroundColor: colors.border, marginLeft: 48 },
+
+  // Settings card
   settingsCard: {
-    paddingHorizontal: 14,
-    paddingVertical: 0,
-    gap: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
     borderRadius: 19,
+    alignItems: "stretch", // Forces children to fill card width
+  },
+  rowWrapper: {
+    width: "100%", // CRITICAL FIX: Forces row to expand
   },
   settingRow: {
-    minHeight: 49,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 13,
-  },
-  settingTitle: { flex: 1, color: colors.ink, fontSize: 13, fontWeight: "600" },
-  settingDetail: { color: colors.muted, fontSize: 12 },
-  rowDivider: { height: 1, backgroundColor: colors.border },
-  logout: {
-    minHeight: 48,
+    minHeight: 50,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingHorizontal: 15,
+    paddingHorizontal: 4,
+  },
+  settingTitle: {
+    flex: 1, // Pushes the chevron to the right edge
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  settingDetail: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  rowDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginLeft: 34,
+  },
+
+  // Sign out
+  logoutCard: {
+    minHeight: 50,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 16,
     borderWidth: 1,
     borderColor: "#FFD2D1",
     borderRadius: 16,
     backgroundColor: "#FFF8F8",
+    marginTop: 4,
+  },
+  logoutIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    backgroundColor: "#FFE2E2",
+    alignItems: "center",
+    justifyContent: "center",
   },
   logoutText: {
     flex: 1,
@@ -276,7 +337,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 11,
     color: colors.mutedLight,
-    marginTop: -3,
+    marginTop: 2,
   },
-  pressed: { opacity: 0.75 },
+  pressed: { opacity: 0.7 },
 });

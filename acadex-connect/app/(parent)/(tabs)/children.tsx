@@ -10,7 +10,6 @@ import {
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { FadeInUp } from "react-native-reanimated";
 import { ChildPicker } from "../../../src/components/ChildPicker";
-import { ParentPageHeader } from "../../../src/components/ParentPageHeader";
 import { Card, Screen } from "../../../src/components/ui";
 import { useChildren } from "../../../src/services/parentData";
 import { colors, radius } from "../../../src/theme/tokens";
@@ -43,10 +42,10 @@ export default function ChildrenScreen() {
 
   return (
     <Screen contentStyle={styles.screen} safeAreaTop>
-      <ParentPageHeader
+      {/* <ParentPageHeader
         title="My Children"
         subtitle={`${children.length} linked ${children.length === 1 ? "child" : "children"}`}
-      />
+      /> */}
       <ChildPicker variant="list" />
 
       {selectedChild ? (

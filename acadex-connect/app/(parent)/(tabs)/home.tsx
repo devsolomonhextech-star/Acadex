@@ -277,65 +277,7 @@ export default function HomeScreen() {
             </View>
           </Animated.View>
 
-          <Animated.View
-            entering={FadeInUp.delay(260).duration(340)}
-            style={styles.metricsRow}
-          >
-            <MetricCard
-              icon={CalendarCheck}
-              iconColor="#2873E8"
-              tint="#EAF3FF"
-              title="Attendance"
-              value={
-                attendance.isLoading
-                  ? "…"
-                  : recordedCount
-                    ? `${presentCount}/${recordedCount}`
-                    : "—"
-              }
-              detail="Present"
-              detailColor="#169B69"
-              footer={<ChevronUp size={12} color="#169B69" strokeWidth={2.5} />}
-              onPress={() => router.push("/(parent)/attendance")}
-            />
-            <MetricCard
-              icon={BookOpen}
-              iconColor="#8755D6"
-              tint="#F3ECFF"
-              title="Average grade"
-              value={reports.isLoading ? "…" : averageGrade}
-              detail={term?.term_name ?? "Latest report"}
-              detailColor="#8053D6"
-              footer={
-                <ChevronRight size={12} color="#8053D6" strokeWidth={2.5} />
-              }
-              onPress={() => router.push("/(parent)/(tabs)/academics")}
-            />
-            <MetricCard
-              icon={CreditCard}
-              iconColor="#189B69"
-              tint="#E9F8EF"
-              title="Fees paid"
-              value={fees.isLoading ? "…" : formattedPaid}
-              detail="All recorded"
-              detailColor="#169B69"
-              footer={<Check size={12} color="#169B69" strokeWidth={3} />}
-              onPress={() => router.push("/(parent)/fees")}
-            />
-            <MetricCard
-              icon={CalendarDays}
-              iconColor="#D47A22"
-              tint="#FFF2E2"
-              title="Upcoming"
-              value={events.isLoading ? "…" : String(events.data?.length ?? 0)}
-              detail="School events"
-              detailColor="#C86816"
-              footer={
-                <ChevronRight size={12} color="#C86816" strokeWidth={2.5} />
-              }
-              onPress={() => router.push("/(parent)/timetable")}
-            />
-          </Animated.View>
+          
 
           <Animated.View
             entering={FadeInUp.delay(320).duration(320)}
@@ -893,6 +835,7 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 5 },
     elevation: 3,
+    padding: 16,
   },
   bannerGradient: { borderRadius: 24 },
   bannerGlow: {
@@ -963,17 +906,14 @@ const styles = StyleSheet.create({
   },
   metricsRow: { flexDirection: "row", alignItems: "stretch", gap: 8 },
   metricCard: {
+    padding: 10,
     flex: 1,
-    flexBasis: 0,
-    minWidth: 0,
-    minHeight: 142,
-    alignItems: "flex-start",
-    justifyContent: "flex-start",
-    padding: 9,
+    minHeight: 120,
+    borderRadius: 17,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "rgba(49,93,245,0.08)",
-    borderRadius: 18,
-  },
+    borderColor: colors.border,
+  }, 
   metricIcon: {
     width: 36,
     height: 36,
@@ -1073,11 +1013,12 @@ const styles = StyleSheet.create({
   },
   announcementShell: {
     borderRadius: 21,
-    shadowColor: "#2563EB",
     shadowOpacity: 0.08,
     shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 5, height: 4 },
     elevation: 2,
+     backgroundColor: "#2A7BF6",
+    shadowColor: "#2168D4",
   },
   announcementGradient: { borderRadius: 21 },
   announcementHalo: {

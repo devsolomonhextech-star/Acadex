@@ -11,7 +11,6 @@ import {
 import Animated, { FadeInUp } from "react-native-reanimated";
 import { apiErrorMessage } from "../../../src/api/client";
 import { ChildPicker } from "../../../src/components/ChildPicker";
-import { ParentPageHeader } from "../../../src/components/ParentPageHeader";
 import {
   Card,
   EmptyState,
@@ -30,6 +29,7 @@ export default function AcademicsScreen() {
     queryFn: ({ signal }) => familyApi.reports(selectedChild!.id, signal),
     enabled: !!selectedChild,
   });
+
   return (
     <Screen
       safeAreaTop
@@ -42,12 +42,10 @@ export default function AcademicsScreen() {
         />
       }
     >
-      <ParentPageHeader
-        title="Academics"
-        subtitle="Published results and reports"
-      />
-      <ChildPicker />
-      <Text style={styles.sectionTitle}>Published report cards</Text>
+      <View style={styles.headerSection}>
+        <ChildPicker />
+        <Text style={styles.sectionTitle}>Published report cards</Text>
+      </View>
 
       {query.isLoading ? (
         <LoadingState />
@@ -63,60 +61,72 @@ export default function AcademicsScreen() {
           body="When your school publishes a report card, it will appear here."
         />
       ) : (
-        query.data.map((report, index) => (
-          <Animated.View
-            key={report.term_id}
-            entering={FadeInUp.delay(index * 55).duration(280)}
-          >
-            <Pressable
-              onPress={() =>
-                selectedChild &&
-                router.push({
-                  pathname: "/(parent)/report-cards/[studentId]/[termId]",
-                  params: {
-                    studentId: selectedChild.id,
-                    termId: report.term_id,
-                  },
-                })
-              }
-              accessibilityRole="button"
-              accessibilityLabel={`View ${report.term_name} report card`}
-              style={({ pressed }) => [pressed && { opacity: 0.75 }]}
+        <View style={styles.list}>
+          {query.data.map((report, index) => (
+            <Animated.View
+              key={report.term_id}
+              entering={FadeInUp.delay(index * 55).duration(280)}
             >
-              <Card style={styles.report}>
-                <View style={styles.file}>
-                  <FileText color={colors.blue} size={23} />
-                </View>
-                <View style={styles.reportCopy}>
-                  <Text style={styles.term}>{report.term_name}</Text>
-                  <Text style={styles.year}>
-                    {report.academic_year_name} Academic Year
-                  </Text>
-                  <View style={styles.published}>
-                    <Check size={13} color={colors.success} strokeWidth={3} />
-                    <Text style={styles.publishedText}>Published</Text>
+              <Pressable
+                onPress={() =>
+                  selectedChild &&
+                  router.push({
+                    pathname: "/(parent)/report-cards/[studentId]/[termId]",
+                    params: {
+                      studentId: selectedChild.id,
+                      termId: report.term_id,
+                    },
+                  })
+                }
+                accessibilityRole="button"
+                accessibilityLabel={`View ${report.term_name} report card`}
+                style={({ pressed }) => [pressed && styles.pressed]}
+              >
+                <Card style={styles.reportCard}>
+                  {/* Top Row: Icon, Term Info, Grade */}
+                  <View style={styles.cardHeader}>
+                    <View style={styles.fileIcon}>
+                      <FileText color={colors.blue} size={22} strokeWidth={2} />
+                    </View>
+                    <View style={styles.headerText}>
+                      <Text style={styles.term}>{report.term_name}</Text>
+                      <Text style={styles.year}>
+                        {report.academic_year_name} Academic Year
+                      </Text>
+                    </View>
+                    <View style={styles.gradeBadge}>
+                      <Text style={styles.gradeText}>
+                        {report.grade ??
+                          (report.aggregate_percent == null
+                            ? "—"
+                            : `${Math.round(Number(report.aggregate_percent))}%`)}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.openLink}>
-                    <Text style={styles.link}>View report card</Text>
-                    <ArrowRight size={16} color={colors.blue} />
+
+                  {/* Divider */}
+                  <View style={styles.divider} />
+
+                  {/* Bottom Row: Status & Action */}
+                  <View style={styles.cardFooter}>
+                    <View style={styles.publishedBadge}>
+                      <Check size={12} color={colors.success} strokeWidth={3} />
+                      <Text style={styles.publishedText}>Published</Text>
+                    </View>
+                    <View style={styles.actionLink}>
+                      <Text style={styles.actionText}>View report card</Text>
+                      <ArrowRight size={16} color={colors.blue} strokeWidth={2.5} />
+                    </View>
                   </View>
-                </View>
-                <View style={styles.grade}>
-                  <Text style={styles.gradeText}>
-                    {report.grade ??
-                      (report.aggregate_percent == null
-                        ? "—"
-                        : `${Math.round(Number(report.aggregate_percent))}%`)}
-                  </Text>
-                </View>
-              </Card>
-            </Pressable>
-          </Animated.View>
-        ))
+                </Card>
+              </Pressable>
+            </Animated.View>
+          ))}
+        </View>
       )}
 
-      <Card style={styles.info}>
-        <LockKeyhole size={19} color={colors.success} />
+      <Card style={styles.infoCard}>
+        <LockKeyhole size={20} color={colors.success} strokeWidth={2} />
         <Text style={styles.infoText}>
           Only results officially published by your school appear here.
         </Text>
@@ -127,68 +137,83 @@ export default function AcademicsScreen() {
 
 const styles = StyleSheet.create({
   screen: { paddingHorizontal: 20, paddingTop: 12, gap: 16, paddingBottom: 30 },
+  headerSection: { gap: 14, marginBottom: 4 },
   sectionTitle: {
     color: colors.ink,
     fontSize: 18,
     fontWeight: "800",
-    marginTop: 2,
+    paddingHorizontal: 4,
   },
-  report: {
+  list: { gap: 12 },
+  pressed: { opacity: 0.7, transform: [{ scale: 0.99 }] },
+  
+  // Card Layout
+  reportCard: {
+    padding: 0, // Remove default card padding to allow full-width footer
+    borderRadius: 20,
+    overflow: "hidden",
+  },
+  cardHeader: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    padding: 15,
-    borderRadius: 19,
-    gap: 13,
+    alignItems: "center",
+    padding: 16,
+    gap: 14,
   },
-  file: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
+  fileIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
     backgroundColor: colors.blueSoft,
     alignItems: "center",
     justifyContent: "center",
   },
-  reportCopy: { flex: 1, minWidth: 0, gap: 4 },
-  term: { color: colors.ink, fontSize: 16, fontWeight: "800" },
-  year: { color: colors.muted, fontSize: 12, lineHeight: 18 },
-  published: {
-    alignSelf: "flex-start",
+  headerText: { flex: 1, gap: 3 },
+  term: { color: colors.ink, fontSize: 16, fontWeight: "700" },
+  year: { color: colors.muted, fontSize: 13, fontWeight: "500" },
+  gradeBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.blueSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gradeText: { fontSize: 14, fontWeight: "800", color: colors.blueDeep },
+  
+  // Card Footer
+  divider: { height: 1, backgroundColor: colors.border, opacity: 0.6 },
+  cardFooter: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    marginTop: 3,
-    paddingHorizontal: 9,
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#FAFAFA", // Slight tint to separate action area
+  },
+  publishedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: radius.pill,
     backgroundColor: colors.successSoft,
   },
   publishedText: { color: colors.success, fontSize: 11, fontWeight: "700" },
-  openLink: {
+  actionLink: { flexDirection: "row", alignItems: "center", gap: 6 },
+  actionText: { color: colors.blue, fontSize: 13, fontWeight: "700" },
+
+  // Info Card
+  infoCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    marginTop: 7,
-  },
-  link: { color: colors.blue, fontSize: 13, fontWeight: "700" },
-  grade: {
-    minWidth: 42,
-    height: 42,
-    borderRadius: radius.pill,
-    backgroundColor: colors.blueSoft,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 4,
-  },
-  gradeText: { fontSize: 13, fontWeight: "800", color: colors.blueDeep },
-  info: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 11,
+    gap: 14,
     backgroundColor: colors.successSoft,
+    borderWidth: 1,
     borderColor: "#CDEBDD",
-    padding: 14,
-    borderRadius: 17,
-    marginTop: 2,
+    padding: 16,
+    borderRadius: 18,
+    marginTop: 8,
   },
-  infoText: { flex: 1, color: colors.success, fontSize: 12, lineHeight: 18 },
+  infoText: { flex: 1, color: colors.success, fontSize: 13, lineHeight: 19, fontWeight: "500" },
 });
