@@ -67,8 +67,8 @@ export function ChildPicker() {
 const styles = StyleSheet.create({
   row: { gap: 10 },
   item: {
-    minWidth: 220,
-    maxWidth: 280,
+    minWidth: 166,
+    maxWidth: 205,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
