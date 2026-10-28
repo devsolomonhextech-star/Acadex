@@ -2,6 +2,7 @@ import { api } from "../api/client";
 import type {
   AttendanceSummary,
   Child,
+  DailyActivity,
   FeesSummary,
   ReportSummary,
   SchoolEvent,
@@ -41,4 +42,10 @@ export const familyApi = {
   events: async (studentId: string, signal?: AbortSignal) =>
     (await api.get<SchoolEvent[]>(`/family/events/${studentId}`, { signal }))
       .data,
+  activities: async (studentId: string, signal?: AbortSignal) =>
+    (
+      await api.get<DailyActivity[]>(`/family/activities/${studentId}`, {
+        signal,
+      })
+    ).data,
 };

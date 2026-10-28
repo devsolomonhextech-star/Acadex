@@ -48,8 +48,8 @@ export default function ParentLayout() {
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="attendance" options={{ title: "Attendance" }} />
-        <Stack.Screen name="fees" options={{ title: "Fees & payments" }} />
+        <Stack.Screen name="attendance" options={{ headerShown: false }} />
+        <Stack.Screen name="fees" options={{ headerShown: false }} />
         <Stack.Screen name="timetable" options={{ title: "Class timetable" }} />
         <Stack.Screen
           name="announcements"

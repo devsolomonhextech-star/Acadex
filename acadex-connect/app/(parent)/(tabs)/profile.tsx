@@ -130,8 +130,6 @@ export default function ProfileScreen() {
               {detail ? (
                 <Text style={styles.settingDetail}>{detail}</Text>
               ) : null}
-              
-            
             </Pressable>
           </View>
         ))}

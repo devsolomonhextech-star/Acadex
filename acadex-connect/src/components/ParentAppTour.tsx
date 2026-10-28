@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import * as SecureStore from "expo-secure-store";
-import Animated, { FadeIn, FadeOut, SlideInRight } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  FadeOut,
+  SlideInRight,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ArrowLeft,
@@ -129,7 +133,10 @@ export function ParentAppTour() {
       <View
         style={[
           styles.frame,
-          { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom, 14) + 8 },
+          {
+            paddingTop: insets.top + 8,
+            paddingBottom: Math.max(insets.bottom, 14) + 8,
+          },
         ]}
       >
         <View style={styles.topRow}>
@@ -161,15 +168,21 @@ export function ParentAppTour() {
           <Card className="gap-0 overflow-hidden rounded-[30px] border border-white/80 bg-white px-5 pb-5 pt-5 shadow-2xl shadow-[#081C49]/20">
             <View className="mb-5 flex-row items-center justify-between">
               <Text className="text-xs font-bold tracking-[1.2px] text-slate-400">
-                {String(stepIndex + 1).padStart(2, "0")} / {String(steps.length).padStart(2, "0")}
+                {String(stepIndex + 1).padStart(2, "0")} /{" "}
+                {String(steps.length).padStart(2, "0")}
               </Text>
-              <View style={styles.progressRow} accessibilityLabel={`Tour step ${stepIndex + 1} of ${steps.length}`}>
+              <View
+                style={styles.progressRow}
+                accessibilityLabel={`Tour step ${stepIndex + 1} of ${steps.length}`}
+              >
                 {steps.map((item, index) => (
                   <View
                     key={item.eyebrow}
                     style={[
                       styles.progressDot,
-                      index === stepIndex ? styles.progressActive : styles.progressInactive,
+                      index === stepIndex
+                        ? styles.progressActive
+                        : styles.progressInactive,
                     ]}
                   />
                 ))}
@@ -181,7 +194,12 @@ export function ParentAppTour() {
                 className="h-[62px] w-[62px] items-center justify-center rounded-[22px]"
                 style={{ backgroundColor: step.tint }}
               >
-                <Icon as={step.icon} size={29} color={step.accent} strokeWidth={2} />
+                <Icon
+                  as={step.icon}
+                  size={29}
+                  color={step.accent}
+                  strokeWidth={2}
+                />
               </View>
               <View className="flex-1">
                 <Text className="mb-1 text-[10px] font-extrabold tracking-[1.4px] text-blue-600">
@@ -191,7 +209,10 @@ export function ParentAppTour() {
               </View>
             </View>
 
-            <Text variant="h3" className="text-left text-[25px] leading-[31px] font-bold tracking-[-0.6px] text-slate-950">
+            <Text
+              variant="h3"
+              className="text-left text-[25px] leading-[31px] font-bold tracking-[-0.6px] text-slate-950"
+            >
               {step.title}
             </Text>
             <Text className="mt-3 text-[14px] leading-[22px] text-slate-600">
@@ -221,10 +242,16 @@ export function ParentAppTour() {
                 className="h-[52px] flex-1 rounded-2xl bg-blue-600 shadow-md shadow-blue-600/20 active:bg-blue-700"
                 onPress={next}
                 disabled={finishing}
-                accessibilityLabel={stepIndex === steps.length - 1 ? "Finish app tour" : "Next tour step"}
+                accessibilityLabel={
+                  stepIndex === steps.length - 1
+                    ? "Finish app tour"
+                    : "Next tour step"
+                }
               >
                 <Text className={buttonTextVariants({ size: "lg" })}>
-                  {stepIndex === steps.length - 1 ? "Explore Acadex" : "Continue"}
+                  {stepIndex === steps.length - 1
+                    ? "Explore Acadex"
+                    : "Continue"}
                 </Text>
                 <Icon
                   as={stepIndex === steps.length - 1 ? CircleCheck : ArrowRight}

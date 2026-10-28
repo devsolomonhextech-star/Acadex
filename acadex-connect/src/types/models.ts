@@ -102,6 +102,21 @@ export type TimetableEntry = {
   ends_at: string;
   room: string | null;
 };
+export type DailyActivity = {
+  id: string;
+  title: string;
+  category: "quiz" | "class_test" | "assignment" | "examination" | string;
+  subject_name: string;
+  subject_code: string;
+  due_on: string | null;
+  status: string;
+  state: "completed" | "overdue" | "due_today" | "due_soon" | "upcoming";
+  max_score: string | number;
+  weight_percent: string | number;
+  score: string | number | null;
+  score_percent: number | null;
+  submission_status: "not_recorded" | "submitted" | "missing" | "excused";
+};
 export type Announcement = {
   id: string;
   title: string;

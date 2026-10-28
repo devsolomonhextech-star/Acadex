@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import {
@@ -9,7 +8,6 @@ import {
   CalendarDays,
   Check,
   ChevronRight,
-  ChevronUp,
   CreditCard,
   X,
   Zap,
@@ -84,19 +82,9 @@ export default function HomeScreen() {
     void events.refetch();
     void notifications.refetch();
   };
-  const term = reports.data?.[0];
   const latestAnnouncement = announcements.data?.[0];
   const unread =
     notifications.data?.filter((item) => !item.read_at).length ?? 0;
-  const presentCount = attendance.data?.counts.present ?? 0;
-  const recordedCount = attendance.data?.total_recorded ?? 0;
-  const formattedPaid = fees.data
-    ? Number(fees.data.paid_total).toLocaleString()
-    : "—";
-  const averageGrade =
-    term?.aggregate_percent != null
-      ? `${Math.round(Number(term.aggregate_percent))}%`
-      : (term?.grade ?? "—");
 
   return (
     <Screen
@@ -276,8 +264,6 @@ export default function HomeScreen() {
               </Pressable>
             </View>
           </Animated.View>
-
-          
 
           <Animated.View
             entering={FadeInUp.delay(320).duration(320)}
@@ -531,60 +517,6 @@ export default function HomeScreen() {
         <LoadingState />
       )}
     </Screen>
-  );
-}
-
-function MetricCard({
-  icon,
-  iconColor,
-  tint,
-  title,
-  value,
-  detail,
-  detailColor,
-  footer,
-  onPress,
-}: {
-  icon: LucideIcon;
-  iconColor: string;
-  tint: string;
-  title: string;
-  value: string;
-  detail: string;
-  detailColor: string;
-  footer?: ReactNode;
-  onPress: () => void;
-}) {
-  const Icon = icon;
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.metricCard,
-        { backgroundColor: tint },
-        pressed && styles.pressed,
-      ]}
-    >
-      <View style={styles.metricIcon}>
-        <Icon size={21} color={iconColor} strokeWidth={2.1} />
-      </View>
-      <Text style={styles.metricTitle} numberOfLines={1}>
-        {title}
-      </Text>
-      <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit>
-        {value}
-      </Text>
-      <View style={styles.metricFooter}>
-        <Text
-          style={[styles.metricDetail, { color: detailColor }]}
-          numberOfLines={1}
-        >
-          {detail}
-        </Text>
-        {footer}
-      </View>
-    </Pressable>
   );
 }
 
@@ -913,7 +845,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-  }, 
+  },
   metricIcon: {
     width: 36,
     height: 36,
@@ -1017,7 +949,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 5, height: 4 },
     elevation: 2,
-     backgroundColor: "#2A7BF6",
+    backgroundColor: "#2A7BF6",
     shadowColor: "#2168D4",
   },
   announcementGradient: { borderRadius: 21 },

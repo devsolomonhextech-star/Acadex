@@ -16,7 +16,7 @@ import { colors, radius } from "../../../src/theme/tokens";
 
 export default function ChildrenScreen() {
   const router = useRouter();
-  const { children, selectedChild } = useChildren();
+  const { selectedChild } = useChildren();
   const links = [
     {
       title: "Academics & reports",

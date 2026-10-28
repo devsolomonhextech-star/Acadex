@@ -254,6 +254,75 @@ async def child_timetable(
     } for slot, subject, _membership, teacher in rows]
 
 
+@router.get("/activities/{student_id}")
+async def child_activities(
+    student_id: UUID,
+    context: Annotated[TenantContext, Depends(require_roles(models.MembershipRole.PARENT))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> list[dict]:
+    """Daily school activities (tests, exercises, quizzes) for a linked child.
+
+    Returns every assessment attached to the child's active class with that
+    student's own score when one has been recorded, ordered by due date so the
+    client can group them into overdue / today / upcoming / completed buckets.
+    """
+    await _guardian_for_child(session, context, student_id)
+    rows = (await session.execute(
+        select(models.Assessment, models.Subject.name, models.Subject.code,
+               models.AssessmentScore.score, models.AssessmentScore.submission_status)
+        .join(models.Subject, (models.Subject.id == models.Assessment.subject_id)
+              & (models.Subject.school_id == models.Assessment.school_id))
+        .join(models.StudentEnrollment,
+              (models.StudentEnrollment.school_id == models.Assessment.school_id)
+              & (models.StudentEnrollment.class_group_id == models.Assessment.class_group_id)
+              & (models.StudentEnrollment.academic_year_id == models.Assessment.academic_year_id)
+              & (models.StudentEnrollment.student_id == student_id)
+              & (models.StudentEnrollment.status == "active"))
+        .outerjoin(models.AssessmentScore,
+                   (models.AssessmentScore.school_id == models.Assessment.school_id)
+                   & (models.AssessmentScore.assessment_id == models.Assessment.id)
+                   & (models.AssessmentScore.student_id == student_id))
+        .where(models.Assessment.school_id == context.school_id)
+        .order_by(models.Assessment.due_on.asc().nulls_last(), models.Assessment.created_at.desc())
+        .limit(60)
+    )).all()
+    today = date.today()
+    items: list[dict] = []
+    for assessment, subject_name, subject_code, score, submission_status in rows:
+        due_on = assessment.due_on
+        if score is not None or submission_status in ("submitted", "excused"):
+            state = "completed"
+        elif due_on is None:
+            state = "upcoming"
+        elif due_on < today:
+            state = "overdue"
+        elif due_on == today:
+            state = "due_today"
+        elif (due_on - today).days <= 7:
+            state = "due_soon"
+        else:
+            state = "upcoming"
+        percent = None
+        if score is not None and assessment.max_score > 0:
+            percent = float(round(score / assessment.max_score * 100, 1))
+        items.append({
+            "id": assessment.id,
+            "title": assessment.title,
+            "category": assessment.category,
+            "subject_name": subject_name,
+            "subject_code": subject_code,
+            "due_on": due_on,
+            "status": assessment.status,
+            "state": state,
+            "max_score": assessment.max_score,
+            "weight_percent": assessment.weight_percent,
+            "score": score,
+            "score_percent": percent,
+            "submission_status": submission_status,
+        })
+    return items
+
+
 @router.get("/events/{student_id}")
 async def child_events(
     student_id: UUID,
