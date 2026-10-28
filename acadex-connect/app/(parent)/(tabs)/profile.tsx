@@ -74,7 +74,7 @@ export default function ProfileScreen() {
   ];
 
   return (
-    <Screen contentStyle={styles.screen}>
+    <Screen contentStyle={styles.screen} safeAreaTop>
       <ParentPageHeader title="Parent profile" />
       <Animated.View entering={FadeInUp.duration(300)} style={styles.identity}>
         <View style={styles.avatar}>

@@ -32,6 +32,7 @@ export default function AcademicsScreen() {
   });
   return (
     <Screen
+      safeAreaTop
       contentStyle={styles.screen}
       refreshControl={
         <RefreshControl

@@ -11,17 +11,28 @@ import {
 } from "react-native";
 import { ArrowRight, CircleAlert, RefreshCw } from "lucide-react-native";
 import { useNetInfo } from "@react-native-community/netinfo";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, space } from "../theme/tokens";
 
 export function Screen({
   children,
   contentStyle,
+  safeAreaTop = false,
   ...props
-}: PropsWithChildren<ScrollViewProps & { contentStyle?: ViewStyle }>) {
+}: PropsWithChildren<
+  ScrollViewProps & { contentStyle?: ViewStyle; safeAreaTop?: boolean }
+>) {
+  const insets = useSafeAreaInsets();
+  const contentPaddingTop =
+    typeof contentStyle?.paddingTop === "number" ? contentStyle.paddingTop : 0;
   return (
     <ScrollView
       {...props}
-      contentContainerStyle={[styles.screen, contentStyle]}
+      contentContainerStyle={[
+        styles.screen,
+        contentStyle,
+        safeAreaTop && { paddingTop: insets.top + contentPaddingTop },
+      ]}
       keyboardShouldPersistTaps="handled"
     >
       {children}

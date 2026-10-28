@@ -42,12 +42,12 @@ export default function ChildrenScreen() {
   ];
 
   return (
-    <Screen contentStyle={styles.screen}>
+    <Screen contentStyle={styles.screen} safeAreaTop>
       <ParentPageHeader
         title="My Children"
         subtitle={`${children.length} linked ${children.length === 1 ? "child" : "children"}`}
       />
-      <ChildPicker />
+      <ChildPicker variant="list" />
 
       {selectedChild ? (
         <Animated.View entering={FadeInUp.duration(280)}>
@@ -63,6 +63,7 @@ export default function ChildrenScreen() {
                 </Text>
               </View>
               <View style={styles.studentCopy}>
+                <Text style={styles.studentEyebrow}>Selected child</Text>
                 <Text style={styles.studentName} numberOfLines={1}>
                   {selectedChild.first_name} {selectedChild.last_name}
                 </Text>
@@ -138,8 +139,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 13,
-    padding: 15,
-    borderRadius: 18,
+    padding: 16,
+    borderRadius: 21,
+    borderColor: "#D7E5FF",
+    backgroundColor: "#FBFDFF",
+    shadowColor: "#1B4B91",
+    shadowOpacity: 0.06,
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
   studentAvatar: {
     width: 58,
@@ -152,6 +160,13 @@ const styles = StyleSheet.create({
   studentInitials: { color: "#fff", fontSize: 17, fontWeight: "800" },
   studentCopy: { flex: 1, minWidth: 0, gap: 4 },
   studentName: { color: colors.ink, fontSize: 16, fontWeight: "800" },
+  studentEyebrow: {
+    color: colors.blue,
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+  },
   admission: { color: colors.muted, fontSize: 12 },
   classPill: {
     alignSelf: "flex-start",

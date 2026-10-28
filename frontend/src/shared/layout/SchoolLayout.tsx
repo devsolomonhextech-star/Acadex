@@ -1,18 +1,20 @@
 import { useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../features/auth/authHooks'
 import { apiRequest } from '../api/client'
 import { useLessonAlerts } from '../../features/academic/useLessonAlerts'
 import {
   AppstoreOutlined, ArrowRightOutlined, BarChartOutlined, BellOutlined, BookOutlined, CalendarOutlined,
   CarOutlined, CheckCircleOutlined, CreditCardOutlined, DashboardOutlined, FlagOutlined, GiftOutlined,
-  HomeOutlined, MenuOutlined, MessageOutlined, ReadOutlined, SearchOutlined, SettingOutlined,
+  HomeOutlined, LogoutOutlined, MenuOutlined, MessageOutlined, ReadOutlined, SearchOutlined, SettingOutlined,
   TeamOutlined, TrophyOutlined, UserAddOutlined, UserOutlined, HeartOutlined,
 } from '@ant-design/icons'
-import { Avatar, Badge, Button, Input, Select } from 'antd'
+import { Avatar, Badge, Button, Input, Popover, Select, Spin } from 'antd'
 import type { ReactNode } from 'react'
 import type { SchoolUser } from '../api/types'
+import type { Notification } from '../api/types'
+import { fetchNotifications, markNotificationRead } from '../api/notifications'
 import { useAcademicPeriod } from '../academic/AcademicPeriodContext'
 
 type SidebarItem = { label: string; to?: string; icon: ReactNode }
@@ -56,12 +58,37 @@ function initials(name: string) {
   return name.split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase()
 }
 
+function relativeTime(value: string) {
+  const seconds = Math.round((new Date(value).getTime() - Date.now()) / 1000)
+  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ['year', 60 * 60 * 24 * 365], ['month', 60 * 60 * 24 * 30], ['week', 60 * 60 * 24 * 7],
+    ['day', 60 * 60 * 24], ['hour', 60 * 60], ['minute', 60], ['second', 1],
+  ]
+  const formatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
+  for (const [unit, length] of units) {
+    if (Math.abs(seconds) >= length || unit === 'second') return formatter.format(Math.round(seconds / length), unit)
+  }
+  return ''
+}
+
+function NotificationEntry({ notification, onOpen }: { notification: Notification; onOpen: (notification: Notification) => void }) {
+  return <button type="button" className={`notification-entry${notification.read_at ? '' : ' notification-entry-unread'}`} onClick={() => onOpen(notification)}>
+    <span className={`notification-entry-icon notification-type-${notification.type}`}><BellOutlined /></span>
+    <span className="notification-entry-copy"><strong>{notification.title}</strong><span>{notification.body}</span><small>{relativeTime(notification.created_at)}</small></span>
+    {!notification.read_at && <span className="notification-unread-dot" aria-label="Unread" />}
+  </button>
+}
+
 export function SchoolLayout({ children, user, onLogout }: { children: ReactNode; user: SchoolUser; onLogout: () => void }) {
   const [open, setOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
   const toggleSection = (key: string) =>
     setCollapsedSections(previous => ({ ...previous, [key]: !previous[key] }))
   const location = useLocation()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { accessToken } = useAuth()
   const { years, terms, yearId, termId, setYearId, setTermId, loading: periodLoading } = useAcademicPeriod()
   const { alerts, dismiss, contextHolder } = useLessonAlerts()
@@ -80,6 +107,31 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
     ?? (location.pathname.startsWith('/students/') ? 'Student profile'
       : location.pathname === '/report-card' ? 'Report card' : 'Overview')
   const canManageAcademics = ['school_admin', 'principal', 'registrar'].includes(user.role)
+  const notifications = useQuery({
+    queryKey: ['notifications'],
+    queryFn: () => fetchNotifications(accessToken!),
+    enabled: Boolean(accessToken),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  })
+  const readNotification = useMutation({
+    mutationFn: (id: string) => markNotificationRead(accessToken!, id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+  const readAllNotifications = useMutation({
+    mutationFn: async () => {
+      await Promise.all((notifications.data ?? []).filter(item => !item.read_at).map(item => markNotificationRead(accessToken!, item.id)))
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+  const notificationItems = notifications.data ?? []
+  const unreadCount = notificationItems.filter(item => !item.read_at).length
+  const handleNotificationOpen = (notification: Notification) => {
+    if (!notification.read_at) readNotification.mutate(notification.id)
+    setNotificationsOpen(false)
+    if (notification.link?.startsWith('/') && !notification.link.startsWith('//')) navigate(notification.link)
+  }
+  const roleLabel = user.role.split('_').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
   const canTakeAttendance = ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role)
   const canViewAssessments = ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role)
   const canViewFinance = ['school_admin', 'principal', 'finance'].includes(user.role)
@@ -107,7 +159,13 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
     </div>}
     <aside className={`sidebar ${open ? 'sidebar-open' : ''}`}>
       <div className="brand"><img className="brand-logo" src="/brand/acadex-logo.png" alt="Acadex"/><button className="mobile-close" onClick={() => setOpen(false)} aria-label="Close menu">×</button></div>
-      <div className="school-switch"><div className="school-emblem">{user.school_name.slice(0, 1).toUpperCase()}</div><div className="school-name"><strong title={user.school_name}>{user.school_name}</strong><span>{user.school_slug}</span></div><span className="chevron">⌄</span></div>
+      <div className="school-switch" aria-label={`Institution: ${user.school_name}`}>
+        <div className="school-emblem" aria-hidden="true">{user.school_name.trim().slice(0, 1).toUpperCase()}</div>
+        <div className="school-name">
+          <span className="school-name-label">INSTITUTION</span>
+          <strong title={user.school_name}>{user.school_name}</strong>
+        </div>
+      </div>
       <button type="button" className="nav-caption nav-section-toggle" aria-expanded={!collapsedSections.workspace}
         aria-controls="sidebar-workspace" onClick={() => toggleSection('workspace')}>
         <span>WORKSPACE</span><span className="section-chevron" aria-hidden="true">⌄</span>
@@ -128,7 +186,41 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
         options={years.map(year => ({ value: year.id, label: year.name }))} onChange={setYearId} />
       <Select aria-label="Term context" value={termId || undefined} loading={periodLoading} placeholder="Term"
         options={terms.map(term => ({ value: term.id, label: term.name }))} onChange={setTermId} disabled={!terms.length} />
-    </div>}<div className="top-actions"><Input className="search-box" prefix={<SearchOutlined />} placeholder="Search anything..." aria-label="Search" disabled/><Button className="icon-button" type="text" icon={<Badge dot color="#ec6e53"><BellOutlined /></Badge>} aria-label="Notifications" disabled/><div className="top-divider"/><Avatar size={34} style={{ backgroundColor: '#e5e9ff', color: '#384ec2', fontWeight: 700 }}>{initials(user.display_name)}</Avatar></div></header>{trialInfo && <div className={`trial-banner${trialUrgent ? ' trial-banner-urgent' : ''}`} role="status">
+    </div>}<div className="top-actions"><Input className="search-box" prefix={<SearchOutlined />} placeholder="Search anything..." aria-label="Search" disabled/>
+      <Popover open={notificationsOpen} onOpenChange={setNotificationsOpen} trigger="click" placement="bottomRight" arrow={false} className="top-menu-popover" content={
+        <section className="top-menu-panel notifications-panel" aria-label="Notifications">
+          <header className="top-menu-heading"><div><strong>Notifications</strong><span>{unreadCount ? `${unreadCount} unread` : 'You’re all caught up'}</span></div>
+            {unreadCount > 0 && <Button type="link" size="small" loading={readAllNotifications.isPending} onClick={() => readAllNotifications.mutate()}>Mark all read</Button>}
+          </header>
+          <div className="notification-list">
+            {notifications.isLoading ? <div className="top-menu-loading"><Spin size="small"/><span>Loading notifications…</span></div>
+              : notifications.isError ? <div className="top-menu-empty"><strong>Notifications unavailable</strong><span>Please try again.</span><Button type="link" onClick={() => notifications.refetch()}>Retry</Button></div>
+                : notificationItems.length === 0 ? <div className="top-menu-empty"><span className="top-menu-empty-icon"><BellOutlined /></span><strong>No notifications yet</strong><span>School updates will appear here.</span></div>
+                  : notificationItems.map(item => <NotificationEntry key={item.id} notification={item} onOpen={handleNotificationOpen}/>)}
+          </div>
+        </section>
+      }>
+        <button type="button" className={`top-icon-trigger${notificationsOpen ? ' top-icon-trigger-active' : ''}`} aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : 'Notifications'} aria-expanded={notificationsOpen}>
+          <Badge count={unreadCount} size="small" overflowCount={9} color="#e46d55"><BellOutlined /></Badge>
+        </button>
+      </Popover>
+      <div className="top-divider"/>
+      <Popover open={profileOpen} onOpenChange={setProfileOpen} trigger="click" placement="bottomRight" arrow={false} className="top-menu-popover" content={
+        <section className="top-menu-panel profile-menu-panel" aria-label="Account menu">
+          <div className="profile-menu-identity"><Avatar size={48} style={{ backgroundColor: '#e5e9ff', color: '#384ec2', fontWeight: 700 }}>{initials(user.display_name)}</Avatar>
+            <div><strong>{user.display_name}</strong><span>{user.email}</span><em>{roleLabel}</em></div>
+          </div>
+          <div className="profile-menu-school"><span>INSTITUTION</span><strong>{user.school_name}</strong></div>
+          {['school_admin', 'teacher'].includes(user.role) && <NavLink className="profile-menu-link" to="/settings" onClick={() => setProfileOpen(false)}><SettingOutlined/><span>Account settings</span><span className="profile-link-hint">Manage your workspace</span></NavLink>}
+          <button type="button" className="profile-menu-link profile-menu-logout" onClick={() => { setProfileOpen(false); onLogout() }}><LogoutOutlined/><span>Sign out</span></button>
+        </section>
+      }>
+        <button type="button" className={`top-profile-trigger${profileOpen ? ' top-profile-trigger-active' : ''}`} aria-label={`Account menu for ${user.display_name}`} aria-expanded={profileOpen}>
+          <Avatar size={34} style={{ backgroundColor: '#e5e9ff', color: '#384ec2', fontWeight: 700 }}>{initials(user.display_name)}</Avatar>
+          <span className="top-profile-name">{user.display_name}</span><span className="top-profile-chevron" aria-hidden="true">⌄</span>
+        </button>
+      </Popover>
+    </div></header>{trialInfo && <div className={`trial-banner${trialUrgent ? ' trial-banner-urgent' : ''}`} role="status">
         <span className="trial-banner-icon"><GiftOutlined /></span>
         <div className="trial-banner-text">
           <strong>{trialUrgent ? 'Your free trial ends soon' : 'Free trial running'}</strong>

@@ -30,6 +30,7 @@ export default function NotificationsScreen() {
   };
   return (
     <Screen
+      safeAreaTop
       refreshControl={
         <RefreshControl
           refreshing={query.isRefetching}

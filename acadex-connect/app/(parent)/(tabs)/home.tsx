@@ -4,11 +4,16 @@ import { useRouter } from "expo-router";
 import {
   ArrowRight,
   Bell,
+  BookOpen,
+  CalendarCheck,
+  CalendarDays,
   Check,
   ChevronRight,
   ChevronUp,
+  CreditCard,
   X,
   Zap,
+  type LucideIcon,
 } from "lucide-react-native";
 import {
   Image,
@@ -34,10 +39,6 @@ const logo = require("../../../assets/images/acadex-logo.png");
 const graduationCap = require("../../../assets/images/3d/graduation-cap.webp");
 const bookStack = require("../../../assets/images/3d/book-stack.webp");
 const schoolBag = require("../../../assets/images/3d/school-bag.webp");
-const calendar3d = require("../../../assets/images/3d/calendar.webp");
-const book3d = require("../../../assets/images/3d/book.webp");
-const money3d = require("../../../assets/images/3d/money.webp");
-const bell3d = require("../../../assets/images/3d/bell.webp");
 const megaphone3d = require("../../../assets/images/3d/megaphone.webp");
 const school3d = require("../../../assets/images/3d/school.webp");
 
@@ -176,98 +177,104 @@ export default function HomeScreen() {
 
       {children.length ? (
         <Animated.View entering={FadeInUp.delay(110).duration(340)}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.childPickerRow}
-        >
-          {children.map((child) => {
-            const active = child.id === selectedChild?.id;
-            return (
-              <Pressable
-                key={child.id}
-                accessibilityRole="button"
-                accessibilityLabel={`View ${child.first_name} ${child.last_name}`}
-                onPress={() => selectChild(child.id)}
-                style={[styles.childCard, active && styles.childCardActive]}
-              >
-                <View
-                  style={[
-                    styles.childAvatar,
-                    active && styles.childAvatarActive,
-                  ]}
+          <View style={styles.childSectionHeading}>
+            <Text style={styles.childSectionTitle}>Your children</Text>
+            <Text style={styles.childCount}>{children.length} linked</Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.childPickerRow}
+          >
+            {children.map((child) => {
+              const active = child.id === selectedChild?.id;
+              return (
+                <Pressable
+                  key={child.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`View ${child.first_name} ${child.last_name}`}
+                  onPress={() => selectChild(child.id)}
+                  style={[styles.childCard, active && styles.childCardActive]}
                 >
-                  <Text
+                  <View
                     style={[
-                      styles.childInitials,
-                      active && styles.childInitialsActive,
+                      styles.childAvatar,
+                      active && styles.childAvatarActive,
                     ]}
                   >
-                    {initials(`${child.first_name} ${child.last_name}`)}
-                  </Text>
-                </View>
-                <View style={styles.childInfo}>
-                  <Text style={styles.childName} numberOfLines={1}>
-                    {child.first_name} {child.last_name}
-                  </Text>
-                  <Text style={styles.childAdmission} numberOfLines={1}>
-                    {child.admission_number}
-                  </Text>
-                </View>
-                {active ? (
-                  <View style={styles.selectedCheck}>
-                    <Check color="#fff" size={14} strokeWidth={3} />
+                    <Text
+                      style={[
+                        styles.childInitials,
+                        active && styles.childInitialsActive,
+                      ]}
+                    >
+                      {initials(`${child.first_name} ${child.last_name}`)}
+                    </Text>
                   </View>
-                ) : null}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+                  <View style={styles.childInfo}>
+                    <Text style={styles.childName} numberOfLines={1}>
+                      {child.first_name} {child.last_name}
+                    </Text>
+                    <Text style={styles.childAdmission} numberOfLines={1}>
+                      {child.class_name || child.admission_number}
+                    </Text>
+                  </View>
+                  {active ? (
+                    <View style={styles.selectedCheck}>
+                      <Check color="#fff" size={14} strokeWidth={3} />
+                    </View>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
         </Animated.View>
       ) : null}
 
       {selectedChild ? (
         <>
           <Animated.View entering={FadeInUp.delay(190).duration(360)}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${selectedChild.first_name}'s profile`}
-              onPress={() => router.push("/(parent)/(tabs)/children")}
-              style={({ pressed }) => [
-                styles.studentBanner,
-                pressed && styles.pressed,
-              ]}
-            >
-              <LinearGradient
-                colors={["#2A7BF6", "#1CA5E7"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-              <View pointerEvents="none" style={styles.bannerGlow} />
-              <View pointerEvents="none" style={styles.bannerGlowTwo} />
-              <View pointerEvents="none" style={styles.bannerRing} />
-              <View style={styles.bannerCopy}>
-                <Text style={styles.bannerName} numberOfLines={1}>
-                  {selectedChild.first_name} {selectedChild.last_name}
-                </Text>
-                <Text style={styles.bannerDetail} numberOfLines={1}>
-                  Class: {selectedChild.class_name || "Not assigned"}
-                </Text>
-                <Text style={styles.bannerDetail} numberOfLines={1}>
-                  Admission No: {selectedChild.admission_number}
-                </Text>
-                <View style={styles.activePill}>
-                  <View style={styles.activeDot} />
-                  <Text style={styles.activeText}>Active student</Text>
+            <View style={styles.studentBannerShell}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${selectedChild.first_name}'s profile`}
+                onPress={() => router.push("/(parent)/(tabs)/children")}
+                style={({ pressed }) => [
+                  styles.studentBanner,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <LinearGradient
+                  colors={["#2A7BF6", "#1CA5E7"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[StyleSheet.absoluteFill, styles.bannerGradient]}
+                />
+                <View pointerEvents="none" style={styles.bannerGlow} />
+                <View pointerEvents="none" style={styles.bannerGlowTwo} />
+                <View pointerEvents="none" style={styles.bannerRing} />
+                <View style={styles.bannerCopy}>
+                  <Text style={styles.bannerName} numberOfLines={1}>
+                    {selectedChild.first_name} {selectedChild.last_name}
+                  </Text>
+                  <Text style={styles.bannerDetail} numberOfLines={1}>
+                    Class: {selectedChild.class_name || "Not assigned"}
+                  </Text>
+                  <Text style={styles.bannerDetail} numberOfLines={1}>
+                    Admission No: {selectedChild.admission_number}
+                  </Text>
+                  <View style={styles.activePill}>
+                    <View style={styles.activeDot} />
+                    <Text style={styles.activeText}>Active student</Text>
+                  </View>
                 </View>
-              </View>
-              <Image
-                source={schoolBag}
-                resizeMode="contain"
-                style={styles.bagArt}
-              />
-            </Pressable>
+                <Image
+                  source={schoolBag}
+                  resizeMode="contain"
+                  style={styles.bagArt}
+                />
+              </Pressable>
+            </View>
           </Animated.View>
 
           <Animated.View
@@ -275,7 +282,8 @@ export default function HomeScreen() {
             style={styles.metricsRow}
           >
             <MetricCard
-              icon={calendar3d}
+              icon={CalendarCheck}
+              iconColor="#2873E8"
               tint="#EAF3FF"
               title="Attendance"
               value={
@@ -291,17 +299,21 @@ export default function HomeScreen() {
               onPress={() => router.push("/(parent)/attendance")}
             />
             <MetricCard
-              icon={book3d}
+              icon={BookOpen}
+              iconColor="#8755D6"
               tint="#F3ECFF"
               title="Average grade"
               value={reports.isLoading ? "…" : averageGrade}
               detail={term?.term_name ?? "Latest report"}
               detailColor="#8053D6"
-              footer={<ChevronRight size={12} color="#8053D6" strokeWidth={2.5} />}
+              footer={
+                <ChevronRight size={12} color="#8053D6" strokeWidth={2.5} />
+              }
               onPress={() => router.push("/(parent)/(tabs)/academics")}
             />
             <MetricCard
-              icon={money3d}
+              icon={CreditCard}
+              iconColor="#189B69"
               tint="#E9F8EF"
               title="Fees paid"
               value={fees.isLoading ? "…" : formattedPaid}
@@ -311,13 +323,16 @@ export default function HomeScreen() {
               onPress={() => router.push("/(parent)/fees")}
             />
             <MetricCard
-              icon={calendar3d}
+              icon={CalendarDays}
+              iconColor="#D47A22"
               tint="#FFF2E2"
               title="Upcoming"
               value={events.isLoading ? "…" : String(events.data?.length ?? 0)}
               detail="School events"
               detailColor="#C86816"
-              footer={<ChevronRight size={12} color="#C86816" strokeWidth={2.5} />}
+              footer={
+                <ChevronRight size={12} color="#C86816" strokeWidth={2.5} />
+              }
               onPress={() => router.push("/(parent)/timetable")}
             />
           </Animated.View>
@@ -327,11 +342,13 @@ export default function HomeScreen() {
             style={styles.sectionHeading}
           >
             <View style={styles.sectionLabel}>
-              <Image
-                source={calendar3d}
-                resizeMode="contain"
-                style={styles.sectionIcon}
-              />
+              <View style={styles.sectionIcon}>
+                <CalendarCheck
+                  size={19}
+                  color={colors.blue}
+                  strokeWidth={2.1}
+                />
+              </View>
               <Text style={styles.sectionTitle}>Recent attendance</Text>
             </View>
             <Pressable
@@ -399,54 +416,83 @@ export default function HomeScreen() {
           </Animated.View>
 
           <Animated.View entering={FadeInUp.delay(410).duration(320)}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push("/(parent)/announcements")}
-            style={({ pressed }) => [
-              styles.announcementCard,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Image
-              source={megaphone3d}
-              resizeMode="contain"
-              style={styles.announcementArt}
-            />
-            <View style={styles.announcementInfo}>
-              <Text style={styles.announcementEyebrow}>
-                Latest announcement
-              </Text>
-              {announcements.isLoading ? (
-                <Text style={styles.announcementTitle}>Loading updates…</Text>
-              ) : announcements.error ? (
-                <Text style={styles.announcementBody} numberOfLines={2}>
-                  {apiErrorMessage(announcements.error)}
-                </Text>
-              ) : latestAnnouncement ? (
-                <>
-                  <View style={styles.announcementTitleRow}>
-                    <Text style={styles.announcementTitle} numberOfLines={1}>
-                      {latestAnnouncement.title}
+            <View style={styles.announcementShell}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push("/(parent)/announcements")}
+                style={({ pressed }) => [
+                  styles.announcementCard,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <LinearGradient
+                  colors={["#F1F7FF", "#E4F0FF"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[StyleSheet.absoluteFill, styles.announcementGradient]}
+                />
+                <View pointerEvents="none" style={styles.announcementHalo} />
+                <View style={styles.announcementArtWrap}>
+                  <Image
+                    source={megaphone3d}
+                    resizeMode="contain"
+                    style={styles.announcementArt}
+                  />
+                </View>
+                <View style={styles.announcementInfo}>
+                  <Text style={styles.announcementEyebrow}>
+                    Latest announcement
+                  </Text>
+                  {announcements.isLoading ? (
+                    <Text style={styles.announcementTitle}>
+                      Loading updates…
                     </Text>
-                    <Text style={styles.newPill}>New</Text>
-                  </View>
-                  <Text style={styles.announcementBody} numberOfLines={2}>
-                    {latestAnnouncement.body}
-                  </Text>
-                  <Text style={styles.announcementDate}>
-                    {new Date(
-                      latestAnnouncement.published_at,
-                    ).toLocaleDateString()}
-                  </Text>
-                </>
-              ) : (
-                <Text style={styles.announcementBody} numberOfLines={2}>
-                  School announcements will appear here.
-                </Text>
-              )}
+                  ) : announcements.error ? (
+                    <Text style={styles.announcementBody} numberOfLines={2}>
+                      {apiErrorMessage(announcements.error)}
+                    </Text>
+                  ) : latestAnnouncement ? (
+                    <>
+                      <View style={styles.announcementTitleRow}>
+                        <Text
+                          style={styles.announcementTitle}
+                          numberOfLines={1}
+                        >
+                          {latestAnnouncement.title}
+                        </Text>
+                        <Text style={styles.newPill}>New</Text>
+                      </View>
+                      <Text style={styles.announcementBody} numberOfLines={2}>
+                        {latestAnnouncement.body}
+                      </Text>
+                      <View style={styles.announcementDateRow}>
+                        <CalendarDays
+                          size={12}
+                          color="#6283BD"
+                          strokeWidth={2}
+                        />
+                        <Text style={styles.announcementDate}>
+                          {new Date(
+                            latestAnnouncement.published_at,
+                          ).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </Text>
+                      </View>
+                    </>
+                  ) : (
+                    <Text style={styles.announcementBody} numberOfLines={2}>
+                      School announcements will appear here.
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.announcementArrow}>
+                  <ChevronRight color={colors.blue} size={18} />
+                </View>
+              </Pressable>
             </View>
-            <ChevronRight color={colors.blue} size={21} />
-          </Pressable>
           </Animated.View>
 
           <Animated.View
@@ -470,28 +516,32 @@ export default function HomeScreen() {
           >
             <QuickAction
               delay={0}
-              icon={book3d}
+              icon={BookOpen}
+              iconColor="#2873E8"
               tint="#EAF3FF"
               title="View grades"
               onPress={() => router.push("/(parent)/(tabs)/academics")}
             />
             <QuickAction
               delay={70}
-              icon={money3d}
+              icon={CreditCard}
+              iconColor="#8755D6"
               tint="#F3ECFF"
               title="Fees"
               onPress={() => router.push("/(parent)/fees")}
             />
             <QuickAction
               delay={140}
-              icon={calendar3d}
+              icon={CalendarCheck}
+              iconColor="#189B69"
               tint="#E9F8EF"
               title="Attendance"
               onPress={() => router.push("/(parent)/attendance")}
             />
             <QuickAction
               delay={210}
-              icon={bell3d}
+              icon={Bell}
+              iconColor="#D47A22"
               tint="#FFF2E2"
               title="Updates"
               onPress={() => router.push("/(parent)/(tabs)/notifications")}
@@ -544,6 +594,7 @@ export default function HomeScreen() {
 
 function MetricCard({
   icon,
+  iconColor,
   tint,
   title,
   value,
@@ -552,7 +603,8 @@ function MetricCard({
   footer,
   onPress,
 }: {
-  icon: number;
+  icon: LucideIcon;
+  iconColor: string;
   tint: string;
   title: string;
   value: string;
@@ -561,6 +613,7 @@ function MetricCard({
   footer?: ReactNode;
   onPress: () => void;
 }) {
+  const Icon = icon;
   return (
     <Pressable
       accessibilityRole="button"
@@ -572,7 +625,7 @@ function MetricCard({
       ]}
     >
       <View style={styles.metricIcon}>
-        <Image source={icon} resizeMode="contain" style={styles.metricImage} />
+        <Icon size={21} color={iconColor} strokeWidth={2.1} />
       </View>
       <Text style={styles.metricTitle} numberOfLines={1}>
         {title}
@@ -595,17 +648,20 @@ function MetricCard({
 
 function QuickAction({
   icon,
+  iconColor,
   tint,
   title,
   onPress,
   delay,
 }: {
-  icon: number;
+  icon: LucideIcon;
+  iconColor: string;
   tint: string;
   title: string;
   onPress: () => void;
   delay: number;
 }) {
+  const Icon = icon;
   return (
     <Animated.View
       entering={FadeInUp.delay(delay).duration(300)}
@@ -617,7 +673,7 @@ function QuickAction({
         style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
       >
         <View style={[styles.quickIcon, { backgroundColor: tint }]}>
-          <Image source={icon} resizeMode="contain" style={styles.quickImage} />
+          <Icon size={22} color={iconColor} strokeWidth={2.1} />
         </View>
         <View style={styles.quickBottom}>
           <Text style={styles.quickTitle} numberOfLines={1}>
@@ -762,13 +818,30 @@ const styles = StyleSheet.create({
   },
   heroCap: { position: "absolute", width: 80, height: 80, right: 51, top: -1 },
   childPickerRow: { gap: 8, paddingRight: 16 },
+  childSectionHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  childSectionTitle: { color: colors.ink, fontSize: 13, fontWeight: "800" },
+  childCount: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    overflow: "hidden",
+    backgroundColor: colors.blueSoft,
+    color: colors.blueDeep,
+    fontSize: 10,
+    fontWeight: "700",
+  },
   childCard: {
-    width: 194,
-    minHeight: 80,
+    width: 202,
+    minHeight: 76,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    padding: 9,
+    padding: 10,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 18,
@@ -802,14 +875,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   studentBanner: {
-    minHeight: 136,
+    minHeight: 144,
     overflow: "hidden",
     flexDirection: "row",
     alignItems: "center",
     padding: 16,
-    borderRadius: 20,
+    borderRadius: 24,
     backgroundColor: "#2A7BF6",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.48)",
   },
+  studentBannerShell: {
+    borderRadius: 24,
+    backgroundColor: "#2A7BF6",
+    shadowColor: "#2168D4",
+    shadowOpacity: 0.13,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 3,
+  },
+  bannerGradient: { borderRadius: 24 },
   bannerGlow: {
     position: "absolute",
     top: -34,
@@ -876,37 +961,37 @@ const styles = StyleSheet.create({
     right: 5,
     bottom: 0,
   },
-  metricsRow: { flexDirection: "row", gap: 8 },
+  metricsRow: { flexDirection: "row", alignItems: "stretch", gap: 8 },
   metricCard: {
     flex: 1,
+    flexBasis: 0,
     minWidth: 0,
-    minHeight: 134,
+    minHeight: 142,
     alignItems: "flex-start",
     justifyContent: "flex-start",
-    padding: 10,
+    padding: 9,
     borderWidth: 1,
     borderColor: "rgba(49,93,245,0.08)",
     borderRadius: 18,
   },
   metricIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.7)",
-    marginBottom: 8,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    marginBottom: 9,
   },
-  metricImage: { width: 36, height: 36 },
   metricTitle: {
     color: "#41537A",
-    fontSize: 9.5,
+    fontSize: 9,
     fontWeight: "700",
     marginTop: 2,
   },
   metricValue: {
     color: colors.blueDeep,
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: "800",
     marginTop: 6,
     maxWidth: "100%",
@@ -930,7 +1015,14 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   sectionLabel: { flexDirection: "row", alignItems: "center", gap: 8 },
-  sectionIcon: { width: 28, height: 28 },
+  sectionIcon: {
+    width: 29,
+    height: 29,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.blueSoft,
+  },
   sectionTitle: { color: colors.ink, fontSize: 15, fontWeight: "800" },
   viewAll: { flexDirection: "row", alignItems: "center", gap: 1 },
   viewAllText: { color: colors.blue, fontSize: 11, fontWeight: "700" },
@@ -968,20 +1060,47 @@ const styles = StyleSheet.create({
   markText: { color: "#7183A4", fontWeight: "800", fontSize: 12 },
   mutedText: { color: colors.muted, fontSize: 11, lineHeight: 17 },
   announcementCard: {
-    minHeight: 103,
+    minHeight: 112,
     flexDirection: "row",
     alignItems: "center",
-    gap: 9,
+    gap: 10,
     overflow: "hidden",
-    padding: 11,
-    borderRadius: 18,
+    padding: 12,
+    borderRadius: 21,
     backgroundColor: "#EAF3FF",
     borderWidth: 1,
-    borderColor: "#D4E5FF",
+    borderColor: "#D2E3FF",
   },
-  announcementArt: { width: 63, height: 68 },
-  announcementInfo: { flex: 1, minWidth: 0, gap: 4 },
-  announcementEyebrow: { color: "#3D77D7", fontSize: 10, fontWeight: "600" },
+  announcementShell: {
+    borderRadius: 21,
+    shadowColor: "#2563EB",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  announcementGradient: { borderRadius: 21 },
+  announcementHalo: {
+    position: "absolute",
+    width: 128,
+    height: 128,
+    top: -72,
+    right: -25,
+    borderRadius: 70,
+    backgroundColor: "rgba(255,255,255,0.44)",
+  },
+  announcementArtWrap: {
+    width: 58,
+    height: 58,
+    flex: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 19,
+    backgroundColor: "rgba(255,255,255,0.66)",
+  },
+  announcementArt: { width: 54, height: 54 },
+  announcementInfo: { flex: 1, minWidth: 0, gap: 5 },
+  announcementEyebrow: { color: "#3D77D7", fontSize: 10, fontWeight: "700" },
   announcementTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   announcementTitle: {
     color: colors.blueDeep,
@@ -999,8 +1118,23 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     overflow: "hidden",
   },
-  announcementBody: { color: colors.muted, fontSize: 10, lineHeight: 15 },
-  announcementDate: { color: "#6283BD", fontSize: 9, marginTop: 1 },
+  announcementBody: { color: "#5F7394", fontSize: 10, lineHeight: 15 },
+  announcementDateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 1,
+  },
+  announcementDate: { color: "#6283BD", fontSize: 9 },
+  announcementArrow: {
+    width: 28,
+    height: 28,
+    flex: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.pill,
+    backgroundColor: "rgba(255,255,255,0.68)",
+  },
   quickBolt: {
     color: colors.blue,
     fontSize: 26,
