@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from app.db import get_session
 from app.domain import notifications as notice_domain
 from app.domain.notifications import SentNotice
 from app.push import send_expo_push
+from app.realtime import publish_user_event
 
 router = APIRouter(prefix="/api/v1/communications", tags=["communications"])
 STAFF_ROLES = (models.MembershipRole.SCHOOL_ADMIN, models.MembershipRole.PRINCIPAL)
@@ -102,6 +103,7 @@ async def preview_audience(
 async def send_notification(
     payload: NoticeCreate,
     background: BackgroundTasks,
+    request: Request,
     context: Annotated[TenantContext, Depends(require_roles(*STAFF_ROLES))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> NoticeResponse:
@@ -122,6 +124,8 @@ async def send_notification(
         raise HTTPException(status_code=404, detail=str(error)) from None
     await session.commit()
     await session.refresh(notice.campaign)
+    for user_id in notice.recipients:
+        await publish_user_event(request, context.school_id, user_id)
     background.add_task(
         send_expo_push,
         context.school_id,

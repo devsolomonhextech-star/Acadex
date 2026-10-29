@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../features/auth/authHooks'
@@ -7,7 +7,7 @@ import { useLessonAlerts } from '../../features/academic/useLessonAlerts'
 import {
   AppstoreOutlined, ArrowRightOutlined, BarChartOutlined, BellOutlined, BookOutlined, CalendarOutlined,
   CarOutlined, CheckCircleOutlined, CreditCardOutlined, DashboardOutlined, FlagOutlined, GiftOutlined,
-  HomeOutlined, IdcardOutlined, InboxOutlined, LogoutOutlined, MenuOutlined, MessageOutlined, ReadOutlined, SearchOutlined, SettingOutlined,
+  HomeOutlined, IdcardOutlined, InboxOutlined, LogoutOutlined, MenuOutlined, MessageOutlined, ReadOutlined, RocketOutlined, SearchOutlined, SettingOutlined,
   TeamOutlined, TrophyOutlined, UserAddOutlined, UserOutlined, HeartOutlined,
 } from '@ant-design/icons'
 import { Avatar, Badge, Button, Input, Popover, Select, Spin } from 'antd'
@@ -27,6 +27,7 @@ type TrialStatus = {
 }
 
 const workspaceItems: SidebarItem[] = [
+  { label: 'School setup', to: '/setup', icon: <RocketOutlined /> },
   { label: 'Overview', to: '/', icon: <DashboardOutlined /> },
   { label: 'Students', to: '/students', icon: <TeamOutlined /> },
   { label: 'Teachers', to: '/teachers', icon: <IdcardOutlined /> },
@@ -93,6 +94,40 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { accessToken } = useAuth()
+  useEffect(() => {
+    if (!accessToken) return
+    let active = true
+    let socket: WebSocket | undefined
+    let retryTimer: number | undefined
+    let retry = 0
+    const connect = async () => {
+      try {
+        const { ticket } = await apiRequest<{ ticket: string }>('/realtime/ticket', { method: 'POST' }, accessToken)
+        if (!active) return
+        const base = import.meta.env.VITE_API_URL || window.location.origin
+        const wsBase = new URL(base, window.location.origin)
+        wsBase.protocol = wsBase.protocol === 'https:' ? 'wss:' : 'ws:'
+        wsBase.pathname = `${wsBase.pathname.replace(/\/$/, '')}/api/v1/realtime/ws`
+        wsBase.search = new URLSearchParams({ ticket }).toString()
+        socket = new WebSocket(wsBase)
+        socket.onopen = () => { retry = 0 }
+        socket.onmessage = () => {
+          void queryClient.invalidateQueries({ queryKey: ['notifications'] })
+          void queryClient.invalidateQueries({ queryKey: ['parent-request-counts', user.school_id] })
+          void queryClient.invalidateQueries({ queryKey: ['parent-requests'] })
+          void queryClient.invalidateQueries({ queryKey: ['sent-notices'] })
+        }
+        socket.onclose = () => {
+          if (!active) return
+          retryTimer = window.setTimeout(() => { void connect() }, Math.min(1000 * 2 ** retry++, 30000))
+        }
+      } catch {
+        if (active) retryTimer = window.setTimeout(() => { void connect() }, Math.min(1000 * 2 ** retry++, 30000))
+      }
+    }
+    void connect()
+    return () => { active = false; if (retryTimer) window.clearTimeout(retryTimer); socket?.close() }
+  }, [accessToken, queryClient, user.school_id])
   const { years, terms, yearId, termId, setYearId, setTermId, loading: periodLoading } = useAcademicPeriod()
   const { alerts, dismiss, contextHolder } = useLessonAlerts()
   // Free-trial countdown reminder for the administrators who own billing.
@@ -148,6 +183,7 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
   const canViewAssessments = ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role)
   const canViewFinance = ['school_admin', 'principal', 'finance'].includes(user.role)
   const visibleNavigation = workspaceItems.filter(item => {
+    if (item.label === 'School setup') return user.role === 'school_admin'
     if (item.label === 'My exams') return user.role === 'student'
     if (item.label === 'Students') return canManageAcademics
     if (item.label === 'Teachers') return ['school_admin', 'principal', 'registrar'].includes(user.role)

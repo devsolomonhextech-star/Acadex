@@ -1,0 +1,32 @@
+.setup-page { max-width: 1080px; margin: 0 auto; padding: 10px 2px 36px; color: #15233b; }
+.setup-hero { display: flex; align-items: center; gap: 22px; padding: 30px; border-radius: 24px; color: #fff; background: linear-gradient(118deg,#102b68 0%,#155eef 60%,#5aa6ff 100%); box-shadow: 0 18px 45px rgba(22,75,170,.16); }
+.setup-hero-icon { display: grid; place-items: center; flex: 0 0 62px; height: 62px; border: 1px solid rgba(255,255,255,.28); border-radius: 20px; background: rgba(255,255,255,.14); font-size: 27px; }
+.setup-hero-copy { flex: 1; min-width: 0; }
+.setup-eyebrow { color: #c8dcff; font-size: 10px; font-weight: 800; letter-spacing: 1.3px; }
+.setup-hero h1 { margin: 6px 0 7px; color: #fff; font-size: clamp(23px,3vw,32px); font-weight: 750; letter-spacing: -.6px; }
+.setup-hero p { max-width: 620px; margin: 0; color: rgba(255,255,255,.8); font-size: 14px; line-height: 1.65; }
+.setup-progress-block { display: grid; justify-items: end; gap: 1px; padding-left: 24px; border-left: 1px solid rgba(255,255,255,.24); }
+.setup-progress-block strong { font-size: 29px; line-height: 1.2; }
+.setup-progress-block strong span { color: #c8dcff; font-size: 16px; font-weight: 600; }
+.setup-progress-block small { color: #d7e6ff; font-size: 11px; }
+.setup-progress-card { margin-top: 18px; border: 1px solid #e5edf8; border-radius: 18px; box-shadow: 0 8px 24px rgba(24,54,96,.04); }
+.setup-progress-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.setup-progress-heading div { display: grid; gap: 4px; }
+.setup-progress-heading strong { color: #15233b; font-size: 14px; }
+.setup-progress-heading div span,.setup-progress-heading>span { color: #71809a; font-size: 12px; }
+.setup-steps { display: grid; gap: 11px; margin-top: 16px; }
+.setup-step-card { display: flex; align-items: center; gap: 16px; border: 1px solid #e8eef6; border-radius: 17px; box-shadow: 0 5px 16px rgba(24,54,96,.035); transition: border-color .18s, transform .18s; }
+.setup-step-card:hover { transform: translateY(-1px); border-color: #bfd4fb; }
+.setup-step-card.is-complete { border-color: #d7eee3; background: linear-gradient(100deg,#fff 0%,#fbfffc 100%); }
+.setup-step-number { display: grid; place-items: center; flex: 0 0 42px; width: 42px; height: 42px; border-radius: 14px; background: #eff5ff; color: #246bdf; font-size: 13px; font-weight: 800; }
+.is-complete .setup-step-number { background: #e8f7ef; color: #1b9a61; font-size: 20px; }
+.setup-step-copy { flex: 1; min-width: 0; }
+.setup-step-title { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.setup-step-title h2 { margin: 0; color: #192b48; font-size: 14px; font-weight: 700; }
+.setup-step-title .ant-tag { margin-inline-end: 0; border: 0; border-radius: 20px; font-size: 10px; line-height: 20px; }
+.setup-step-copy p { margin: 5px 0 0; color: #71809a; font-size: 12px; line-height: 1.5; }
+.setup-step-action { display: inline-flex; align-items: center; gap: 8px; height: 36px; border-color: #e1eaf7; border-radius: 11px; color: #245bb5; font-size: 12px; font-weight: 650; }
+.setup-step-action:hover { border-color: #a8c5f5 !important; color: #155eef !important; }
+.setup-loading { display: flex; justify-content: center; align-items: center; gap: 12px; min-height: 210px; color: #71809a; }
+.setup-finish { margin-top: 16px; border-radius: 14px; }
+@media (max-width: 680px) { .setup-hero { align-items: flex-start; padding: 23px 20px; gap: 14px; flex-wrap: wrap; } .setup-hero-icon { flex-basis: 48px; height: 48px; border-radius: 15px; font-size: 22px; } .setup-hero-copy { flex: 1 1 calc(100% - 64px); } .setup-hero p { font-size: 12px; } .setup-progress-block { flex: 1 1 100%; justify-items: start; padding: 12px 0 0; border-left: 0; border-top: 1px solid rgba(255,255,255,.24); } .setup-step-card { align-items: flex-start; flex-wrap: wrap; padding-bottom: 16px; } .setup-step-copy { flex: 1 1 calc(100% - 60px); } .setup-step-action { margin-left: 58px; } }

@@ -1,22 +1,23 @@
-"""Live notification stream shared by the school dashboard and family devices.
-
-The hub is process-local: the API runs as a single uvicorn worker, so an
-in-memory registry is enough. A multi-worker deployment would replace the
-delivery loop with Redis pub/sub behind the same interface.
-"""
+"""Short-lived WebSocket tickets and per-user Redis event delivery."""
+import hashlib
+import json
+import secrets
 import asyncio
-from collections.abc import Iterable, Sequence
-from datetime import UTC, datetime
-from typing import Any
+from collections.abc import Iterable
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import WebSocket
+from fastapi import APIRouter, Depends, Request, WebSocket
+from pydantic import BaseModel
+from redis.exceptions import RedisError
 
-from app.models import Notification
+from app.api.auth import TenantContext, current_tenant
+
+router = APIRouter(prefix="/api/v1/realtime", tags=["realtime"])
 
 
 class RealtimeHub:
-    """Tracks open sockets per school and delivers events to named users."""
+    """Compatibility hub for the legacy authenticated socket module."""
 
     def __init__(self) -> None:
         self._rooms: dict[UUID, dict[WebSocket, UUID]] = {}
@@ -28,38 +29,21 @@ class RealtimeHub:
 
     async def remove(self, school_id: UUID, socket: WebSocket) -> None:
         async with self._lock:
-            room = self._rooms.get(school_id)
-            if not room:
-                return
+            room = self._rooms.get(school_id, {})
             room.pop(socket, None)
             if not room:
                 self._rooms.pop(school_id, None)
 
-    async def connection_count(self, school_id: UUID | None = None) -> int:
+    async def publish(self, school_id: UUID, user_ids: Iterable[UUID], event: dict) -> int:
+        targets = set(user_ids)
         async with self._lock:
-            if school_id is None:
-                return sum(len(room) for room in self._rooms.values())
-            return len(self._rooms.get(school_id, {}))
-
-    async def publish(
-        self, school_id: UUID, user_ids: Iterable[UUID], event: dict[str, Any]
-    ) -> int:
-        """Send one event to every open socket belonging to those users."""
-        recipients = set(user_ids)
-        if not recipients:
-            return 0
-        async with self._lock:
-            targets = [
-                socket
-                for socket, user_id in self._rooms.get(school_id, {}).items()
-                if user_id in recipients
-            ]
+            sockets = [socket for socket, user_id in self._rooms.get(school_id, {}).items() if user_id in targets]
         delivered = 0
-        for socket in targets:
+        for socket in sockets:
             try:
                 await socket.send_json(event)
                 delivered += 1
-            except Exception:  # noqa: BLE001 - a dead socket must not break the request
+            except Exception:  # noqa: BLE001 - dead sockets must not break delivery
                 await self.remove(school_id, socket)
         return delivered
 
@@ -67,28 +51,57 @@ class RealtimeHub:
 hub = RealtimeHub()
 
 
-def notification_event(notification: Notification) -> dict[str, Any]:
-    created_at = notification.created_at or datetime.now(UTC)
-    return {
-        "type": "notification",
-        "notification": {
-            "id": str(notification.id),
-            "title": notification.title,
-            "body": notification.body,
-            "kind": notification.type,
-            "link": notification.link,
-            "created_at": created_at.isoformat(),
-        },
-    }
+class TicketResponse(BaseModel):
+    ticket: str
+    expires_in: int = 30
 
 
-async def publish_notifications(
-    school_id: UUID, notifications: Sequence[Notification]
-) -> int:
-    """Fan a batch of saved notifications out to their live sockets."""
-    delivered = 0
-    for notification in notifications:
-        delivered += await hub.publish(
-            school_id, [notification.user_id], notification_event(notification)
+@router.post("/ticket", response_model=TicketResponse)
+async def create_ticket(
+    request: Request,
+    context: Annotated[TenantContext, Depends(current_tenant)],
+) -> TicketResponse:
+    ticket = secrets.token_urlsafe(32)
+    key = "acadex:ws-ticket:" + hashlib.sha256(ticket.encode()).hexdigest()
+    await request.app.state.redis.set(
+        key, json.dumps({"school_id": str(context.school_id), "user_id": str(context.user_id)}), ex=30, nx=True
+    )
+    return TicketResponse(ticket=ticket)
+
+
+async def publish_user_event(request: Request, school_id: UUID, user_id: UUID, event: str = "notifications.updated") -> None:
+    """Publish a cache-invalidation event; notification rows remain the source of truth."""
+    try:
+        await request.app.state.redis.publish(
+            f"acadex:school:{school_id}:user:{user_id}", json.dumps({"type": event})
         )
-    return delivered
+    except (AttributeError, RedisError):
+        # Real-time delivery is best effort; REST and Expo push remain available.
+        pass
+
+
+@router.websocket("/ws")
+async def websocket_events(websocket: WebSocket, ticket: str = "") -> None:
+    redis = websocket.app.state.redis
+    key = "acadex:ws-ticket:" + hashlib.sha256(ticket.encode()).hexdigest()
+    try:
+        raw = await redis.getdel(key)
+    except (RedisError, AttributeError):
+        raw = None
+    if not raw:
+        await websocket.close(code=4401)
+        return
+    identity = json.loads(raw)
+    channel = f"acadex:school:{identity['school_id']}:user:{identity['user_id']}"
+    await websocket.accept()
+    pubsub = redis.pubsub()
+    try:
+        await pubsub.subscribe(channel)
+        while True:
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+            if message and message.get("type") == "message":
+                data = message["data"]
+                await websocket.send_text(data.decode() if isinstance(data, bytes) else data)
+    finally:
+        await pubsub.unsubscribe(channel)
+        await pubsub.aclose()

@@ -3,7 +3,7 @@ from datetime import date, datetime
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -11,15 +11,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import TenantContext, require_roles
 from app.db import get_session
+from app.push import send_expo_push
+from app.realtime import publish_user_event
 from app.models import (
     AcademicYear,
     AttendanceRecord,
     AttendanceSession,
     AuditEvent,
     ClassGroup,
+    Guardian,
     MembershipRole,
+    Notification,
     SchoolMembership,
     Student,
+    StudentGuardian,
     StudentEnrollment,
 )
 
@@ -121,6 +126,8 @@ async def get_sheet(
 @router.put("/sheet", response_model=AttendanceSheet)
 async def save_sheet(
     payload: AttendanceSave,
+    background: BackgroundTasks,
+    request: Request,
     context: Annotated[TenantContext, Depends(require_roles(*attendance_roles))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ):
@@ -156,6 +163,7 @@ async def save_sheet(
     ).with_for_update())
     record_by_student = {record.student_id: record for record in existing_records}
     changed = created
+    newly_absent: set[UUID] = set()
     for mark in payload.marks:
         record = record_by_student.get(mark.student_id)
         note = mark.note.strip() if mark.note and mark.note.strip() else None
@@ -163,7 +171,11 @@ async def save_sheet(
             session.add(AttendanceRecord(school_id=context.school_id, session_id=attendance.id,
                                          student_id=mark.student_id, status=mark.status, note=note))
             changed = True
+            if mark.status == "absent":
+                newly_absent.add(mark.student_id)
         elif record.status != mark.status or record.note != note:
+            if record.status != "absent" and mark.status == "absent":
+                newly_absent.add(mark.student_id)
             record.status = mark.status
             record.note = note
             changed = True
@@ -174,9 +186,33 @@ async def save_sheet(
             action="attendance.recorded" if created else "attendance.corrected",
             resource_type="attendance_session", resource_id=attendance.id,
         ))
+    recipients: dict[UUID, list[tuple[UUID, str]]] = {}
+    if newly_absent:
+        rows = (await session.execute(
+            select(Guardian.user_id, Student.id, Student.first_name, Student.last_name)
+            .join(StudentGuardian, StudentGuardian.guardian_id == Guardian.id)
+            .join(Student, Student.id == StudentGuardian.student_id)
+            .where(Guardian.school_id == context.school_id, StudentGuardian.school_id == context.school_id,
+                   Student.id.in_(newly_absent), Guardian.user_id.is_not(None))
+        )).all()
+        for user_id, student_id, first_name, last_name in rows:
+            name = f"{first_name} {last_name}"
+            recipients.setdefault(user_id, []).append((student_id, name))
+            session.add(Notification(
+                school_id=context.school_id, user_id=user_id, title="Attendance update",
+                body=f"{name} was marked absent on {payload.attendance_date.isoformat()}.",
+                type="attendance_absent",
+                link=f"/notifications?student_id={student_id}&date={payload.attendance_date.isoformat()}",
+            ))
     try:
         await session.commit()
     except IntegrityError:
         await session.rollback()
         raise HTTPException(status_code=409, detail="Attendance was updated at the same time. Reload and try again") from None
+    for user_id, children in recipients.items():
+        names = sorted({name for _, name in children})
+        message = f"{', '.join(names)} {'were' if len(names) > 1 else 'was'} marked absent on {payload.attendance_date.isoformat()}."
+        await publish_user_event(request, context.school_id, user_id)
+        background.add_task(send_expo_push, context.school_id, [user_id], "Attendance update", message,
+                            {"link": "/notifications"})
     return await get_sheet(payload.class_group_id, payload.attendance_date, context, session)

@@ -1,10 +1,10 @@
 """Parent-facing access to linked students and published academic reports."""
-from datetime import date
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import models
@@ -157,6 +157,66 @@ async def child_attendance(
     counts = {key: sum(1 for record in records if record["status"] == key)
               for key in ("present", "absent", "late", "excused")}
     return {"records": records, "counts": counts, "total_recorded": len(records)}
+
+
+@router.get("/weekly-summary/{student_id}")
+async def child_weekly_summary(
+    student_id: UUID,
+    context: Annotated[TenantContext, Depends(require_roles(models.MembershipRole.PARENT))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    """Summarize this week's attendance and newly released assessment results."""
+    await _guardian_for_child(session, context, student_id)
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    monday = datetime.combine(week_start, time.min, tzinfo=UTC)
+    tomorrow = datetime.combine(today + timedelta(days=1), time.min, tzinfo=UTC)
+    attendance_rows = (await session.execute(
+        select(models.AttendanceRecord.status, func.count())
+        .join(models.AttendanceSession,
+              (models.AttendanceSession.id == models.AttendanceRecord.session_id)
+              & (models.AttendanceSession.school_id == models.AttendanceRecord.school_id))
+        .where(models.AttendanceRecord.school_id == context.school_id,
+               models.AttendanceRecord.student_id == student_id,
+               models.AttendanceSession.attendance_date >= week_start,
+               models.AttendanceSession.attendance_date <= today)
+        .group_by(models.AttendanceRecord.status)
+    )).all()
+    attendance = {status: int(count) for status, count in attendance_rows}
+    result_rows = (await session.execute(
+        select(models.Assessment.title, models.Subject.name, models.AssessmentScore.score,
+               models.Assessment.max_score, models.AssessmentScore.updated_at)
+        .join(models.Assessment,
+              (models.Assessment.id == models.AssessmentScore.assessment_id)
+              & (models.Assessment.school_id == models.AssessmentScore.school_id))
+        .join(models.Subject,
+              (models.Subject.id == models.Assessment.subject_id)
+              & (models.Subject.school_id == models.Assessment.school_id))
+        .where(models.AssessmentScore.school_id == context.school_id,
+               models.AssessmentScore.student_id == student_id,
+               models.AssessmentScore.score.is_not(None),
+               models.Assessment.status.in_(("returned", "approved")),
+               models.AssessmentScore.updated_at >= monday,
+               models.AssessmentScore.updated_at < tomorrow)
+        .order_by(models.AssessmentScore.updated_at.desc())
+        .limit(8)
+    )).all()
+    results = [{
+        "title": title,
+        "subject": subject,
+        "score_percent": round(float(score / max_score * 100), 1) if max_score else None,
+        "updated_at": updated_at,
+    } for title, subject, score, max_score, updated_at in result_rows]
+    average = round(sum(item["score_percent"] for item in results if item["score_percent"] is not None)
+                    / max(sum(1 for item in results if item["score_percent"] is not None), 1), 1) if results else None
+    return {
+        "week_start": week_start,
+        "week_end": today,
+        "days_recorded": sum(attendance.values()),
+        "attendance": {key: attendance.get(key, 0) for key in ("present", "late", "absent", "excused")},
+        "results": results,
+        "average_score_percent": average,
+    }
 
 
 @router.get("/fees/{student_id}")

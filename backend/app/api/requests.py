@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from app.db import get_session
 from app.domain import requests as request_domain
 from app.domain.requests import RequestSummary
 from app.push import send_expo_push
+from app.realtime import publish_user_event
 
 school_router = APIRouter(prefix="/api/v1/communications", tags=["communications"])
 family_router = APIRouter(prefix="/api/v1/family", tags=["family"])
@@ -218,6 +219,7 @@ async def reply_to_request(
     request_id: UUID,
     payload: RequestMessageCreate,
     background: BackgroundTasks,
+    http_request: Request,
     context: Annotated[TenantContext, Depends(require_roles(*STAFF_ROLES))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ParentRequestDetailResponse:
@@ -249,6 +251,8 @@ async def reply_to_request(
         link=f"/parents?request={summary.request.id}",
     )
     await session.commit()
+    for recipient in recipients:
+        await publish_user_event(http_request, context.school_id, recipient)
     background.add_task(
         send_expo_push, context.school_id, recipients, title, body,
         {"link": f"/parents?request={summary.request.id}"},
@@ -261,6 +265,7 @@ async def update_request_status(
     request_id: UUID,
     payload: RequestStatusUpdate,
     background: BackgroundTasks,
+    http_request: Request,
     context: Annotated[TenantContext, Depends(require_roles(*STAFF_ROLES))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ParentRequestDetailResponse:
@@ -287,6 +292,8 @@ async def update_request_status(
         )
     await session.commit()
     if changed:
+        for recipient in recipients:
+            await publish_user_event(http_request, context.school_id, recipient)
         background.add_task(
         send_expo_push, context.school_id, recipients, title, body,
         {"link": f"/parents?request={request.id}"},
@@ -336,6 +343,7 @@ async def get_parent_request(
 async def create_parent_request(
     payload: ParentRequestCreate,
     background: BackgroundTasks,
+    http_request: Request,
     context: Annotated[TenantContext, Depends(require_roles(models.MembershipRole.PARENT))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ParentRequestDetailResponse:
@@ -377,6 +385,8 @@ async def create_parent_request(
         link=link,
     )
     await session.commit()
+    for recipient in admin_ids:
+        await publish_user_event(http_request, context.school_id, recipient)
     background.add_task(send_expo_push, context.school_id, admin_ids, title, body, {"link": link})
     summary = await request_domain.get_parent_request(
         session, context.school_id, guardian.id, request.id
@@ -389,6 +399,7 @@ async def reply_to_school(
     request_id: UUID,
     payload: RequestMessageCreate,
     background: BackgroundTasks,
+    http_request: Request,
     context: Annotated[TenantContext, Depends(require_roles(models.MembershipRole.PARENT))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ParentRequestDetailResponse:
@@ -426,5 +437,7 @@ async def reply_to_school(
         link=link,
     )
     await session.commit()
+    for recipient in admin_ids:
+        await publish_user_event(http_request, context.school_id, recipient)
     background.add_task(send_expo_push, context.school_id, admin_ids, title, body, {"link": link})
     return await _detail_response(session, summary)

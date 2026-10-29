@@ -10,6 +10,7 @@ import {
   Check,
   ChevronRight,
   GraduationCap,
+  TrendingUp,
   Wallet,
   X,
   Zap,
@@ -73,6 +74,12 @@ export default function HomeScreen() {
     queryFn: ({ signal }) => familyApi.attendance(selectedChild!.id, signal),
     enabled: !!selectedChild,
   });
+  const weeklySummary = useQuery({
+    queryKey: ["weekly-summary", selectedChild?.id],
+    queryFn: ({ signal }) => familyApi.weeklySummary(selectedChild!.id, signal),
+    enabled: !!selectedChild,
+    staleTime: 60_000,
+  });
   const events = useQuery({
     queryKey: ["events", selectedChild?.id],
     queryFn: ({ signal }) => familyApi.events(selectedChild!.id, signal),
@@ -91,6 +98,7 @@ export default function HomeScreen() {
     void reports.refetch();
     void fees.refetch();
     void attendance.refetch();
+    void weeklySummary.refetch();
     void announcements.refetch();
     void events.refetch();
     void notifications.refetch();
@@ -120,6 +128,7 @@ export default function HomeScreen() {
             reports.isRefetching ||
             fees.isRefetching ||
             attendance.isRefetching ||
+            weeklySummary.isRefetching ||
             announcements.isRefetching ||
             events.isRefetching ||
             notifications.isRefetching
@@ -368,6 +377,58 @@ export default function HomeScreen() {
             ) : (
               <Text style={styles.mutedText}>No attendance records yet.</Text>
             )}
+          </Animated.View>
+
+          <Animated.View entering={FadeInUp.delay(395).duration(320)} style={styles.weeklySummaryCard}>
+            <View style={styles.weeklySummaryHeader}>
+              <View style={styles.weeklySummaryIcon}><TrendingUp size={18} color={colors.blue} strokeWidth={2.2} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.weeklySummaryTitle}>Weekly progress</Text>
+                <Text style={styles.weeklySummaryDate}>
+                  {weeklySummary.data
+                    ? `${new Date(`${weeklySummary.data.week_start}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${new Date(`${weeklySummary.data.week_end}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+                    : "This week"}
+                </Text>
+              </View>
+              <Text style={styles.weeklyChildName} numberOfLines={1}>{selectedChild.first_name}</Text>
+            </View>
+            {weeklySummary.isLoading ? (
+              <Text style={styles.mutedText}>Putting this week’s progress together…</Text>
+            ) : weeklySummary.error ? (
+              <Text style={styles.mutedText}>This week’s progress is unavailable right now.</Text>
+            ) : weeklySummary.data ? (
+              <>
+                <View style={styles.weeklyStatsRow}>
+                  <View style={styles.weeklyStat}>
+                    <Text style={styles.weeklyStatValue}>{weeklySummary.data.attendance.present + weeklySummary.data.attendance.late}/{weeklySummary.data.days_recorded}</Text>
+                    <Text style={styles.weeklyStatLabel}>Days attended</Text>
+                  </View>
+                  <View style={styles.weeklyStatDivider} />
+                  <View style={styles.weeklyStat}>
+                    <Text style={styles.weeklyStatValue}>{weeklySummary.data.attendance.absent}</Text>
+                    <Text style={styles.weeklyStatLabel}>Absences</Text>
+                  </View>
+                  <View style={styles.weeklyStatDivider} />
+                  <View style={styles.weeklyStat}>
+                    <Text style={styles.weeklyStatValue}>{weeklySummary.data.average_score_percent == null ? "—" : `${Math.round(weeklySummary.data.average_score_percent)}%`}</Text>
+                    <Text style={styles.weeklyStatLabel}>New results</Text>
+                  </View>
+                </View>
+                {weeklySummary.data.results.length ? (
+                  <View style={styles.weeklyResults}>
+                    {weeklySummary.data.results.slice(0, 2).map((result, index) => (
+                      <View key={`${result.title}-${index}`} style={styles.weeklyResultRow}>
+                        <View style={styles.weeklyResultDot} />
+                        <Text style={styles.weeklyResultText} numberOfLines={1}>{result.subject}: {result.title}</Text>
+                        <Text style={styles.weeklyResultScore}>{result.score_percent == null ? "—" : `${Math.round(result.score_percent)}%`}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <Text style={styles.weeklyEmpty}>No new graded results were released this week.</Text>
+                )}
+              </>
+            ) : null}
           </Animated.View>
 
           <Animated.View entering={FadeInUp.delay(410).duration(320)}>
@@ -988,6 +1049,45 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  weeklySummaryCard: {
+    marginTop: 13,
+    padding: 15,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: "#DCE9FA",
+    gap: 13,
+  },
+  weeklySummaryHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
+  weeklySummaryIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.blueSoft,
+  },
+  weeklySummaryTitle: { color: colors.ink, fontWeight: "800", fontSize: 14 },
+  weeklySummaryDate: { color: colors.muted, fontSize: 10, marginTop: 2 },
+  weeklyChildName: { maxWidth: 80, color: colors.blue, fontSize: 11, fontWeight: "700" },
+  weeklyStatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    paddingVertical: 10,
+    borderRadius: 15,
+    backgroundColor: "#F6F9FE",
+  },
+  weeklyStat: { flex: 1, alignItems: "center", gap: 3 },
+  weeklyStatValue: { color: colors.ink, fontSize: 16, fontWeight: "800" },
+  weeklyStatLabel: { color: colors.muted, fontSize: 9, textAlign: "center" },
+  weeklyStatDivider: { width: 1, height: 28, backgroundColor: colors.border },
+  weeklyResults: { gap: 8 },
+  weeklyResultRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  weeklyResultDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success },
+  weeklyResultText: { flex: 1, color: colors.muted, fontSize: 10 },
+  weeklyResultScore: { color: colors.success, fontSize: 10, fontWeight: "800" },
+  weeklyEmpty: { color: colors.muted, fontSize: 10, lineHeight: 15 },
   weekStrip: { flexDirection: "row", justifyContent: "space-between" },
   dayItem: {
     flex: 1,

@@ -21,9 +21,11 @@ from app.api.grading import router as grading_router
 from app.api.guardians import router as guardians_router
 from app.api.mobile import router as mobile_router
 from app.api.overview import router as overview_router
+from app.api.onboarding import router as onboarding_router
 from app.api.requests import family_router as family_requests_router
 from app.api.requests import school_router as school_requests_router
 from app.api.results import router as results_router
+from app.realtime import router as realtime_router
 from app.api.school_notifications import router as school_notifications_router
 from app.api.staff import router as staff_router
 from app.api.student_imports import router as student_imports_router
@@ -59,6 +61,8 @@ app.add_middleware(
     expose_headers=["Retry-After"],
 )
 app.include_router(identity_router)
+app.include_router(onboarding_router)
+app.include_router(realtime_router)
 app.include_router(students_router)
 app.include_router(student_profile_router)
 app.include_router(student_imports_router)
