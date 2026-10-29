@@ -1,10 +1,16 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { Bell, Check, Megaphone } from "lucide-react-native";
+import { useState } from "react";
 import {
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
+  TextInput,
   Text,
   View,
 } from "react-native";
@@ -17,6 +23,7 @@ import {
   Screen,
 } from "../../../src/components/ui";
 import { communicationsApi } from "../../../src/features/communicationsApi";
+import { familyApi } from "../../../src/features/familyApi";
 import { notificationRoute } from "../../../src/lib/notificationRoutes";
 import type { Notification } from "../../../src/types/models";
 import { colors, radius } from "../../../src/theme/tokens";
@@ -24,6 +31,8 @@ import { colors, radius } from "../../../src/theme/tokens";
 export default function NotificationsScreen() {
   const client = useQueryClient();
   const router = useRouter();
+  const [absence, setAbsence] = useState<{ studentId: string; date: string; detail: string } | null>(null);
+  const [reason, setReason] = useState("");
   const query = useQuery({
     queryKey: ["notifications"],
     queryFn: ({ signal }) => communicationsApi.notifications(signal),
@@ -34,8 +43,40 @@ export default function NotificationsScreen() {
   };
   const openNotification = (item: Notification) => {
     if (!item.read_at) void markRead(item.id);
+    if (item.type === "attendance_absent" && item.link) {
+      const queryString = item.link.split("?")[1] ?? "";
+      const params = new URLSearchParams(queryString);
+      const studentId = params.get("student_id");
+      const date = params.get("date");
+      if (studentId && date) {
+        setReason("");
+        setAbsence({ studentId, date, detail: item.body });
+        return;
+      }
+    }
     const route = notificationRoute(item.link);
     if (route) router.push(route);
+  };
+  const submitReason = async () => {
+    const trimmed = reason.trim();
+    if (!absence || trimmed.length < 10) {
+      Alert.alert("Add a little more detail", "Please enter at least 10 characters for the reason.");
+      return;
+    }
+    try {
+      await familyApi.createRequest({
+        topic: "absence",
+        subject: `Absence explanation · ${absence.date}`,
+        message: trimmed,
+        student_id: absence.studentId,
+      });
+      setAbsence(null);
+      setReason("");
+      void client.invalidateQueries({ queryKey: ["family-requests"] });
+      Alert.alert("Reason sent", "Your child’s absence explanation has been sent to the school.");
+    } catch (error) {
+      Alert.alert("Could not send reason", apiErrorMessage(error));
+    }
   };
   return (
     <Screen
@@ -83,6 +124,15 @@ export default function NotificationsScreen() {
                 {!item.read_at ? <View style={styles.dot} /> : null}
               </View>
               <Text style={styles.body}>{item.body}</Text>
+              {item.type === "attendance_absent" ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => openNotification(item)}
+                  style={styles.reasonButton}
+                >
+                  <Text style={styles.reasonButtonText}>Send absence reason</Text>
+                </Pressable>
+              ) : null}
               <Text style={styles.date}>
                 {new Date(item.created_at).toLocaleString()}
               </Text>
@@ -107,6 +157,38 @@ export default function NotificationsScreen() {
           School notices are listed in School updates.
         </Text>
       </View>
+      <Modal visible={Boolean(absence)} transparent animationType="fade" onRequestClose={() => setAbsence(null)}>
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <View style={styles.reasonModal}>
+            <Text style={styles.modalEyebrow}>ATTENDANCE FOLLOW-UP</Text>
+            <Text style={styles.modalTitle}>Share the reason for the absence</Text>
+            <Text style={styles.modalBody}>{absence?.detail}</Text>
+            <TextInput
+              accessibilityLabel="Absence reason"
+              multiline
+              maxLength={1000}
+              textAlignVertical="top"
+              value={reason}
+              onChangeText={setReason}
+              placeholder="Write a short explanation for the school…"
+              placeholderTextColor={colors.mutedLight}
+              style={styles.reasonInput}
+            />
+            <Text style={styles.characterCount}>{reason.length}/1000</Text>
+            <View style={styles.modalActions}>
+              <Pressable onPress={() => setAbsence(null)} style={styles.cancelButton}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={() => void submitReason()} style={styles.sendButton}>
+                <Text style={styles.sendText}>Send to school</Text>
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </Screen>
   );
 }
@@ -137,6 +219,46 @@ const styles = StyleSheet.create({
   body: { color: colors.muted, fontSize: 12, lineHeight: 18 },
   date: { color: colors.mutedLight, fontSize: 10, marginTop: 2 },
   read: { padding: 7 },
+  reasonButton: {
+    alignSelf: "flex-start",
+    borderRadius: radius.pill,
+    backgroundColor: colors.blueSoft,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 5,
+  },
+  reasonButtonText: { color: colors.blue, fontSize: 12, fontWeight: "700" },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: "center",
+    padding: 22,
+    backgroundColor: "rgba(9, 25, 55, 0.48)",
+  },
+  reasonModal: {
+    borderRadius: 24,
+    padding: 22,
+    backgroundColor: colors.surface,
+    gap: 12,
+  },
+  modalEyebrow: { color: colors.blue, fontSize: 10, fontWeight: "800", letterSpacing: 1.1 },
+  modalTitle: { color: colors.ink, fontSize: 19, fontWeight: "800", lineHeight: 26 },
+  modalBody: { color: colors.muted, fontSize: 13, lineHeight: 19 },
+  reasonInput: {
+    minHeight: 130,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    color: colors.ink,
+    fontSize: 14,
+    backgroundColor: "#FBFDFF",
+  },
+  characterCount: { alignSelf: "flex-end", color: colors.mutedLight, fontSize: 11, marginTop: -7 },
+  modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 10, marginTop: 2 },
+  cancelButton: { paddingHorizontal: 15, paddingVertical: 12 },
+  cancelText: { color: colors.muted, fontWeight: "700", fontSize: 13 },
+  sendButton: { borderRadius: radius.pill, backgroundColor: colors.blue, paddingHorizontal: 17, paddingVertical: 12 },
+  sendText: { color: "white", fontWeight: "700", fontSize: 13 },
   subhead: { flexDirection: "row", alignItems: "center", gap: 8 },
   subtext: { color: colors.muted, fontSize: 12 },
 });
