@@ -69,10 +69,10 @@ const steps: {
     eyebrow: "READY WHEN YOU ARE",
     title: "Explore their full school record.",
     description:
-      "Use My Children to switch profiles, Academics to open published report cards, and Profile to manage your account and settings.",
+      "Use Parent Desk to send a request to school, Academics to open published report cards, and Profile to manage your account and settings.",
     accent: "#315DF5",
     tint: "#EAF0FF",
-    hint: "Your navigation is always at the bottom",
+    hint: "Parent Desk is your direct line to school",
   },
 ];
 

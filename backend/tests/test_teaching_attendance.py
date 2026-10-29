@@ -77,6 +77,13 @@ async def test_teacher_invitation_assignment_and_attendance_access(client):
     teacher_classes = await client.get("/api/v1/academic/classes", headers=teacher_headers, params={"academic_year_id": year.json()["id"]})
     assert [row["id"] for row in teacher_classes.json()] == [group.json()["id"]]
 
+    # Attendance is a homeroom duty: the subject teacher only gains the sheet
+    # once the school makes them this class's class teacher.
+    class_teacher = await client.put(f"/api/v1/academic/classes/{group.json()['id']}/class-teacher", headers=admin_headers, json={
+        "teacher_membership_id": teachers.json()[0]["membership_id"],
+    })
+    assert class_teacher.status_code == 200, class_teacher.text
+
     assessment = await client.post("/api/v1/assessments", headers=teacher_headers, json={
         "class_group_id": group.json()["id"], "subject_id": subjects.json()["id"], "term_id": term.json()["id"],
         "title": "Mid-term science test", "category": "class_test", "max_score": "20", "weight_percent": "30",

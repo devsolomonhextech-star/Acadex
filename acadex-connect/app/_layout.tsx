@@ -25,6 +25,7 @@ function RouteGuard() {
     const inAuth = segments[0] === "(auth)";
     const atIndex = !segments.length || segments.join("/") === "index";
     if (!parent && !inAuth && !atIndex) router.replace("/(auth)/login");
+    // A signed-in parent must never stay on the auth screens.
     if (parent && inAuth) router.replace("/(parent)/(tabs)/home");
   }, [loading, parent, router, segments]);
   if (loading)

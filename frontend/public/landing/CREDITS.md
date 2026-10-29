@@ -1,17 +1,22 @@
 # Landing page photography
 
-The landing page uses local copies of Ghanaian school photography. The people shown are not Acadex users and the photos do not imply endorsement.
+The landing page uses local copies of stock photography from [Pexels](https://www.pexels.com/license/). The people shown are models and are not Acadex users; the images do not imply endorsement by them or by their schools.
 
-| Asset | Source and license |
-| --- | --- |
-| `hero-student.jpg`, `feat-timetable.jpg` | [JHS students looking on a laptop](https://commons.wikimedia.org/wiki/File:JHS_students_looking_on_a_laptop.jpg), Bright Kwame Ayisi (Kwameghana), CC0 1.0. |
-| `feat-fees.jpg` | [Female students looking on a laptop](https://commons.wikimedia.org/wiki/File:A_group_of_female_students_looking_on_a_laptop.jpg), Bright Kwame Ayisi (Kwameghana), CC0 1.0. |
-| `feat-student.jpg` | [A primary school girl in Ghana](https://commons.wikimedia.org/wiki/File:A_Primary_School_Girl_in_Ghana.jpg), KISUMAR123, CC0 1.0. |
-| `feat-assessment.jpg` | [JHS students listening to their teacher](https://commons.wikimedia.org/wiki/File:JHS_students_listening_to_their_teacher.jpg), Bright Kwame Ayisi (Kwameghana), CC0 1.0. |
-| `avatar-student.jpg` | [Pupils in school uniform in Accra](https://commons.wikimedia.org/wiki/File:Pupils_in_school_uniform.jpg), Bright Kwame Ayisi (Kwameghana), CC0 1.0. |
-| `feat-attendance.jpg` | [Ghana school children during English class](https://commons.wikimedia.org/wiki/File:Ghana_school_children_(8203372110).jpg), USAID / A. Kauffeld, public domain in the United States. |
-| `school-campus.jpg` | [Universal secondary education](https://commons.wikimedia.org/wiki/File:Universal_secondary_education.jpg), Hakamal, CC0 1.0. |
-| `teacher-laptop.jpg` | [Ghana headmistress and primary school students](https://commons.wikimedia.org/wiki/File:Ghana_students.jpg), Henry Akorsu (USAID), public domain in the United States. |
-| `feat-parents.jpg` | [A teacher showing some students something on a phone](https://commons.wikimedia.org/wiki/File:A_teacher_showing_some_students_something_on_a_phone.jpg), Bright Kwame Ayisi (Kwameghana), CC0 1.0. |
+Pexels photos are free to use, including commercially, without attribution. Credits are kept here anyway so the source of every asset stays traceable.
 
-The images are served from this directory so the landing page does not depend on a third-party image host at runtime.
+| Asset | Subject | Source | Photographer |
+| --- | --- | --- | --- |
+| `hero-parent-phone.jpg` | Parent smiling at her phone | [Pexels 32418566](https://www.pexels.com/photo/smiling-woman-holding-smartphone-indoors-32418566/) | Rohit Sharma |
+| `hero-parent-fees.jpg` | Parent paying a bill on her phone | [Pexels 8788832](https://www.pexels.com/de-de/foto/frau-benutzt-ihr-smartphone-und-halt-ihre-kreditkarte-8788832/) | Darina Belonogova |
+| `hero-parent-child.jpg` | Parent and child working together | [Pexels 8923081](https://www.pexels.com/photo/a-woman-teaching-a-boy-in-the-classroom-8923081/) | Mikhail Nilov |
+| `feature-records.jpg` | Pupil with Montessori materials | [Pexels 31864409](https://www.pexels.com/photo/child-learning-with-montessori-materials-31864409/) | Bhupindra International Public School |
+| `feature-attendance.jpg` | Students at their desks | [Pexels 7395899](https://www.pexels.com/de-de/foto/frauen-sitzung-sitzen-schule-7395899/) | cottonbro studio |
+| `feature-assessment.jpg` | Pupil practising with materials | [Pexels 31864405](https://www.pexels.com/el-gr/photo/montessori-31864405/) | Bhupindra International Public School |
+| `feature-fees.jpg` | Pair reviewing a phone together | [Pexels 8055532](https://www.pexels.com/fr-fr/photo/femme-jeune-fille-etre-assis-chapeau-8055532/) | Annushka Ahuja |
+| `feature-timetable.jpg` | Student presenting in class | [Pexels 37934607](https://www.pexels.com/photo/student-in-classroom-with-blackboard-background-37934607/) | Nguyễn Tiến Thịnh |
+| `feature-parents.jpg` | Parent reading a message with her child | [Pexels 6414839](https://www.pexels.com/photo/couple-love-smartphone-friends-6414839/) | RDNE Stock project |
+| `split-teacher.jpg` | Teacher supporting a student | [Pexels 6503098](https://www.pexels.com/fr-fr/photo/une-enseignante-tutorat-son-eleve-6503098/) | Thirdman |
+| `campus-school.jpg` | Modern school building | [Pexels 37137233](https://www.pexels.com/nb-no/bilde/moderne-skolebygning-i-shanghai-kina-37137233/) | Anderson Wei |
+| `avatar-student.jpg` | Pupil avatar used in the phone mock | [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Pupils_in_school_uniform.jpg) | Bright Kwame Ayisi (Kwameghana), CC0 1.0 |
+
+Images are served from this directory at web sizes so the landing page does not depend on a third-party host at runtime.

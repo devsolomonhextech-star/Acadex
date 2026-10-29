@@ -21,7 +21,10 @@ from app.api.grading import router as grading_router
 from app.api.guardians import router as guardians_router
 from app.api.mobile import router as mobile_router
 from app.api.overview import router as overview_router
+from app.api.requests import family_router as family_requests_router
+from app.api.requests import school_router as school_requests_router
 from app.api.results import router as results_router
+from app.api.school_notifications import router as school_notifications_router
 from app.api.staff import router as staff_router
 from app.api.student_imports import router as student_imports_router
 from app.api.student_profile import router as student_profile_router
@@ -71,6 +74,9 @@ app.include_router(results_router)
 app.include_router(timetable_router)
 app.include_router(guardians_router)
 app.include_router(communications_router)
+app.include_router(school_requests_router)
+app.include_router(school_notifications_router)
+app.include_router(family_requests_router)
 app.include_router(family_router)
 app.include_router(overview_router)
 app.include_router(student_support_router)

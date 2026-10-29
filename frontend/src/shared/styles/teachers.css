@@ -1,0 +1,23 @@
+/* Teachers: staff list, class-teacher and subject assignment. */
+.teachers-page{max-width:1500px;margin:0 auto}
+.teachers-stats{margin-bottom:16px}
+.stat-of{margin-left:1px;font:600 14px 'DM Sans',sans-serif;color:#9aa1b1}
+.teacher-alert{margin-bottom:14px;border-radius:10px}
+.teacher-panel{margin-bottom:14px}
+.teacher-cell{display:flex;align-items:center;gap:10px;min-width:0}
+.teacher-avatar{display:grid;place-items:center;flex:none;width:32px;height:32px;border-radius:10px;background:#eef1ff;color:#4a61d2;font-size:11px;font-weight:800;letter-spacing:.02em}
+.teacher-meta{display:flex;flex-direction:column;gap:2px;min-width:0}
+.teacher-meta strong{font-size:12.5px;color:#333b52;font-weight:700}
+.teacher-meta small{font-size:11px;color:#8a92a4;overflow:hidden;text-overflow:ellipsis}
+.teacher-tags{display:inline-flex;flex-wrap:wrap;gap:4px}
+.teacher-tags .ant-tag{margin:0;font-size:10.5px;line-height:17px}
+.teacher-panel .ant-table{font-size:12px}
+.teacher-panel .ant-table-thead>tr>th{background:#fafbfe;color:#9298a8;font-size:10.5px;letter-spacing:.5px;font-weight:700;padding:10px}
+.teacher-panel .ant-table-tbody>tr>td{padding:10px;border-bottom-color:#f0f2f7}
+.teacher-panel .ant-table-tbody>tr>td .ant-btn{height:27px;border-radius:7px;font-size:11.5px}
+.teacher-panel .ant-table-tbody>tr>td .ant-btn .anticon-down{font-size:9px;margin-left:2px}
+.teacher-panel .ant-dropdown-menu-item{font-size:12px}
+@media(max-width:600px){
+  .teachers-stats{grid-template-columns:1fr 1fr}
+  .teacher-panel .ant-table-thead>tr>th,.teacher-panel .ant-table-tbody>tr>td{padding:8px}
+}

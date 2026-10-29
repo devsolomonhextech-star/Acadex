@@ -4,6 +4,9 @@ import type {
   Child,
   DailyActivity,
   FeesSummary,
+  ParentRequestDetail,
+  ParentRequestInbox,
+  ParentRequestTopic,
   ReportSummary,
   SchoolEvent,
   TimetableEntry,
@@ -47,5 +50,26 @@ export const familyApi = {
       await api.get<DailyActivity[]>(`/family/activities/${studentId}`, {
         signal,
       })
+    ).data,
+  requests: async (signal?: AbortSignal) =>
+    (await api.get<ParentRequestInbox>("/family/requests", { signal })).data,
+  request: async (requestId: string, signal?: AbortSignal) =>
+    (
+      await api.get<ParentRequestDetail>(`/family/requests/${requestId}`, {
+        signal,
+      })
+    ).data,
+  createRequest: async (payload: {
+    topic: ParentRequestTopic;
+    subject: string;
+    message: string;
+    student_id: string | null;
+  }) => (await api.post<ParentRequestDetail>("/family/requests", payload)).data,
+  replyToRequest: async (requestId: string, body: string) =>
+    (
+      await api.post<ParentRequestDetail>(
+        `/family/requests/${requestId}/messages`,
+        { body },
+      )
     ).data,
 };

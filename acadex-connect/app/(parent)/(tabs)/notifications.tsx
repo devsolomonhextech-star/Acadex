@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "expo-router";
 import { Bell, Check, Megaphone } from "lucide-react-native";
 import {
   Pressable,
@@ -16,10 +17,13 @@ import {
   Screen,
 } from "../../../src/components/ui";
 import { communicationsApi } from "../../../src/features/communicationsApi";
+import { notificationRoute } from "../../../src/lib/notificationRoutes";
+import type { Notification } from "../../../src/types/models";
 import { colors, radius } from "../../../src/theme/tokens";
 
 export default function NotificationsScreen() {
   const client = useQueryClient();
+  const router = useRouter();
   const query = useQuery({
     queryKey: ["notifications"],
     queryFn: ({ signal }) => communicationsApi.notifications(signal),
@@ -27,6 +31,11 @@ export default function NotificationsScreen() {
   const markRead = async (id: string) => {
     await communicationsApi.markRead(id);
     await client.invalidateQueries({ queryKey: ["notifications"] });
+  };
+  const openNotification = (item: Notification) => {
+    if (!item.read_at) void markRead(item.id);
+    const route = notificationRoute(item.link);
+    if (route) router.push(route);
   };
   return (
     <Screen
@@ -58,10 +67,13 @@ export default function NotificationsScreen() {
         />
       ) : (
         query.data.map((item) => (
-          <Card
+          <Pressable
             key={item.id}
-            style={{ ...styles.item, ...(item.read_at ? {} : styles.unread) }}
+            accessibilityRole="button"
+            accessibilityLabel={item.title}
+            onPress={() => openNotification(item)}
           >
+          <Card style={{ ...styles.item, ...(item.read_at ? {} : styles.unread) }}>
             <View style={styles.icon}>
               <Bell size={17} color={colors.blue} />
             </View>
@@ -86,6 +98,7 @@ export default function NotificationsScreen() {
               </Pressable>
             ) : null}
           </Card>
+          </Pressable>
         ))
       )}
       <View style={styles.subhead}>

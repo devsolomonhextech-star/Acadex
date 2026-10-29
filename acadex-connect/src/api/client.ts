@@ -107,14 +107,24 @@ export function onSessionExpired(handler: (() => void) | null) {
 export function apiErrorMessage(error: unknown): string {
   if (isAxiosError(error)) {
     const detail = error.response?.data?.detail;
-    if (typeof detail === "string") return detail;
+    if (typeof detail === "string" && detail.trim()) return detail;
+    // Structured errors (rate limits, subscription gates) carry a message.
+    if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+      const message = (detail as { message?: unknown }).message;
+      if (typeof message === "string" && message.trim()) return message;
+    }
+    // FastAPI validation errors arrive as [{ loc, msg, type }, ...].
+    if (Array.isArray(detail) && detail[0] && typeof detail[0].msg === "string")
+      return detail[0].msg;
     if (error.code === "ECONNABORTED")
       return "The connection timed out. Please try again.";
     if (!error.response)
       return "We could not reach the school. Check your connection and try again.";
+    if (error.response.status >= 500)
+      return "The school service is having trouble right now. Try again in a moment.";
     return `Something went wrong (${error.response.status}). Please try again.`;
   }
-  return error instanceof Error
+  return error instanceof Error && error.message.trim()
     ? error.message
     : "Something went wrong. Please try again.";
 }

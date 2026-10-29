@@ -1,4 +1,4 @@
-import { Redirect, Stack, useRouter, type Href } from "expo-router";
+import { Redirect, Stack, useRouter } from "expo-router";
 import { useEffect } from "react";
 import * as Notifications from "expo-notifications";
 import { useAuth } from "../../src/services/auth";
@@ -7,6 +7,7 @@ import { ParentDataProvider } from "../../src/services/parentData";
 import { registerPushToken } from "../../src/services/pushNotifications";
 import { OfflineBanner } from "../../src/components/ui";
 import { ParentAppTour } from "../../src/components/ParentAppTour";
+import { notificationRoute } from "../../src/lib/notificationRoutes";
 export default function ParentLayout() {
   const { parent, loading } = useAuth();
   const router = useRouter();
@@ -15,18 +16,10 @@ export default function ParentLayout() {
     void registerPushToken().catch(() => undefined);
     const subscription = Notifications.addNotificationResponseReceivedListener(
       (response) => {
-        const link = response.notification.request.content.data?.link;
-        const destinations: Record<string, Href> = {
-          "/attendance": "/(parent)/attendance",
-          "/fees": "/(parent)/fees",
-          "/timetable": "/(parent)/timetable",
-          "/announcements": "/(parent)/announcements",
-          "/academics": "/(parent)/(tabs)/academics",
-          "/notifications": "/(parent)/(tabs)/notifications",
-          "/children": "/(parent)/(tabs)/children",
-        };
-        if (typeof link === "string" && destinations[link])
-          router.push(destinations[link]);
+        const route = notificationRoute(
+          response.notification.request.content.data?.link,
+        );
+        if (route) router.push(route);
       },
     );
     return () => subscription.remove();
@@ -48,6 +41,10 @@ export default function ParentLayout() {
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="children"
+          options={{ title: "My Children", headerBackTitle: "Back" }}
+        />
         <Stack.Screen name="attendance" options={{ headerShown: false }} />
         <Stack.Screen name="fees" options={{ headerShown: false }} />
         <Stack.Screen name="timetable" options={{ title: "Class timetable" }} />

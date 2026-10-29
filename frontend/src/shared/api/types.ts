@@ -106,7 +106,8 @@ export type AcademicCalendarEvent = {
   audience: 'all' | 'students' | 'staff' | 'parents' | 'teachers' | 'class'
   starts_on: string; ends_on: string; description: string | null; created_at: string
 }
-export type ClassGroup = { id: string; academic_year_id: string; name: string; grade_level: string; stream: string; class_teacher_membership_id?: string | null; class_teacher_name?: string | null }
+export type ClassGroup = { id: string; academic_year_id: string; name: string; grade_level: string; stream: string; class_teacher_membership_id?: string | null; class_teacher_name?: string | null; student_count?: number }
+export type UnassignedStudent = { id: string; admission_number: string; first_name: string; last_name: string; status: string }
 export type ClassRosterStudent = { id: string; admission_number: string; first_name: string; last_name: string; gender: string | null; status: string; enrolled_on: string }
 export type Enrollment = { id: string; student_id: string; academic_year_id: string; class_group_id: string; enrolled_on: string; status: string }
 export type Subject = { id: string; code: string; name: string; status: string }
@@ -391,6 +392,79 @@ export interface Notification {
   read_at: string | null
   link: string | null
   created_at: string
+}
+
+export type NoticeAudience = 'all_parents' | 'class' | 'student'
+
+export interface SchoolNotice {
+  id: string
+  title: string
+  body: string
+  audience: NoticeAudience
+  class_group_id: string | null
+  student_id: string | null
+  recipient_count: number
+  sent_by: string
+  target_name: string | null
+  created_at: string
+}
+
+export type ParentRequestTopic = 'absence' | 'documents' | 'meeting' | 'fees' | 'details' | 'other'
+export type ParentRequestStatus = 'open' | 'awaiting_parent' | 'resolved'
+
+export interface ParentRequestSummary {
+  id: string
+  reference: string
+  topic: ParentRequestTopic
+  subject: string
+  status: ParentRequestStatus
+  student_id: string | null
+  student_name: string | null
+  admission_number: string | null
+  guardian_name: string
+  guardian_email: string | null
+  guardian_phone: string | null
+  preview: string
+  last_message_at: string
+  last_message_by: 'parent' | 'school'
+  message_count: number
+  unread: boolean
+  created_at: string
+  first_school_reply_at: string | null
+  resolved_at: string | null
+}
+
+export interface ParentRequestMessage {
+  id: string
+  author_role: 'parent' | 'school'
+  author_name: string
+  body: string
+  created_at: string
+}
+
+export interface ParentRequestDetail extends ParentRequestSummary {
+  messages: ParentRequestMessage[]
+}
+
+export interface ParentRequestCounts {
+  open: number
+  awaiting_parent: number
+  resolved: number
+  unread: number
+  total: number
+}
+
+export interface ParentRequestPage {
+  items: ParentRequestSummary[]
+  total: number
+  page: number
+  page_size: number
+  counts: ParentRequestCounts
+}
+
+export interface ParentRequestInbox {
+  items: ParentRequestSummary[]
+  counts: ParentRequestCounts
 }
 
 export interface Guardian {

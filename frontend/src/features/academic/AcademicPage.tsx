@@ -1,16 +1,21 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, DatePicker, Empty, Form, Input, Modal, Select, Table, Tabs, Tag, message } from 'antd'
+import { Alert, Button, DatePicker, Empty, Form, Input, Modal, Select, Space, Table, Tabs, Tag, message } from 'antd'
 import type { TableColumnsType } from 'antd'
-import { BookOutlined, CalendarOutlined, PlusOutlined, TeamOutlined } from '@ant-design/icons'
+import {
+  BookOutlined, CalendarOutlined, PlusOutlined, SearchOutlined, TeamOutlined, UsergroupAddOutlined,
+} from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { useAuth } from '../auth/authHooks'
 import {
   createAcademicTerm, createAcademicYear, createClassGroup, createEnrollment,
-  fetchAcademicTerms, fetchAcademicYears, fetchClassEnrollments, fetchClassGroups,
+  bulkEnrollStudents, fetchAcademicTerms, fetchAcademicYears, fetchClassRoster, fetchClassGroups,
+  fetchUnassignedStudents,
 } from './academicApi'
 import { fetchStudentOptions } from '../students/studentsApi'
-import type { AcademicTerm, AcademicYear, ClassGroup, Enrollment, Student } from '../../shared/api/types'
+import type {
+  AcademicTerm, AcademicYear, ClassGroup, ClassRosterStudent, Student, UnassignedStudent,
+} from '../../shared/api/types'
 import { formatApiError } from '../../shared/api/errors'
 import { TeachingAssignmentsPanel } from './TeachingAssignmentsPanel'
 import { TeachersPanel } from './TeachersPanel'
@@ -36,6 +41,9 @@ export default function AcademicPage() {
   const [selectedClass, setSelectedClass] = useState('')
   const [activeSection, setActiveSection] = useState('classes')
   const [modal, setModal] = useState<ModalKind>(null)
+  const [assignOpen, setAssignOpen] = useState(false)
+  const [assignSearch, setAssignSearch] = useState('')
+  const [assignSelected, setAssignSelected] = useState<string[]>([])
   const [form] = Form.useForm<AcademicFormValues>()
   const [toast, contextHolder] = message.useMessage()
   const yearsQuery = useQuery({ queryKey: ['academic-years', user?.school_id], queryFn: () => fetchAcademicYears(accessToken!), enabled: !!accessToken })
@@ -44,10 +52,40 @@ export default function AcademicPage() {
   const termsQuery = useQuery({ queryKey: ['academic-terms', user?.school_id, yearId], queryFn: () => fetchAcademicTerms(accessToken!, yearId), enabled: !!accessToken && !!yearId })
   const classesQuery = useQuery({ queryKey: ['class-groups', user?.school_id, yearId], queryFn: () => fetchClassGroups(accessToken!, yearId), enabled: !!accessToken && !!yearId })
   const classGroups = classesQuery.data ?? []
-  const classId = classGroups.some(group => group.id === selectedClass) ? selectedClass : classGroups[0]?.id ?? ''
-  const enrollmentsQuery = useQuery({ queryKey: ['enrollments', user?.school_id, classId], queryFn: () => fetchClassEnrollments(accessToken!, classId), enabled: !!accessToken && !!classId })
+  const classId = classGroups.some(group => group.id === selectedClass)
+    ? selectedClass
+    : (classGroups.find(group => (group.student_count ?? 0) > 0) ?? classGroups[0])?.id ?? ''
+  const rosterQuery = useQuery({
+    queryKey: ['class-roster', user?.school_id, classId],
+    queryFn: () => fetchClassRoster(accessToken!, classId),
+    enabled: !!accessToken && !!classId,
+  })
+  const unassignedQuery = useQuery({
+    queryKey: ['unassigned-students', user?.school_id, yearId, assignSearch],
+    queryFn: () => fetchUnassignedStudents(accessToken!, yearId, assignSearch),
+    enabled: !!accessToken && !!yearId && assignOpen,
+  })
+  const assignMutation = useMutation({
+    mutationFn: (studentIds: string[]) => bulkEnrollStudents(accessToken!, classId, studentIds),
+    onSuccess: async result => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['class-groups', user?.school_id] }),
+        queryClient.invalidateQueries({ queryKey: ['class-roster', user?.school_id] }),
+        queryClient.invalidateQueries({ queryKey: ['unassigned-students', user?.school_id] }),
+        queryClient.invalidateQueries({ queryKey: ['student-options', user?.school_id] }),
+      ])
+      setAssignOpen(false)
+      setAssignSelected([])
+      setAssignSearch('')
+      toast.success(
+        result.skipped
+          ? `${result.enrolled} student${result.enrolled === 1 ? '' : 's'} assigned · ${result.skipped} already enrolled`
+          : `${result.enrolled} student${result.enrolled === 1 ? '' : 's'} assigned to ${classGroups.find(group => group.id === classId)?.name ?? 'the class'}`,
+      )
+    },
+    onError: error => toast.error(formatApiError(error)),
+  })
   const studentQuery = useQuery({ queryKey: ['student-options', user?.school_id], queryFn: () => fetchStudentOptions(accessToken!), enabled: !!accessToken })
-  const studentById = useMemo(() => new Map((studentQuery.data?.items ?? []).map(student => [student.id, student])), [studentQuery.data])
   const students = studentQuery.data?.items ?? []
   const mutation = useMutation({
     mutationFn: async (values: AcademicFormValues) => {
@@ -73,7 +111,8 @@ export default function AcademicPage() {
         queryClient.invalidateQueries({ queryKey: ['academic-years', user?.school_id] }),
         queryClient.invalidateQueries({ queryKey: ['academic-terms', user?.school_id] }),
         queryClient.invalidateQueries({ queryKey: ['class-groups', user?.school_id] }),
-        queryClient.invalidateQueries({ queryKey: ['enrollments', user?.school_id] }),
+        queryClient.invalidateQueries({ queryKey: ['class-roster', user?.school_id] }),
+        queryClient.invalidateQueries({ queryKey: ['unassigned-students', user?.school_id] }),
       ])
       toast.success(modal === 'enrollment' ? 'Student enrolled in the class' : 'Academic details saved')
       setModal(null)
@@ -83,17 +122,19 @@ export default function AcademicPage() {
   })
   const submitAcademicForm = (values: AcademicFormValues) => mutation.mutate(values)
   const readOnly = !['school_admin', 'registrar'].includes(user?.role ?? '')
-  const enrollmentColumns: TableColumnsType<Enrollment> = [
-    { title: 'STUDENT', dataIndex: 'student_id', key: 'student', render: (id: string) => {
-      const student = studentById.get(id)
-      return student ? <div className="academic-student"><span className="student-avatar">{student.first_name[0]}{student.last_name[0]}</span><span><strong>{student.first_name} {student.last_name}</strong><small>{student.admission_number}</small></span></div> : <span className="table-muted">Student record</span>
-    } },
+  const rosterColumns: TableColumnsType<ClassRosterStudent> = [
+    { title: 'STUDENT', key: 'student', render: (_, row) => (
+      <div className="academic-student">
+        <span className="student-avatar">{row.first_name[0]}{row.last_name[0]}</span>
+        <span><strong>{row.first_name} {row.last_name}</strong><small>{row.admission_number}</small></span>
+      </div>
+    ) },
     { title: 'ENROLLED', dataIndex: 'enrolled_on', key: 'enrolled_on', render: (date: string) => dayjs(date).format('D MMM YYYY') },
     { title: 'STATUS', dataIndex: 'status', key: 'status', render: (value: string) => <Tag color="green" className="student-status">{value}</Tag> },
   ]
   const terms = termsQuery.data ?? []
   const startCreate = (kind: Exclude<ModalKind, null>) => { form.resetFields(); setModal(kind) }
-  const pageError = yearsQuery.error ?? classesQuery.error ?? termsQuery.error ?? enrollmentsQuery.error ?? studentQuery.error
+  const pageError = yearsQuery.error ?? classesQuery.error ?? termsQuery.error ?? rosterQuery.error ?? studentQuery.error
 
   return <div className="page-content academic-page">
     {contextHolder}
@@ -112,11 +153,23 @@ export default function AcademicPage() {
           {terms.length ? <div className="term-list">{terms.map((term: AcademicTerm) => <div className="term-row" key={term.id}><span className="term-number">{String(term.ordinal).padStart(2, '0')}</span><span><strong>{term.name}</strong><small>{dayjs(term.starts_on).format('D MMM')} – {dayjs(term.ends_on).format('D MMM YYYY')}</small></span></div>)}</div> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No terms set up yet" />}
         </section>
         <section className="academic-section panel"><div className="academic-card-heading"><div><span className="academic-card-icon"><BookOutlined /></span><h2>Class groups</h2></div>{!readOnly && <Button type="text" size="small" icon={<PlusOutlined />} onClick={() => startCreate('class')}>Add class</Button>}</div>
-          {classGroups.length ? <div className="class-chip-list">{classGroups.map((group: ClassGroup) => <button key={group.id} className={`class-chip ${classId === group.id ? 'selected' : ''}`} onClick={() => setSelectedClass(group.id)}><span className="class-chip-name">{group.name}</span><span>{group.stream ? `Stream ${group.stream}` : group.grade_level}</span></button>)}</div> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No classes for this year" />}
+          {classGroups.length ? <div className="class-chip-list">{classGroups.map((group: ClassGroup) => <button key={group.id} className={`class-chip ${classId === group.id ? 'selected' : ''}`} onClick={() => setSelectedClass(group.id)}><span className="class-chip-name">{group.name}</span><span>{group.stream ? `Stream ${group.stream}` : group.grade_level} · {group.student_count ?? 0} student{(group.student_count ?? 0) === 1 ? '' : 's'}</span></button>)}</div> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No classes for this year" />}
         </section>
       </div>
-      {classId && <section className="academic-section panel roster-panel"><div className="academic-card-heading"><div><span className="academic-card-icon"><TeamOutlined /></span><div><h2>Class roster</h2><p>{classGroups.find(group => group.id === classId)?.name} · {enrollmentsQuery.data?.length ?? 0} enrolled</p></div></div>{!readOnly && <Button type="primary" icon={<PlusOutlined />} onClick={() => startCreate('enrollment')} disabled={!students.length}>Enroll student</Button>}</div>
-      <Table<Enrollment> rowKey="id" columns={enrollmentColumns} dataSource={enrollmentsQuery.data ?? []} loading={enrollmentsQuery.isLoading || studentQuery.isLoading} pagination={{ pageSize: 8, showSizeChanger: false }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No students in this class yet" /> }} />
+      {classId && <section className="academic-section panel roster-panel">
+        <div className="academic-card-heading">
+          <div><span className="academic-card-icon"><TeamOutlined /></span><div><h2>Students in this class</h2><p>{classGroups.find(group => group.id === classId)?.name} · {rosterQuery.data?.length ?? 0} student{(rosterQuery.data?.length ?? 0) === 1 ? '' : 's'}</p></div></div>
+          {!readOnly && <Space>
+            <Button icon={<UsergroupAddOutlined />} onClick={() => { setAssignSelected([]); setAssignSearch(''); setAssignOpen(true) }} disabled={!yearId}>Assign students</Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => startCreate('enrollment')} disabled={!students.length}>Enroll one student</Button>
+          </Space>}
+        </div>
+        <Table<ClassRosterStudent> rowKey="id" columns={rosterColumns} dataSource={rosterQuery.data ?? []} loading={rosterQuery.isLoading} pagination={{ pageSize: 8, showSizeChanger: false }}
+          locale={{ emptyText: (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No students in this class yet">
+              {!readOnly && <Button type="primary" icon={<UsergroupAddOutlined />} onClick={() => setAssignOpen(true)}>Assign students</Button>}
+            </Empty>
+          ) }} />
       </section>}
       </> },
       { key: 'subjects', label: 'Subjects', children: <TeachingAssignmentsPanel yearId={yearId} classes={classGroups} /> },
@@ -131,6 +184,63 @@ export default function AcademicPage() {
         {modal === 'enrollment' && <><Form.Item name="student_id" label="Student" rules={[{ required: true, message: 'Choose a student' }]}><Select showSearch optionFilterProp="label" placeholder="Find by name or admission number" options={students.map((student: Student) => ({ value: student.id, label: `${student.first_name} ${student.last_name} · ${student.admission_number}` }))}/></Form.Item><Form.Item name="enrolled_on" label="Enrollment date" rules={[{ required: true, message: 'Choose an enrollment date' }]}><DatePicker className="academic-range" format="D MMM YYYY"/></Form.Item></>}
         <div className="student-form-actions"><Button onClick={() => setModal(null)}>Cancel</Button><Button type="primary" htmlType="submit" loading={mutation.isPending}>{modal === 'enrollment' ? 'Enroll student' : 'Save details'}</Button></div>
       </Form>
+    </Modal>
+
+    <Modal
+      title={`Assign students to ${classGroups.find(group => group.id === classId)?.name ?? 'this class'}`}
+      open={assignOpen}
+      onCancel={() => { setAssignOpen(false); setAssignSelected([]); setAssignSearch('') }}
+      width={720}
+      footer={<div className="student-form-actions">
+        <Button onClick={() => { setAssignOpen(false); setAssignSelected([]); setAssignSearch('') }}>Cancel</Button>
+        <Button type="primary" loading={assignMutation.isPending} disabled={!assignSelected.length}
+                onClick={() => assignMutation.mutate(assignSelected)}>
+          Assign {assignSelected.length || ''} student{assignSelected.length === 1 ? '' : 's'}
+        </Button>
+      </div>}
+    >
+      <p className="form-hint">
+        These students have no class in {years.find(year => year.id === yearId)?.name ?? 'this academic year'} yet.
+        A student can belong to one class per academic year.
+      </p>
+      <Input
+        allowClear
+        prefix={<SearchOutlined />}
+        placeholder="Search by name or admission number"
+        value={assignSearch}
+        onChange={event => setAssignSearch(event.target.value)}
+        className="assign-search"
+        aria-label="Search students without a class"
+      />
+      <Table<UnassignedStudent>
+        rowKey="id"
+        size="small"
+        loading={unassignedQuery.isLoading}
+        dataSource={unassignedQuery.data ?? []}
+        pagination={{ pageSize: 6, showSizeChanger: false }}
+        rowSelection={{
+          selectedRowKeys: assignSelected,
+          preserveSelectedRowKeys: true,
+          onChange: keys => setAssignSelected(keys.map(String)),
+        }}
+        columns={[
+          { title: 'STUDENT', key: 'student', render: (_, row) => (
+            <div className="academic-student">
+              <span className="student-avatar">{row.first_name[0]}{row.last_name[0]}</span>
+              <span><strong>{row.first_name} {row.last_name}</strong><small>{row.admission_number}</small></span>
+            </div>
+          ) },
+          { title: 'ADMISSION NO.', dataIndex: 'admission_number', key: 'admission' },
+        ]}
+        locale={{ emptyText: (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={assignSearch
+              ? 'No unassigned students match that search.'
+              : 'Every active student already has a class this year.'}
+          />
+        ) }}
+      />
     </Modal>
   </div>
 }

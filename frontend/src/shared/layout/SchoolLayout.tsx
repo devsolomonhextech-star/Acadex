@@ -7,7 +7,7 @@ import { useLessonAlerts } from '../../features/academic/useLessonAlerts'
 import {
   AppstoreOutlined, ArrowRightOutlined, BarChartOutlined, BellOutlined, BookOutlined, CalendarOutlined,
   CarOutlined, CheckCircleOutlined, CreditCardOutlined, DashboardOutlined, FlagOutlined, GiftOutlined,
-  HomeOutlined, LogoutOutlined, MenuOutlined, MessageOutlined, ReadOutlined, SearchOutlined, SettingOutlined,
+  HomeOutlined, IdcardOutlined, InboxOutlined, LogoutOutlined, MenuOutlined, MessageOutlined, ReadOutlined, SearchOutlined, SettingOutlined,
   TeamOutlined, TrophyOutlined, UserAddOutlined, UserOutlined, HeartOutlined,
 } from '@ant-design/icons'
 import { Avatar, Badge, Button, Input, Popover, Select, Spin } from 'antd'
@@ -16,6 +16,7 @@ import type { SchoolUser } from '../api/types'
 import type { Notification } from '../api/types'
 import { fetchNotifications, markNotificationRead } from '../api/notifications'
 import { useAcademicPeriod } from '../academic/AcademicPeriodContext'
+import { fetchParentRequestCounts } from '../../features/parent-reports/parentReportsApi'
 
 type SidebarItem = { label: string; to?: string; icon: ReactNode }
 
@@ -28,6 +29,7 @@ type TrialStatus = {
 const workspaceItems: SidebarItem[] = [
   { label: 'Overview', to: '/', icon: <DashboardOutlined /> },
   { label: 'Students', to: '/students', icon: <TeamOutlined /> },
+  { label: 'Teachers', to: '/teachers', icon: <IdcardOutlined /> },
   { label: 'Classes & academics', to: '/classes', icon: <BookOutlined /> },
   { label: 'Assessment gradebook', to: '/assessments', icon: <BarChartOutlined /> },
   { label: 'Tasks', to: '/tasks', icon: <CheckCircleOutlined /> },
@@ -36,6 +38,7 @@ const workspaceItems: SidebarItem[] = [
   { label: 'Term results', to: '/results', icon: <TrophyOutlined /> },
   { label: 'Attendance', to: '/attendance', icon: <CalendarOutlined /> },
   { label: 'Finance', to: '/finance', icon: <CreditCardOutlined /> },
+  { label: 'Parent reports', to: '/parent-reports', icon: <InboxOutlined /> },
   { label: 'Communications', to: '/communications', icon: <MessageOutlined /> },
   { label: 'Parent Portal', to: '/parents', icon: <UserOutlined /> },
 ]
@@ -126,6 +129,15 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
   })
   const notificationItems = notifications.data ?? []
   const unreadCount = notificationItems.filter(item => !item.read_at).length
+  const canAnswerParents = ['school_admin', 'principal'].includes(user.role)
+  const parentRequests = useQuery({
+    queryKey: ['parent-request-counts', user.school_id],
+    queryFn: () => fetchParentRequestCounts(accessToken!),
+    enabled: Boolean(accessToken) && canAnswerParents,
+    staleTime: 30_000,
+    refetchInterval: 90_000,
+  })
+  const unreadRequests = parentRequests.data?.unread ?? 0
   const handleNotificationOpen = (notification: Notification) => {
     if (!notification.read_at) readNotification.mutate(notification.id)
     setNotificationsOpen(false)
@@ -138,12 +150,14 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
   const visibleNavigation = workspaceItems.filter(item => {
     if (item.label === 'My exams') return user.role === 'student'
     if (item.label === 'Students') return canManageAcademics
+    if (item.label === 'Teachers') return ['school_admin', 'principal', 'registrar'].includes(user.role)
     if (item.label === 'Classes & academics') return canManageAcademics
     if (item.label === 'Attendance') return canTakeAttendance
     if (item.label === 'Assessment gradebook' || item.label === 'Term results') return canViewAssessments
     if (item.label === 'Tasks') return canViewAssessments
     if (item.label === 'Student support') return ['school_admin', 'principal', 'registrar', 'teacher', 'staff'].includes(user.role)
     if (item.label === 'Finance') return canViewFinance
+    if (item.label === 'Parent reports') return canAnswerParents
     if (item.label === 'Communications') return ['school_admin', 'principal'].includes(user.role)
     if (item.label === 'Parent Portal') return user.role === 'parent'
     return true
@@ -170,7 +184,7 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
         aria-controls="sidebar-workspace" onClick={() => toggleSection('workspace')}>
         <span>WORKSPACE</span><span className="section-chevron" aria-hidden="true">⌄</span>
       </button>
-      {!collapsedSections.workspace && <nav id="sidebar-workspace" aria-label="Main navigation">{visibleNavigation.map(item => <NavLink key={item.to} to={item.to!} onClick={() => setOpen(false)} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} end={item.to === '/'}>{item.icon}<span>{item.label}</span></NavLink>)}</nav>}
+      {!collapsedSections.workspace && <nav id="sidebar-workspace" aria-label="Main navigation">{visibleNavigation.map(item => <NavLink key={item.to} to={item.to!} onClick={() => setOpen(false)} className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} end={item.to === '/'}>{item.icon}<span>{item.label}</span>{item.to === '/parent-reports' && unreadRequests > 0 && <span className="nav-count" aria-label={`${unreadRequests} unread parent requests`}>{unreadRequests > 99 ? '99+' : unreadRequests}</span>}</NavLink>)}</nav>}
       <button type="button" className="nav-caption nav-section-toggle tools-caption" aria-expanded={!collapsedSections.tools}
         aria-controls="sidebar-tools" onClick={() => toggleSection('tools')}>
         <span>SCHOOL TOOLS</span><span className="section-chevron" aria-hidden="true">⌄</span>

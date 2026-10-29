@@ -92,6 +92,7 @@ class ClassResponse(BaseModel):
     stream: str
     class_teacher_membership_id: UUID | None = None
     class_teacher_name: str | None = None
+    student_count: int = 0
 
 
 class EnrollmentResponse(BaseModel):
@@ -193,11 +194,21 @@ async def _class_responses(
         .where(ClassGroup.school_id == school_id,
                ClassGroup.id.in_([group.id for group in groups]))
     )).all())
+    student_counts = dict((await session.execute(
+        select(StudentEnrollment.class_group_id, func.count())
+        .where(
+            StudentEnrollment.school_id == school_id,
+            StudentEnrollment.class_group_id.in_([group.id for group in groups]),
+            StudentEnrollment.status == "active",
+        )
+        .group_by(StudentEnrollment.class_group_id)
+    )).all())
     return [ClassResponse(
         id=group.id, academic_year_id=group.academic_year_id, name=group.name,
         grade_level=group.grade_level, stream=group.stream,
         class_teacher_membership_id=group.class_teacher_membership_id,
         class_teacher_name=teacher_names.get(group.id),
+        student_count=int(student_counts.get(group.id, 0)),
     ) for group in groups]
 
 
@@ -363,6 +374,123 @@ async def create_enrollment(payload: EnrollmentCreate, context: Annotated[Tenant
     await _audit(session, context, "student.enrolled", "student_enrollment", row.id)
     await _commit_or_conflict(session, "Student already has an enrollment for this academic year")
     return row
+
+
+class UnassignedStudent(BaseModel):
+    id: UUID
+    admission_number: str
+    first_name: str
+    last_name: str
+    status: str
+
+
+class BulkEnrollRequest(BaseModel):
+    student_ids: list[UUID] = Field(min_length=1, max_length=300)
+    enrolled_on: date | None = None
+
+
+class BulkEnrollResult(BaseModel):
+    class_group_id: UUID
+    enrolled: int
+    skipped: int
+
+
+@router.get("/years/{year_id}/unassigned-students", response_model=list[UnassignedStudent])
+async def list_unassigned_students(
+    year_id: UUID,
+    context: Annotated[TenantContext, Depends(require_roles(*roles))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    search: str = "",
+):
+    """Active students with no enrollment in this academic year yet."""
+    year = await session.scalar(select(AcademicYear.id).where(
+        AcademicYear.id == year_id, AcademicYear.school_id == context.school_id,
+    ))
+    if year is None:
+        raise HTTPException(status_code=404, detail="Academic year not found")
+    enrolled = select(StudentEnrollment.student_id).where(
+        StudentEnrollment.school_id == context.school_id,
+        StudentEnrollment.academic_year_id == year_id,
+    )
+    query = select(Student).where(
+        Student.school_id == context.school_id,
+        Student.status == "active",
+        Student.id.not_in(enrolled),
+    )
+    if search.strip():
+        pattern = f"%{search.strip()}%"
+        query = query.where(or_(
+            Student.first_name.ilike(pattern),
+            Student.last_name.ilike(pattern),
+            Student.admission_number.ilike(pattern),
+        ))
+    students = (await session.scalars(
+        query.order_by(Student.last_name, Student.first_name).limit(300)
+    )).all()
+    return [
+        UnassignedStudent(
+            id=student.id, admission_number=student.admission_number,
+            first_name=student.first_name, last_name=student.last_name, status=student.status,
+        )
+        for student in students
+    ]
+
+
+@router.post(
+    "/classes/{class_group_id}/enrollments/bulk",
+    response_model=BulkEnrollResult,
+    status_code=status.HTTP_201_CREATED,
+)
+async def bulk_enroll_students(
+    class_group_id: UUID,
+    payload: BulkEnrollRequest,
+    context: Annotated[TenantContext, Depends(require_roles(*writers))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Place several students into one class in a single, audited step.
+
+    A student can hold one enrollment per academic year, so anyone already
+    enrolled this year is counted as skipped rather than failing the batch.
+    """
+    group = await session.scalar(select(ClassGroup).where(
+        ClassGroup.id == class_group_id, ClassGroup.school_id == context.school_id,
+    ))
+    if group is None:
+        raise HTTPException(status_code=404, detail="Class group not found")
+    year = await session.scalar(select(AcademicYear).where(
+        AcademicYear.id == group.academic_year_id, AcademicYear.school_id == context.school_id,
+    ))
+    if year is None:
+        raise HTTPException(status_code=404, detail="Academic year not found")
+    enrolled_on = payload.enrolled_on or year.starts_on
+    if not year.starts_on <= enrolled_on <= year.ends_on:
+        raise HTTPException(status_code=422, detail="Enrollment date must fall within the academic year")
+
+    existing = set((await session.scalars(select(StudentEnrollment.student_id).where(
+        StudentEnrollment.school_id == context.school_id,
+        StudentEnrollment.academic_year_id == year.id,
+    ))).all())
+    valid = set((await session.scalars(select(Student.id).where(
+        Student.school_id == context.school_id,
+        Student.status == "active",
+        Student.id.in_(payload.student_ids),
+    ))).all())
+
+    created = 0
+    skipped = 0
+    for student_id in dict.fromkeys(payload.student_ids):
+        if student_id in existing or student_id not in valid:
+            skipped += 1
+            continue
+        session.add(StudentEnrollment(
+            id=uuid4(), school_id=context.school_id, student_id=student_id,
+            academic_year_id=year.id, class_group_id=group.id,
+            enrolled_on=enrolled_on, status="active",
+        ))
+        created += 1
+    await _audit(session, context, "students.enrolled_bulk", "class_group", group.id)
+    await _commit_or_conflict(session, "Some students were already enrolled. Refresh and try again.")
+    return BulkEnrollResult(class_group_id=group.id, enrolled=created, skipped=skipped)
 
 
 @router.get("/subjects", response_model=list[SubjectResponse])

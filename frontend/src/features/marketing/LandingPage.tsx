@@ -26,6 +26,7 @@ import {
   HeartFilled,
   HomeOutlined,
 } from '@ant-design/icons'
+import { HeroCarousel } from './HeroCarousel'
 
 const navLinks = [
   { label: 'Product', href: '#product' },
@@ -60,43 +61,43 @@ const features = [
     icon: <TeamOutlined />,
     title: 'Student records',
     copy: 'Keep complete student profiles, academic history, and documents in one place.',
-    img: '/landing/avatar-student.jpg',
-    alt: 'A Ghanaian primary school pupil outside her school canteen',
+    img: '/landing/feature-records.jpg',
+    alt: 'A pupil working with Montessori learning materials',
   },
   {
     icon: <CalendarOutlined />,
     title: 'Attendance',
     copy: 'Track attendance in real time and spot issues early.',
-    img: '/landing/feat-attendance.jpg',
-    alt: 'Ghanaian pupils writing in class',
+    img: '/landing/feature-attendance.jpg',
+    alt: 'Students at their desks in a bright classroom',
   },
   {
     icon: <BarChartOutlined />,
     title: 'Assessments & results',
     copy: 'Create assessments, track progress, and generate reports with ease.',
-    img: '/landing/feat-assessment.jpg',
-    alt: 'Ghanaian students listening to their teacher',
+    img: '/landing/feature-assessment.jpg',
+    alt: 'A student practising with Montessori materials',
   },
   {
     icon: <WalletOutlined />,
     title: 'Fees & finance',
     copy: 'Manage fees, payments and financial records with confidence.',
-    img: '/landing/feat-fees.jpg',
-    alt: 'Ghanaian students learning together with a laptop',
+    img: '/landing/feature-fees.jpg',
+    alt: 'A parent reviewing a payment on her phone',
   },
   {
     icon: <ClockCircleOutlined />,
     title: 'Timetable',
     copy: 'Build and manage class schedules, rooms and teachers.',
-    img: '/landing/feat-timetable.jpg',
-    alt: 'Ghanaian students learning together around a laptop',
+    img: '/landing/feature-timetable.jpg',
+    alt: 'A student presenting at the front of the class',
   },
   {
     icon: <MessageOutlined />,
     title: 'Parent communication',
     copy: 'Keep parents informed with updates, reports and messages.',
-    img: '/landing/feat-parents.jpg',
-    alt: 'A Ghanaian teacher showing her pupils something on a phone',
+    img: '/landing/feature-parents.jpg',
+    alt: 'A parent holding her child while reading a message on her phone',
   },
 ]
 
@@ -368,23 +369,7 @@ export default function LandingPage() {
               </ul>
             </div>
 
-            <div className="lp-hero-visual">
-              <div className="lp-hero-card">
-                <span className="lp-hero-blob blue" aria-hidden="true" />
-                <span className="lp-hero-blob violet" aria-hidden="true" />
-                <span className="lp-hero-blob green" aria-hidden="true" />
-                <div className="lp-hero-photo">
-                  <img src="/landing/teacher-laptop.jpg" alt="A Ghanaian headmistress standing with her pupils" />
-                </div>
-                <div className="lp-hero-chip card">
-                  <span className="lp-hero-chip-icon"><TeamOutlined /></span>
-                  <div><strong>One place</strong><small>School-wide records</small></div>
-                </div>
-                <div className="lp-hero-chip pill"><CheckCircleFilled /> 96% attendance</div>
-                <span className="lp-hero-orb orb-shield" aria-hidden="true"><SafetyCertificateOutlined /></span>
-                <span className="lp-hero-orb orb-wallet" aria-hidden="true"><WalletOutlined /></span>
-              </div>
-            </div>
+            <HeroCarousel />
           </div>
         </section>
 
@@ -507,7 +492,7 @@ export default function LandingPage() {
         {/* ----------------------------------------------------- teacher split */}
         <section className="lp-split">
           <div className="lp-split-photo">
-            <img src="/landing/hero-student.jpg" alt="Ghanaian students learning together around a laptop" loading="lazy" />
+            <img src="/landing/split-teacher.jpg" alt="A teacher working through an exercise with a student" loading="lazy" />
           </div>
           <div className="lp-split-copy">
             <p className="lp-kicker">For teachers &amp; administrators</p>
@@ -751,7 +736,7 @@ export default function LandingPage() {
               ))}
             </ul>
             <div className="lp-security-photo">
-              <img src="/landing/school-campus.jpg" alt="Ghanaian pupils on their school compound" loading="lazy" />
+              <img src="/landing/campus-school.jpg" alt="A modern school building and courtyard" loading="lazy" />
             </div>
           </div>
         </section>

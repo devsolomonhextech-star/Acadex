@@ -1,5 +1,5 @@
 import { apiRequest } from '../../shared/api/client'
-import type { AcademicTerm, AcademicYear, ClassGroup, ClassRosterStudent, Enrollment } from '../../shared/api/types'
+import type { AcademicTerm, AcademicYear, ClassGroup, ClassRosterStudent, Enrollment, UnassignedStudent } from '../../shared/api/types'
 
 export function fetchAcademicYears(token: string) {
   return apiRequest<AcademicYear[]>('/academic/years', {}, token)
@@ -37,4 +37,19 @@ export function fetchClassRoster(token: string, classId: string) {
 
 export function createEnrollment(token: string, payload: Omit<Enrollment, 'id' | 'status'>) {
   return apiRequest<Enrollment>('/academic/enrollments', { method: 'POST', body: JSON.stringify(payload) }, token)
+}
+
+export function fetchUnassignedStudents(token: string, yearId: string, search = '') {
+  const query = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ''
+  return apiRequest<UnassignedStudent[]>(
+    `/academic/years/${encodeURIComponent(yearId)}/unassigned-students${query}`, {}, token,
+  )
+}
+
+export function bulkEnrollStudents(token: string, classGroupId: string, studentIds: string[]) {
+  return apiRequest<{ class_group_id: string; enrolled: number; skipped: number }>(
+    `/academic/classes/${encodeURIComponent(classGroupId)}/enrollments/bulk`,
+    { method: 'POST', body: JSON.stringify({ student_ids: studentIds }) },
+    token,
+  )
 }

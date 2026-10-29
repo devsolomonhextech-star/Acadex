@@ -1104,6 +1104,113 @@ class Notification(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class NotificationCampaign(Base):
+    """One school notice pushed to a chosen set of parents.
+
+    The campaign is the durable record the school can review; each recipient
+    also gets an ordinary ``Notification`` row so the family sees it in the
+    app whether or not the push reached their device.
+    """
+
+    __tablename__ = "notification_campaigns"
+    __table_args__ = (
+        UniqueConstraint("school_id", "id", name="uq_notification_campaigns_school_id"),
+        CheckConstraint(
+            "audience IN ('all_parents', 'class', 'student')",
+            name="ck_notification_campaigns_audience",
+        ),
+        ForeignKeyConstraint(
+            ["school_id", "class_group_id"], ["class_groups.school_id", "class_groups.id"], ondelete="RESTRICT"
+        ),
+        ForeignKeyConstraint(
+            ["school_id", "student_id"], ["students.school_id", "students.id"], ondelete="RESTRICT"
+        ),
+        Index("ix_notification_campaigns_school_created", "school_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    audience: Mapped[str] = mapped_column(String(20), nullable=False)
+    class_group_id: Mapped[UUID | None] = mapped_column(Uuid)
+    student_id: Mapped[UUID | None] = mapped_column(Uuid)
+    recipient_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_by_user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+REQUEST_TOPICS = ("absence", "documents", "meeting", "fees", "details", "other")
+
+
+class ParentRequest(Base):
+    """A parent-initiated conversation with the school office.
+
+    The row is the thread; ``ParentRequestMessage`` rows are the conversation.
+    ``status`` and ``last_message_by`` together name whose turn it is, so each
+    inbox can render an accurate badge without scanning messages. Requests are
+    never deleted: resolving is a reversible state, and the thread keeps the
+    full history for both sides.
+    """
+
+    __tablename__ = "parent_requests"
+    __table_args__ = (
+        UniqueConstraint("school_id", "id", name="uq_parent_requests_school_id"),
+        UniqueConstraint("school_id", "reference", name="uq_parent_requests_reference"),
+        ForeignKeyConstraint(["school_id", "student_id"], ["students.school_id", "students.id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["school_id", "guardian_id"], ["guardians.school_id", "guardians.id"], ondelete="RESTRICT"),
+        CheckConstraint("status IN ('open', 'awaiting_parent', 'resolved')", name="ck_parent_requests_status"),
+        CheckConstraint(
+            "topic IN ('absence', 'documents', 'meeting', 'fees', 'details', 'other')",
+            name="ck_parent_requests_topic",
+        ),
+        CheckConstraint("last_message_by IN ('parent', 'school')", name="ck_parent_requests_last_sender"),
+        Index("ix_parent_requests_school_status", "school_id", "status", "last_message_at"),
+        Index("ix_parent_requests_guardian", "guardian_id", "last_message_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    reference: Mapped[str] = mapped_column(String(12), nullable=False)
+    student_id: Mapped[UUID | None] = mapped_column(Uuid)
+    guardian_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    created_by_user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    topic: Mapped[str] = mapped_column(String(24), nullable=False)
+    subject: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="open", server_default="open")
+    last_message_by: Mapped[str] = mapped_column(String(12), nullable=False, default="parent", server_default="parent")
+    last_message_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    last_message_preview: Mapped[str] = mapped_column(String(200), nullable=False, default="", server_default="")
+    parent_last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    school_last_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    first_school_reply_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_by_user_id: Mapped[UUID | None] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=utcnow)
+
+
+class ParentRequestMessage(Base):
+    """One turn in a parent request thread, authored by the parent or the school."""
+
+    __tablename__ = "parent_request_messages"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["school_id", "request_id"], ["parent_requests.school_id", "parent_requests.id"], ondelete="RESTRICT"
+        ),
+        CheckConstraint("author_role IN ('parent', 'school')", name="ck_parent_request_messages_author"),
+        Index("ix_parent_request_messages_thread", "school_id", "request_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    school_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("schools.id", ondelete="RESTRICT"), nullable=False)
+    request_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    author_user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    author_role: Mapped[str] = mapped_column(String(12), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Task(Base):
     """A school-owned action item assigned to one staff member.
 

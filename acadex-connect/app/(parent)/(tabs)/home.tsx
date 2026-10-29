@@ -1,14 +1,16 @@
+import { useEffect, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import {
   ArrowRight,
+  ArrowUpRight,
   Bell,
-  BookOpen,
   CalendarCheck,
   CalendarDays,
   Check,
   ChevronRight,
-  CreditCard,
+  GraduationCap,
+  Wallet,
   X,
   Zap,
   type LucideIcon,
@@ -22,15 +24,26 @@ import {
   Text,
   View,
 } from "react-native";
-import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
+import Animated, {
+  Easing,
+  FadeInDown,
+  FadeInUp,
+  ZoomIn,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiErrorMessage } from "../../../src/api/client";
 import { EmptyState, LoadingState, Screen } from "../../../src/components/ui";
+import { PressableScale } from "../../../src/components/insights/InsightVisuals";
 import { communicationsApi } from "../../../src/features/communicationsApi";
 import { familyApi } from "../../../src/features/familyApi";
 import { useAuth } from "../../../src/services/auth";
 import { useChildren } from "../../../src/services/parentData";
+import { formatMoney } from "../../../src/features/insights";
 import { colors, radius } from "../../../src/theme/tokens";
 
 const logo = require("../../../assets/images/acadex-logo.png");
@@ -85,6 +98,18 @@ export default function HomeScreen() {
   const latestAnnouncement = announcements.data?.[0];
   const unread =
     notifications.data?.filter((item) => !item.read_at).length ?? 0;
+  const latestReport = reports.data?.[0];
+  const gradeValue =
+    latestReport?.aggregate_percent != null
+      ? `${Math.round(Number(latestReport.aggregate_percent))}%`
+      : (latestReport?.grade ?? "—");
+  const feeValue = fees.data
+    ? formatMoney(fees.data.outstanding_total, fees.data.currency)
+    : "—";
+  const attendanceValue = attendance.data
+    ? `${attendance.data.counts.present}/${attendance.data.total_recorded}`
+    : "—";
+  const updatesValue = notifications.data ? String(unread) : "—";
 
   return (
     <Screen
@@ -118,11 +143,14 @@ export default function HomeScreen() {
           >
             <Bell color={colors.ink} size={23} strokeWidth={1.8} />
             {unread > 0 ? (
-              <View style={styles.unreadBadge}>
+              <Animated.View
+                entering={ZoomIn.duration(220)}
+                style={styles.unreadBadge}
+              >
                 <Text style={styles.unreadText}>
                   {unread > 9 ? "9+" : unread}
                 </Text>
-              </View>
+              </Animated.View>
             ) : null}
           </Pressable>
           <Pressable
@@ -148,7 +176,7 @@ export default function HomeScreen() {
             Here’s an overview of your child’s progress.
           </Text>
         </View>
-        <View pointerEvents="none" style={styles.heroArt}>
+        <FloatingArt>
           <View style={styles.heroHalo} />
           <Image
             source={bookStack}
@@ -160,7 +188,7 @@ export default function HomeScreen() {
             resizeMode="contain"
             style={styles.heroCap}
           />
-        </View>
+        </FloatingArt>
       </Animated.View>
 
       {children.length ? (
@@ -177,9 +205,8 @@ export default function HomeScreen() {
             {children.map((child) => {
               const active = child.id === selectedChild?.id;
               return (
-                <Pressable
+                <PressableScale
                   key={child.id}
-                  accessibilityRole="button"
                   accessibilityLabel={`View ${child.first_name} ${child.last_name}`}
                   onPress={() => selectChild(child.id)}
                   style={[styles.childCard, active && styles.childCardActive]}
@@ -208,11 +235,14 @@ export default function HomeScreen() {
                     </Text>
                   </View>
                   {active ? (
-                    <View style={styles.selectedCheck}>
+                    <Animated.View
+                      entering={ZoomIn.duration(200)}
+                      style={styles.selectedCheck}
+                    >
                       <Check color="#fff" size={14} strokeWidth={3} />
-                    </View>
+                    </Animated.View>
                   ) : null}
-                </Pressable>
+                </PressableScale>
               );
             })}
           </ScrollView>
@@ -223,14 +253,10 @@ export default function HomeScreen() {
         <>
           <Animated.View entering={FadeInUp.delay(190).duration(360)}>
             <View style={styles.studentBannerShell}>
-              <Pressable
-                accessibilityRole="button"
+              <PressableScale
                 accessibilityLabel={`Open ${selectedChild.first_name}'s profile`}
-                onPress={() => router.push("/(parent)/(tabs)/children")}
-                style={({ pressed }) => [
-                  styles.studentBanner,
-                  pressed && styles.pressed,
-                ]}
+                onPress={() => router.push("/(parent)/children")}
+                style={styles.studentBanner}
               >
                 <LinearGradient
                   colors={["#2A7BF6", "#1CA5E7"]}
@@ -261,7 +287,7 @@ export default function HomeScreen() {
                   resizeMode="contain"
                   style={styles.bagArt}
                 />
-              </Pressable>
+              </PressableScale>
             </View>
           </Animated.View>
 
@@ -301,8 +327,9 @@ export default function HomeScreen() {
                 {attendance.data.records.slice(0, 5).map((record, index) => {
                   const date = new Date(`${record.date}T00:00:00`);
                   return (
-                    <View
+                    <Animated.View
                       key={`${record.date}-${record.status}`}
+                      entering={FadeInUp.delay(380 + index * 35).duration(260)}
                       style={[styles.dayItem, index > 0 && styles.dayDivider]}
                     >
                       <Text style={styles.dayName}>
@@ -334,7 +361,7 @@ export default function HomeScreen() {
                           <X size={12} color="#7183A4" strokeWidth={3} />
                         )}
                       </View>
-                    </View>
+                    </Animated.View>
                   );
                 })}
               </View>
@@ -345,13 +372,10 @@ export default function HomeScreen() {
 
           <Animated.View entering={FadeInUp.delay(410).duration(320)}>
             <View style={styles.announcementShell}>
-              <Pressable
-                accessibilityRole="button"
+              <PressableScale
+                accessibilityLabel="Open latest announcement"
                 onPress={() => router.push("/(parent)/announcements")}
-                style={({ pressed }) => [
-                  styles.announcementCard,
-                  pressed && styles.pressed,
-                ]}
+                style={styles.announcementCard}
               >
                 <LinearGradient
                   colors={["#F1F7FF", "#E4F0FF"]}
@@ -419,7 +443,7 @@ export default function HomeScreen() {
                 <View style={styles.announcementArrow}>
                   <ChevronRight color={colors.blue} size={18} />
                 </View>
-              </Pressable>
+              </PressableScale>
             </View>
           </Animated.View>
 
@@ -428,56 +452,62 @@ export default function HomeScreen() {
             style={styles.sectionHeading}
           >
             <View style={styles.sectionLabel}>
-              <Zap color={colors.blue} size={21} fill={colors.blue} />
-              <Text style={styles.sectionTitle}>Quick actions</Text>
+              <View style={styles.sectionIcon}>
+                <Zap color={colors.blue} size={21} fill={colors.blue} />
+              </View>
+              <View style={styles.sectionCopy}>
+                <Text style={styles.sectionTitle}>Quick actions</Text>
+                <Text style={styles.sectionCaption}>
+                  Your key updates, one tap away.
+                </Text>
+              </View>
             </View>
-            <Pressable
-              onPress={() => router.push("/(parent)/(tabs)/children")}
-              hitSlop={8}
-            >
-              <ViewAllLabel />
-            </Pressable>
           </Animated.View>
-          <Animated.View
-            entering={FadeInUp.delay(500).duration(340)}
-            style={styles.quickGrid}
-          >
+          <View style={styles.quickGrid}>
             <QuickAction
-              delay={0}
-              icon={BookOpen}
+              delay={500}
+              icon={GraduationCap}
               iconColor="#2873E8"
               tint="#EAF3FF"
-              title="View grades"
+              title="Academics"
+              value={gradeValue}
+              subtitle="Latest result"
               onPress={() => router.push("/(parent)/(tabs)/academics")}
             />
             <QuickAction
-              delay={70}
-              icon={CreditCard}
+              delay={540}
+              icon={Wallet}
               iconColor="#8755D6"
               tint="#F3ECFF"
               title="Fees"
+              value={feeValue}
+              subtitle="Outstanding"
               onPress={() => router.push("/(parent)/fees")}
             />
             <QuickAction
-              delay={140}
+              delay={580}
               icon={CalendarCheck}
               iconColor="#189B69"
               tint="#E9F8EF"
               title="Attendance"
+              value={attendanceValue}
+              subtitle="Days present"
               onPress={() => router.push("/(parent)/attendance")}
             />
             <QuickAction
-              delay={210}
+              delay={620}
               icon={Bell}
               iconColor="#D47A22"
               tint="#FFF2E2"
               title="Updates"
+              value={updatesValue}
+              subtitle="Unread updates"
               onPress={() => router.push("/(parent)/(tabs)/notifications")}
             />
-          </Animated.View>
+          </View>
 
           <Animated.View
-            entering={FadeInUp.delay(560).duration(340)}
+            entering={FadeInUp.delay(680).duration(340)}
             style={styles.welcomeBanner}
           >
             <View style={styles.welcomeIcon}>
@@ -493,14 +523,14 @@ export default function HomeScreen() {
                 Stay connected with your child’s academic journey.
               </Text>
             </View>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push("/(parent)/(tabs)/children")}
+            <PressableScale
+              accessibilityLabel="Explore Acadex Connect"
+              onPress={() => router.push("/(parent)/children")}
               style={styles.learnButton}
             >
               <Text style={styles.learnText}>Explore</Text>
               <ArrowRight size={15} color={colors.blue} />
-            </Pressable>
+            </PressableScale>
             <Image
               source={school3d}
               resizeMode="contain"
@@ -520,11 +550,35 @@ export default function HomeScreen() {
   );
 }
 
+function FloatingArt({ children }: { children: ReactNode }) {
+  const drift = useSharedValue(0);
+  useEffect(() => {
+    drift.value = withRepeat(
+      withTiming(1, {
+        duration: 5200,
+        easing: Easing.inOut(Easing.quad),
+      }),
+      -1,
+      true,
+    );
+  }, [drift]);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: drift.value * 6 }],
+  }));
+  return (
+    <Animated.View pointerEvents="none" style={[styles.heroArt, animatedStyle]}>
+      {children}
+    </Animated.View>
+  );
+}
+
 function QuickAction({
   icon,
   iconColor,
   tint,
   title,
+  value,
+  subtitle,
   onPress,
   delay,
 }: {
@@ -532,30 +586,51 @@ function QuickAction({
   iconColor: string;
   tint: string;
   title: string;
+  value: string;
+  subtitle: string;
   onPress: () => void;
   delay: number;
 }) {
   const Icon = icon;
   return (
     <Animated.View
-      entering={FadeInUp.delay(delay).duration(300)}
+      entering={FadeInUp.delay(delay).duration(340)}
       style={styles.quickCell}
     >
-      <Pressable
-        accessibilityRole="button"
+      <PressableScale
+        accessibilityLabel={`${title}: ${value}`}
         onPress={onPress}
-        style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
+        style={styles.quickAction}
       >
-        <View style={[styles.quickIcon, { backgroundColor: tint }]}>
-          <Icon size={22} color={iconColor} strokeWidth={2.1} />
+        <LinearGradient
+          colors={[tint, "#FFFFFF"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View pointerEvents="none" style={styles.quickGlow} />
+        <View style={styles.quickTop}>
+          <View style={styles.quickIconWrap}>
+            <Icon size={18} color={iconColor} strokeWidth={2.2} />
+          </View>
+          <View style={styles.quickArrow}>
+            <ArrowUpRight size={13} color={iconColor} strokeWidth={2.4} />
+          </View>
         </View>
-        <View style={styles.quickBottom}>
-          <Text style={styles.quickTitle} numberOfLines={1}>
-            {title}
-          </Text>
-          <ChevronRight color={colors.muted} size={16} />
-        </View>
-      </Pressable>
+        <Text
+          style={[styles.quickValue, { color: iconColor }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+        >
+          {value}
+        </Text>
+        <Text style={styles.quickTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text style={styles.quickSubtitle} numberOfLines={1}>
+          {subtitle}
+        </Text>
+      </PressableScale>
     </Animated.View>
   );
 }
@@ -887,6 +962,12 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   sectionLabel: { flexDirection: "row", alignItems: "center", gap: 8 },
+  sectionCopy: { flex: 1, minWidth: 0, gap: 1 },
+  sectionCaption: {
+    color: colors.muted,
+    fontSize: 9.5,
+    marginTop: 1,
+  },
   sectionIcon: {
     width: 29,
     height: 29,
@@ -1008,39 +1089,76 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: "rgba(255,255,255,0.68)",
   },
-  quickBolt: {
-    color: colors.blue,
-    fontSize: 26,
-    lineHeight: 28,
-    fontWeight: "900",
+  quickGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginHorizontal: -5,
+    rowGap: 10,
   },
-  quickGrid: { flexDirection: "row", gap: 7 },
-  quickCell: { flex: 1, minWidth: 0 },
+  quickCell: { width: "50%", paddingHorizontal: 5 },
   quickAction: {
-    minHeight: 85,
+    minHeight: 116,
+    padding: 11,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#E7EEF8",
+    backgroundColor: colors.surface,
+    overflow: "hidden",
+    shadowColor: "#1B4F8A",
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+  quickGlow: {
+    position: "absolute",
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    top: -56,
+    right: -42,
+    backgroundColor: "rgba(255,255,255,0.46)",
+  },
+  quickTop: {
+    flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    padding: 9,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
   },
-  quickIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 16,
+  quickIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    backgroundColor: "rgba(255,255,255,0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.9)",
     alignItems: "center",
     justifyContent: "center",
   },
-  quickImage: { width: 37, height: 37 },
-  quickBottom: {
-    width: "100%",
-    flexDirection: "row",
+  quickArrow: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "rgba(255,255,255,0.7)",
     alignItems: "center",
-    gap: 2,
+    justifyContent: "center",
   },
-  quickTitle: { color: colors.ink, flex: 1, fontSize: 10, fontWeight: "700" },
+  quickValue: {
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+    marginTop: 8,
+  },
+  quickTitle: {
+    color: colors.ink,
+    fontSize: 10.5,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  quickSubtitle: {
+    color: colors.muted,
+    fontSize: 8.5,
+    marginTop: 1,
+  },
   welcomeBanner: {
     minHeight: 78,
     overflow: "hidden",

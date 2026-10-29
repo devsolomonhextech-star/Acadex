@@ -143,3 +143,49 @@ export type Notification = {
   link: string | null;
   created_at: string;
 };
+
+export type ParentRequestStatus = "open" | "awaiting_parent" | "resolved";
+export type ParentRequestTopic =
+  | "absence"
+  | "documents"
+  | "meeting"
+  | "fees"
+  | "details"
+  | "other";
+
+export type ParentRequestSummary = {
+  id: string;
+  reference: string;
+  topic: ParentRequestTopic;
+  subject: string;
+  status: ParentRequestStatus;
+  student_id: string | null;
+  student_name: string | null;
+  admission_number: string | null;
+  guardian_name: string;
+  preview: string;
+  last_message_at: string;
+  last_message_by: "parent" | "school";
+  message_count: number;
+  unread: boolean;
+  created_at: string;
+  first_school_reply_at: string | null;
+  resolved_at: string | null;
+};
+
+export type ParentRequestMessage = {
+  id: string;
+  author_role: "parent" | "school";
+  author_name: string;
+  body: string;
+  created_at: string;
+};
+
+export type ParentRequestDetail = ParentRequestSummary & {
+  messages: ParentRequestMessage[];
+};
+
+export type ParentRequestInbox = {
+  items: ParentRequestSummary[];
+  counts: { open: number; resolved: number; unread: number };
+};

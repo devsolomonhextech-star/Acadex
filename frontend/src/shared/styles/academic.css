@@ -8,3 +8,7 @@
 .teaching-load{color:#5f6c92;font-size:12px;font-weight:600}
 .teaching-row-actions{display:inline-flex;gap:8px;align-items:center}
 .teaching-panel .ant-tag{margin-inline-start:0}
+
+/* Primary actions must keep white labels; the heading rule above tinted them blue. */
+.academic-card-heading .ant-btn.ant-btn-primary{color:#fff}
+.academic-card-heading .ant-btn.ant-btn-primary .anticon{color:#fff}

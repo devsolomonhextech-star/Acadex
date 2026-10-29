@@ -1,10 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Alert, Button, Divider, Drawer, Empty, Input, InputNumber, Modal, Progress, Select, Space, Spin, Table, Tag, message,
+  Alert, Button, Divider, Drawer, Empty, Input, InputNumber, Modal, Popconfirm, Progress, Select, Space,
+  Spin, Table, Tag, Tooltip, message,
 } from 'antd'
 import type { TableColumnsType } from 'antd'
-import { CheckCircleOutlined, EyeInvisibleOutlined, EyeOutlined, LockOutlined, PlusOutlined, PrinterOutlined, SaveOutlined, TrophyOutlined } from '@ant-design/icons'
+import {
+  CheckCircleOutlined, ClockCircleOutlined, EyeInvisibleOutlined, EyeOutlined, LockOutlined, PlusOutlined,
+  PrinterOutlined, SaveOutlined, SettingOutlined, TeamOutlined, TrophyOutlined,
+} from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/authHooks'
 import { fetchAcademicTerms, fetchAcademicYears, fetchClassGroups } from '../academic/academicApi'
@@ -114,19 +118,26 @@ export default function ResultsPage() {
     const subjects = new Map<string, { name: string; code: string }>()
     for (const student of results?.students ?? []) {
       for (const subject of student.subjects) {
-        if (!subjects.has(subject.subject_id)) subjects.set(subject.subject_id, { name: subject.subject_name, code: subject.subject_code })
+        if (!subjects.has(subject.subject_id)) {
+          subjects.set(subject.subject_id, { name: subject.subject_name, code: subject.subject_code })
+        }
       }
     }
-    const dynamic: TableColumnsType<StudentResult> = [...subjects.values()]
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map(subject => ({
-        title: subject.name,
-        key: subject.code,
+    const dynamic: TableColumnsType<StudentResult> = [...subjects.entries()]
+      .sort((a, b) => a[1].name.localeCompare(b[1].name))
+      .map(([subjectId, subject]) => ({
+        title: <Tooltip title={subject.name}><span className="term-subject-head">{subject.code || subject.name}</span></Tooltip>,
+        key: subjectId,
         align: 'right',
         render: (_, row) => {
-          const entry = row.subjects.find(item => item.subject_name === subject.name)
+          const entry = row.subjects.find(item => item.subject_id === subjectId)
           if (!entry) return <span className="results-missing">—</span>
-          return <span className="results-cell"><strong>{Number(entry.weighted_total).toFixed(1)}</strong><small>{entry.grade ?? '—'}</small></span>
+          return (
+            <span className="term-score">
+              <strong>{Number(entry.weighted_total).toFixed(1)}</strong>
+              <em>{entry.grade ?? '—'}</em>
+            </span>
+          )
         },
       }))
     return [
@@ -134,45 +145,87 @@ export default function ResultsPage() {
         title: 'STUDENT',
         key: 'student',
         fixed: 'left',
-        width: 200,
-        render: (_, row) => <button type="button" className="results-student results-student-button" onClick={() => setBreakdownStudent(row)} aria-label={`View ${row.first_name} ${row.last_name}'s result breakdown`}><strong>{row.first_name} {row.last_name}</strong><small>{row.admission_number}</small></button>,
+        width: 232,
+        render: (_, row) => (
+          <button
+            type="button"
+            className="term-student"
+            onClick={() => setBreakdownStudent(row)}
+            aria-label={`View ${row.first_name} ${row.last_name}'s result breakdown`}
+          >
+            <span className="term-avatar">{`${row.first_name[0] ?? ''}${row.last_name[0] ?? ''}`.toUpperCase()}</span>
+            <span className="term-student-copy">
+              <strong>{row.first_name} {row.last_name}</strong>
+              <small>{row.admission_number}</small>
+            </span>
+          </button>
+        ),
       },
       ...dynamic,
       {
-        title: 'TERM AVERAGE',
+        title: 'AVERAGE',
         key: 'aggregate',
         align: 'right',
+        width: 116,
         render: (_, row) => row.aggregate_percent === null
           ? <span className="results-missing">Incomplete</span>
-          : <span className="results-cell"><strong>{Number(row.aggregate_percent).toFixed(1)}</strong><small>{row.grade ?? '—'}</small></span>,
+          : (
+            <span className="term-average">
+              <strong>{Number(row.aggregate_percent).toFixed(1)}</strong>
+              <em>{row.grade ?? '—'}</em>
+            </span>
+          ),
       },
       {
-        title: 'POSITION',
+        title: 'RANK',
         key: 'position',
         align: 'center',
+        width: 82,
         render: (_, row) => row.position === null
           ? <span className="results-missing">—</span>
-          : <Tag className="results-position" color={row.position === 1 ? 'gold' : 'blue'}>#{row.position}</Tag>,
+          : <span className={`term-rank${row.position <= 3 ? ' is-top' : ''}`}>{row.position}</span>,
       },
       {
         title: '',
-        key: 'breakdown',
+        key: 'actions',
         align: 'right',
-        render: (_, row) => <Button size="small" type="link" icon={<EyeOutlined/>} onClick={() => setBreakdownStudent(row)}>Details</Button>,
-      },
-      {
-        title: '',
-        key: 'report-card',
-        align: 'right',
-        render: (_, row) => published
-          ? <Button size="small" icon={<PrinterOutlined/>}
-                   onClick={() => navigate(`/report-card?student_id=${row.student_id}&term_id=${termId}`)}>
-              Report card
-            </Button>
-          : null,
+        width: 92,
+        render: (_, row) => (
+          <span className="term-row-actions">
+            <Tooltip title="Assessment breakdown">
+              <Button
+                type="text" size="small" icon={<EyeOutlined />}
+                onClick={() => setBreakdownStudent(row)}
+                aria-label={`Breakdown for ${row.first_name} ${row.last_name}`}
+              />
+            </Tooltip>
+            {published && (
+              <Tooltip title="Open report card">
+                <Button
+                  type="text" size="small" icon={<PrinterOutlined />}
+                  onClick={() => navigate(`/report-card?student_id=${row.student_id}&term_id=${termId}`)}
+                  aria-label={`Report card for ${row.first_name} ${row.last_name}`}
+                />
+              </Tooltip>
+            )}
+          </span>
+        ),
       },
     ]
   }, [results, published, termId, navigate])
+
+  const summary = useMemo(() => {
+    const rows = results?.students ?? []
+    const scored = rows.filter(row => row.aggregate_percent !== null)
+    const average = scored.length
+      ? scored.reduce((total, row) => total + Number(row.aggregate_percent), 0) / scored.length
+      : null
+    const best = scored.reduce<StudentResult | null>(
+      (top, row) => (!top || Number(row.aggregate_percent) > Number(top.aggregate_percent) ? row : top),
+      null,
+    )
+    return { total: rows.length, scored: scored.length, average, best }
+  }, [results])
 
   const refreshAll = async () => Promise.all([
     queryClient.invalidateQueries({ queryKey: ['class-results', user?.school_id] }),
@@ -277,25 +330,50 @@ export default function ResultsPage() {
   const selectedTermRow = terms.find(term => term.id === termId)
   const classHasSubjects = (results?.students ?? []).some(student => student.subjects.length > 0)
 
+  const status = results?.publication.status ?? 'draft'
+  const statusLabel = published ? 'Published' : status === 'withdrawn' ? 'Withdrawn' : 'Draft'
+  const publishedOn = results?.publication.published_at
+    ? new Date(results.publication.published_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    : null
+
   return <div className="page-content results-page">
     {contextHolder}
     <div className="eyebrow">ACADEMIC OPERATIONS</div>
-    <div className="students-heading">
+    <div className="term-heading">
       <div>
         <h1>Term results</h1>
-        <p>Compute weighted term totals from approved assessments, review grades, and publish class results.</p>
+        <p>Weighted totals from approved assessments — review the class, then publish when every grade is right.</p>
       </div>
-      <Space>
-        {canManage && <Button onClick={() => setScalesOpen(true)} disabled={!scalesQuery.isSuccess}>Grading scales</Button>}
-        {canCompute && results && !published &&
-          <Button icon={<SaveOutlined/>} loading={computeMutation.isPending} disabled={!classHasSubjects && !!results}
-                  onClick={() => computeMutation.mutate()}>Recompute</Button>}
-        {canManage && results && !published && results.students.length > 0 &&
-          <Button type="primary" icon={<LockOutlined/>} onClick={() => { setPublishConfirm(''); setPublishOpen(true) }}>Publish results</Button>}
-        {canManage && published &&
-          <Button danger icon={<EyeInvisibleOutlined/>} loading={withdrawMutation.isPending}
-                  onClick={() => withdrawMutation.mutate()}>Withdraw publication</Button>}
-      </Space>
+      <div className="term-heading-actions">
+        {canManage && (
+          <Button icon={<SettingOutlined />} onClick={() => setScalesOpen(true)} disabled={!scalesQuery.isSuccess}>
+            Grading scales
+          </Button>
+        )}
+      </div>
+    </div>
+
+    <div className="stats-grid term-stats">
+      <div className="stat-card">
+        <div className="stat-top"><span>Students</span><span className="stat-icon blue"><TeamOutlined /></span></div>
+        <div className="stat-value">{summary.total}</div>
+        <div className="stat-foot">{summary.scored} with complete totals</div>
+      </div>
+      <div className="stat-card">
+        <div className="stat-top"><span>Class average</span><span className="stat-icon green"><TrophyOutlined /></span></div>
+        <div className="stat-value">{summary.average === null ? '—' : `${summary.average.toFixed(1)}%`}</div>
+        <div className="stat-foot">{selectedTermRow?.name ?? 'This term'} · all subjects</div>
+      </div>
+      <div className="stat-card">
+        <div className="stat-top"><span>Top of class</span><span className="stat-icon purple"><TrophyOutlined /></span></div>
+        <div className="stat-value">{summary.best ? `${Number(summary.best.aggregate_percent).toFixed(1)}%` : '—'}</div>
+        <div className="stat-foot">{summary.best ? `${summary.best.first_name} ${summary.best.last_name}` : 'No results yet'}</div>
+      </div>
+      <div className="stat-card">
+        <div className="stat-top"><span>Status</span><span className="stat-icon orange"><ClockCircleOutlined /></span></div>
+        <div className={`stat-value term-status-value is-${published ? 'published' : status}`}>{statusLabel}</div>
+        <div className="stat-foot">{publishedOn ? `Published ${publishedOn}` : 'Not published to families'}</div>
+      </div>
     </div>
 
     {pageError && <Alert type="error" showIcon message="Could not load results data" description={formatApiError(pageError)} className="student-error"/>}
@@ -305,62 +383,138 @@ export default function ResultsPage() {
              description={canManage
                ? 'Create a grading scale and mark it as default before computing or publishing results.'
                : 'Ask a school administrator to configure a default grading scale before results can be computed.'}/>}
-    {resultsQuery.isSuccess && !resultsQuery.isFetching && !results?.students.length &&
-      <Alert type="info" showIcon className="student-error" message="No computed results yet"
-             description={canCompute
-               ? `Compute results for ${selectedClassRow?.name ?? 'this class'} once approved assessments have complete scores.`
-               : 'Results have not been computed for this class and term yet.'}/>}
 
-    <section className="results-context panel">
-      <div className="results-filter">
+    <section className="term-controls panel">
+      <div className="term-filter">
         <span>Academic year</span>
         <Select value={yearId || undefined} placeholder="Choose year"
                 onChange={value => { setPeriodYearId(value); setSelectedClass('') }}
                 options={years.map((year: AcademicYear) => ({ value: year.id, label: year.name }))}/>
       </div>
-      <div className="results-filter">
+      <div className="term-filter">
         <span>Term</span>
         <Select value={termId || undefined} placeholder="Choose term"
                 onChange={setPeriodTermId}
                 options={terms.map((term: AcademicTerm) => ({ value: term.id, label: term.name }))} disabled={!terms.length}/>
       </div>
-      <div className="results-filter">
+      <div className="term-filter">
         <span>Class group</span>
         <Select value={classId || undefined} placeholder="Choose class"
                 onChange={value => setSelectedClass(value)}
                 options={classes.map(group => ({ value: group.id, label: group.name }))} disabled={!classes.length}/>
       </div>
-      <div className="results-filter">
-        <span>Status</span>
-        <div className="results-status">
-          {results
-            ? <Tag color={published ? 'green' : results.publication.status === 'withdrawn' ? 'orange' : 'blue'}>
-                {published ? 'Published' : results.publication.status === 'withdrawn' ? 'Withdrawn' : 'Draft'}
-              </Tag>
-            : <Tag>—</Tag>}
-          {results?.grading_scale_name && <Tag color="purple">{results.grading_scale_name}</Tag>}
-        </div>
+      <div className="term-controls-side">
+        <span className={`term-status-pill is-${published ? 'published' : status}`}>
+          {published ? <CheckCircleOutlined /> : <ClockCircleOutlined />}
+          {statusLabel}
+        </span>
+        {results?.grading_scale_name && <Tag className="term-scale-tag">{results.grading_scale_name}</Tag>}
       </div>
     </section>
 
-    <section className="results-list panel">
-      <div className="results-list-heading">
-        <div className="results-title">
-          <span className="academic-card-icon"><TrophyOutlined/></span>
-          <div>
-            <h2>Class results</h2>
-            <p>{selectedClassRow?.name ?? 'Select a class'} · {selectedTermRow?.name ?? ''} · {results?.students.length ?? 0} students</p>
-          </div>
-        </div>
-        {published && <Tag color="green" icon={<CheckCircleOutlined/>}>Published results are locked</Tag>}
+    <section className={`term-publication is-${published ? 'published' : status}`}>
+      <span className="term-publication-icon">
+        {published ? <LockOutlined /> : <ClockCircleOutlined />}
+      </span>
+      <div className="term-publication-copy">
+        <strong>
+          {published
+            ? 'Published and locked'
+            : status === 'withdrawn' ? 'Publication withdrawn' : 'Draft — not visible to families'}
+        </strong>
+        <p>
+          {published
+            ? `Locked${publishedOn ? ` on ${publishedOn}` : ''}. Families can open report cards, and approved scores stay frozen until you withdraw the publication.`
+            : status === 'withdrawn'
+              ? 'Recompute the totals and publish again once the class is ready. Families cannot see results until then.'
+              : 'Totals are computed but hidden from families. Review every grade, then publish to release report cards.'}
+        </p>
       </div>
-      {resultsQuery.isLoading
-        ? <div className="results-loading"><Spin/><span>Loading results…</span></div>
-        : results && results.students.length > 0
-          ? <Table<StudentResult> rowKey="student_id" columns={subjectColumns} dataSource={results.students}
-                                  pagination={{ pageSize: 10, showSizeChanger: false }}
-                                  locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No results computed"/> }}/>
-          : null}
+      <div className="term-publication-actions">
+        {canCompute && !published && (
+          <Button
+            icon={<SaveOutlined />}
+            loading={computeMutation.isPending}
+            disabled={!classHasSubjects && !!results}
+            onClick={() => computeMutation.mutate()}
+          >
+            {results?.students.length ? 'Recompute' : 'Compute results'}
+          </Button>
+        )}
+        {canManage && !published && results && results.students.length > 0 && (
+          <Button type="primary" icon={<LockOutlined />} onClick={() => { setPublishConfirm(''); setPublishOpen(true) }}>
+            Publish results
+          </Button>
+        )}
+        {canManage && published && (
+          <Popconfirm
+            title="Withdraw this publication?"
+            description="Report cards stop being available and results can be recomputed."
+            okText="Withdraw" okButtonProps={{ danger: true }}
+            onConfirm={() => withdrawMutation.mutate()}
+          >
+            <Button danger icon={<EyeInvisibleOutlined />} loading={withdrawMutation.isPending}>
+              Withdraw publication
+            </Button>
+          </Popconfirm>
+        )}
+      </div>
+    </section>
+
+    <section className="term-results panel">
+      <header className="term-results-head">
+        <div>
+          <h2>{selectedClassRow?.name ?? 'Class results'}</h2>
+          <p>
+            {selectedTermRow?.name ?? 'Choose a term'}
+            {results?.grading_scale_name ? ` · ${results.grading_scale_name}` : ''}
+            {` · ${summary.total} student${summary.total === 1 ? '' : 's'}`}
+          </p>
+        </div>
+        {published && <span className="term-lock"><CheckCircleOutlined /> Results locked</span>}
+      </header>
+
+      {results && results.students.length > 0 && !classHasSubjects && (
+        <p className="term-note">
+          Term totals are recorded for this class, but subject-level results are missing.
+          The subject columns appear once totals are computed from approved assessments.
+        </p>
+      )}
+
+      {resultsQuery.isLoading ? (
+        <div className="results-loading"><Spin/><span>Loading results…</span></div>
+      ) : results && results.students.length > 0 ? (
+        <Table<StudentResult>
+          rowKey="student_id"
+          columns={subjectColumns}
+          dataSource={results.students}
+          pagination={{ pageSize: 10, showSizeChanger: false }}
+          tableLayout="fixed"
+          scroll={{ x: 560 + Math.max(0, subjectColumns.length - 4) * 96 }}
+          size="middle"
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No results computed"/> }}
+        />
+      ) : (
+        <div className="term-empty">
+          <span className="term-empty-icon"><TrophyOutlined /></span>
+          <h3>No results for this class yet</h3>
+          <p>
+            {canCompute
+              ? `Compute ${selectedClassRow?.name ?? 'this class'} once approved assessments have complete scores.`
+              : 'Results have not been computed for this class and term yet.'}
+          </p>
+          {canCompute && (
+            <Button
+              type="primary" icon={<SaveOutlined />}
+              loading={computeMutation.isPending}
+              disabled={!classHasSubjects && !!results}
+              onClick={() => computeMutation.mutate()}
+            >
+              Compute results
+            </Button>
+          )}
+        </div>
+      )}
     </section>
 
     <Drawer className="result-breakdown-drawer" open={!!breakdownStudent} onClose={() => setBreakdownStudent(null)} width={760}

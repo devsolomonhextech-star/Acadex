@@ -113,8 +113,10 @@ async def test_profile_is_tenant_safe_and_role_scoped(client):
         "password": "teacher-long-secure-password",
     })
     teacher_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    # Out-of-scope students are reported as missing so a teacher cannot probe
+    # the directory by id.
     denied = await client.get(f"/api/v1/students/{student_id}/profile", headers=teacher_headers)
-    assert denied.status_code == 403, denied.text
+    assert denied.status_code == 404, denied.text
 
     anonymous = await client.get(f"/api/v1/students/{student_id}/profile")
     assert anonymous.status_code == 401

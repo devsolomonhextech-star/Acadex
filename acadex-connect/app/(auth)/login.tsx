@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Controller, useForm, type Control } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import Svg, { Circle, Path, Rect } from "react-native-svg";
+import { StatusBar } from "expo-status-bar";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -14,18 +15,39 @@ import {
   Text,
   TextInput,
   View,
+  type ScrollViewInstance,
 } from "react-native";
 import {
+  ArrowRight,
+  Building2,
   Eye,
   EyeOff,
   LockKeyhole,
   Mail,
   ShieldCheck,
 } from "lucide-react-native";
+import Animated, {
+  Easing,
+  FadeInDown,
+  FadeInUp,
+  ZoomIn,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
+import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  FloatingOrb,
+  PressableScale,
+} from "../../src/components/insights/InsightVisuals";
 import { useAuth } from "../../src/services/auth";
 import { apiErrorMessage } from "../../src/api/client";
-import { colors, radius, space } from "../../src/theme/tokens";
-import { Card, PrimaryButton } from "../../src/components/ui";
+import { colors } from "../../src/theme/tokens";
+
+const logo = require("../../assets/images/acadex-logo.png");
+const school3d = require("../../assets/images/3d/school.webp");
 
 const credentialsSchema = z.object({
   school: z.string().trim().min(3, "Enter your school workspace address"),
@@ -35,12 +57,17 @@ const credentialsSchema = z.object({
 type Credentials = z.infer<typeof credentialsSchema>;
 
 export default function LoginScreen() {
+  const insets = useSafeAreaInsets();
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const formY = useRef(0);
   const { signIn, verifyCode } = useAuth();
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [errorSeq, setErrorSeq] = useState(0);
   const [challenge, setChallenge] = useState<string | null>(null);
   const [code, setCode] = useState("");
+  const [codeFocused, setCodeFocused] = useState(false);
   const {
     control,
     handleSubmit,
@@ -58,10 +85,12 @@ export default function LoginScreen() {
       if (result.requiresTwoFactor) setChallenge(result.challengeToken ?? null);
     } catch (cause) {
       setError(apiErrorMessage(cause));
+      setErrorSeq(value => value + 1);
     } finally {
       setBusy(false);
     }
   });
+
   const submitCode = async () => {
     if (!challenge || !/^\d{6}$/.test(code)) {
       setError("Enter the 6-digit code from your authenticator app.");
@@ -73,201 +102,291 @@ export default function LoginScreen() {
       await verifyCode(challenge, code);
     } catch (cause) {
       setError(apiErrorMessage(cause));
+      setErrorSeq(value => value + 1);
     } finally {
       setBusy(false);
     }
   };
 
+  // Bring the error banner into view whenever a sign-in attempt fails.
+  useEffect(() => {
+    if (!errorSeq) return;
+    scrollRef.current?.scrollTo({
+      y: Math.max(0, formY.current - 16),
+      animated: true,
+    });
+  }, [errorSeq]);
+
+  const showHelp = () => {
+    Alert.alert(
+      "Need help signing in?",
+      "Contact your school administrator to reset your password or confirm your school workspace.",
+    );
+  };
+
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <ScrollView
-        contentContainerStyle={styles.page}
-        keyboardShouldPersistTaps="handled"
+    <View style={styles.root}>
+      <StatusBar style="light" />
+      <KeyboardAvoidingView
+        style={styles.root}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={styles.top}>
-          <Image
-            source={require("../../assets/images/acadex-logo.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          <Text style={styles.tagline}>Smarter Schools. Brighter Futures.</Text>
-          <Text style={styles.parentCaption}>
-            Parent portal — stay connected with your child’s learning journey.
-          </Text>
-        </View>
-        <View style={styles.body}>
-          {challenge ? (
-            <>
-              <Text style={styles.eyebrow}>ACADEX CONNECT</Text>
-              <Text style={styles.title}>Verify it’s you</Text>
-              <Text style={styles.subtitle}>
-                Enter the 6-digit code from your authenticator app.
-              </Text>
-            </>
-          ) : null}
-          {!challenge ? <SchoolIllustration /> : null}
-          <Card style={styles.form}>
-            {challenge ? (
-              <View style={styles.field}>
-                <Text style={styles.label}>Authenticator code</Text>
-                <View style={styles.inputWrap}>
-                  <ShieldCheck color={colors.muted} size={18} />
-                  <TextInput
-                    value={code}
-                    onChangeText={setCode}
-                    keyboardType="number-pad"
-                    maxLength={6}
-                    autoComplete="one-time-code"
-                    placeholder="000000"
-                    placeholderTextColor={colors.mutedLight}
-                    style={styles.input}
-                  />
-                </View>
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={styles.page}
+          keyboardShouldPersistTaps="always"
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View
+            entering={FadeInDown.duration(420)}
+            style={[styles.hero, { paddingTop: insets.top + 12 }]}
+          >
+            <LinearGradient
+              colors={["#071F57", "#0F49C7", "#2D8CFF"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <FloatingOrb
+              style={styles.heroOrbLarge}
+              distance={11}
+              duration={5600}
+            />
+            <FloatingOrb
+              style={styles.heroOrbSmall}
+              distance={-8}
+              duration={4800}
+            />
+            <View style={styles.heroTop}>
+              <Animated.View
+                entering={ZoomIn.delay(80).duration(380)}
+                style={styles.logoCard}
+              >
+                <Image source={logo} style={styles.logo} resizeMode="contain" />
+              </Animated.View>
+              <View style={styles.portalPill}>
+                <ShieldCheck size={12} color="#FFFFFF" strokeWidth={2.2} />
+                <Text style={styles.portalText}>PARENT PORTAL</Text>
               </View>
-            ) : (
-              <>
-                <Field
-                  label="School workspace"
-                  name="school"
-                  control={control}
-                  placeholder="e.g. greenwood-demo"
-                  error={errors.school?.message}
-                  autoCapitalize="none"
-                />
-                <Field
-                  label="Email address"
-                  name="email"
-                  control={control}
-                  placeholder="you@school.example"
-                  error={errors.email?.message}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                />
-                <View style={styles.field}>
-                  <Text style={styles.label}>Password</Text>
-                  <View style={styles.inputWrap}>
-                    <LockKeyhole color={colors.muted} size={18} />
-                    <Controller
-                      control={control}
-                      name="password"
-                      render={({ field: { onChange, onBlur, value } }) => (
-                        <TextInput
-                          value={value}
-                          onChangeText={onChange}
-                          onBlur={onBlur}
-                          secureTextEntry={!passwordVisible}
-                          autoCapitalize="none"
-                          placeholder="Your password"
-                          placeholderTextColor={colors.mutedLight}
-                          style={styles.input}
-                        />
-                      )}
-                    />
-                    <Pressable
-                      onPress={() => setPasswordVisible((v) => !v)}
-                      accessibilityRole="button"
-                      accessibilityLabel={
-                        passwordVisible ? "Hide password" : "Show password"
-                      }
+            </View>
+            <View style={styles.heroBody}>
+              <View style={styles.heroCopy}>
+                <Text style={styles.heroEyebrow}>ACADEX CONNECT</Text>
+                <Text style={styles.heroTitle}>Welcome back.</Text>
+                <Text style={styles.heroText}>
+                  A clear view of your child’s school day, results and payments.
+                </Text>
+              </View>
+              <FloatingSchool />
+            </View>
+          </Animated.View>
+
+          <Animated.View
+            entering={FadeInUp.delay(120).duration(450)}
+            style={styles.formShell}
+            onLayout={event => {
+              formY.current = event.nativeEvent.layout.y;
+            }}
+          >
+            <View style={styles.formCard}>
+              <View style={styles.formHeader}>
+                <Text style={styles.formEyebrow}>
+                  {challenge ? "SECURITY CHECK" : "PARENT SIGN IN"}
+                </Text>
+                <Text style={styles.formTitle}>
+                  {challenge ? "Verify it’s you" : "Sign in to your account"}
+                </Text>
+                <Text style={styles.formSubtitle}>
+                  {challenge
+                    ? "Enter the 6-digit code from your authenticator app."
+                    : "Use the school workspace and details provided by your school."}
+                </Text>
+              </View>
+
+              {error ? <ErrorBox message={error} /> : null}
+
+              {challenge ? (
+                <>
+                  <View style={styles.field}>
+                    <Text style={styles.label}>Authenticator code</Text>
+                    <View
+                      style={[
+                        styles.codeWrap,
+                        codeFocused && styles.inputFocused,
+                      ]}
                     >
-                      {passwordVisible ? (
-                        <EyeOff color={colors.muted} size={18} />
-                      ) : (
-                        <Eye color={colors.muted} size={18} />
-                      )}
+                      <ShieldCheck
+                        size={18}
+                        color={codeFocused ? colors.blue : colors.muted}
+                        strokeWidth={2.1}
+                      />
+                      <TextInput
+                        value={code}
+                        onChangeText={(value) => {
+                          setCode(value.replace(/\D/g, ""));
+                          if (error) setError("");
+                        }}
+                        onFocus={() => setCodeFocused(true)}
+                        onBlur={() => setCodeFocused(false)}
+                        editable={!busy}
+                        keyboardType="number-pad"
+                        maxLength={6}
+                        autoComplete="one-time-code"
+                        placeholder="000000"
+                        placeholderTextColor={colors.mutedLight}
+                        style={styles.codeInput}
+                      />
+                    </View>
+                  </View>
+                  <PrimaryAction
+                    title="Verify and continue"
+                    busy={busy}
+                    onPress={() => void submitCode()}
+                    disabled={code.length !== 6}
+                  />
+                  <PressableScale
+                    accessibilityLabel="Back to sign in"
+                    onPress={() => {
+                      setChallenge(null);
+                      setCode("");
+                      setError("");
+                    }}
+                    style={styles.backLink}
+                  >
+                    <Text style={styles.backLinkText}>Back to sign in</Text>
+                  </PressableScale>
+                </>
+              ) : (
+                <>
+                  <Field
+                    label="School workspace"
+                    name="school"
+                    icon={Building2}
+                    control={control}
+                    placeholder="e.g. greenwood-demo"
+                    error={errors.school?.message}
+                    autoCapitalize="none"
+                    disabled={busy}
+                  />
+                  <Field
+                    label="Email address"
+                    name="email"
+                    icon={Mail}
+                    control={control}
+                    placeholder="you@school.example"
+                    error={errors.email?.message}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    disabled={busy}
+                  />
+                  <PasswordField
+                    control={control}
+                    error={errors.password?.message}
+                    visible={passwordVisible}
+                    onToggle={() => setPasswordVisible((value) => !value)}
+                    disabled={busy}
+                  />
+                  <PrimaryAction
+                    title="Sign in"
+                    busy={busy}
+                    onPress={() => void submit()}
+                  />
+                  <View style={styles.helperRow}>
+                    <Text style={styles.helperText}>Forgot your password?</Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      hitSlop={8}
+                      onPress={showHelp}
+                    >
+                      <Text style={styles.helperLink}>Contact school</Text>
                     </Pressable>
                   </View>
-                  {errors.password?.message ? (
-                    <Text style={styles.fieldError}>
-                      {errors.password.message}
-                    </Text>
-                  ) : null}
-                </View>
-              </>
-            )}
-            {error ? (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{error}</Text>
+                </>
+              )}
+
+              <View style={styles.secureRow}>
+                <ShieldCheck size={13} color={colors.blue} strokeWidth={2.1} />
+                <Text style={styles.secureText}>
+                  Your school controls what information is shared with your
+                  account.
+                </Text>
               </View>
-            ) : null}
-            <PrimaryButton
-              title={challenge ? "Verify and continue" : "Login"}
-              onPress={challenge ? submitCode : () => void submit()}
-              busy={busy}
-              disabled={challenge ? code.length !== 6 : false}
-            />
-            {challenge ? (
-              <Pressable
-                onPress={() => {
-                  setChallenge(null);
-                  setCode("");
-                  setError("");
-                }}
-                style={styles.back}
-              >
-                <Text style={styles.link}>Back to sign in</Text>
-              </Pressable>
-            ) : null}
-          </Card>
-          <View style={styles.security}>
-            <ShieldCheck size={16} color={colors.blue} />
-            <Text style={styles.securityText}>
-              Your school controls what information is shared with your account.
-            </Text>
-          </View>
-          {!challenge ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() =>
-                Alert.alert(
-                  "Need help signing in?",
-                  "Contact your school administrator to reset your password or confirm your school workspace.",
-                )
-              }
-            >
-              <Text style={styles.forgot}>
-                Forgot password? Contact your school.
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-        <Text style={styles.footer}>
-          Don’t have an account? Contact your school.
-        </Text>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            </View>
+          </Animated.View>
+
+          <Text style={styles.footer}>
+            Don’t have an account? Contact your school.
+          </Text>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+function FloatingSchool() {
+  const drift = useSharedValue(0);
+  useEffect(() => {
+    drift.value = withRepeat(
+      withTiming(1, {
+        duration: 5000,
+        easing: Easing.inOut(Easing.quad),
+      }),
+      -1,
+      true,
+    );
+  }, [drift]);
+  const floatStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: drift.value * 6 }],
+  }));
+  return (
+    <Animated.View
+      entering={ZoomIn.delay(140).duration(450)}
+      style={styles.schoolWrap}
+    >
+      <Animated.View style={floatStyle}>
+        <Image
+          source={school3d}
+          resizeMode="contain"
+          style={styles.schoolImage}
+        />
+      </Animated.View>
+    </Animated.View>
   );
 }
 
 function Field({
   label,
   name,
+  icon: Icon,
   control,
   placeholder,
   error,
   autoCapitalize = "sentences",
   keyboardType = "default",
+  disabled = false,
 }: {
   label: string;
   name: "school" | "email";
+  icon: typeof Building2;
   control: Control<Credentials>;
   placeholder: string;
   error?: string;
   autoCapitalize?: "none" | "sentences";
   keyboardType?: "default" | "email-address";
+  disabled?: boolean;
 }) {
+  const [focused, setFocused] = useState(false);
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
-      <View style={styles.inputWrap}>
-        {name === "email" ? (
-          <Mail color={colors.muted} size={18} />
-        ) : (
-          <LockKeyhole color={colors.muted} size={18} />
-        )}
+      <View style={[styles.inputWrap, focused && styles.inputFocused]}>
+        <View style={[styles.inputIcon, focused && styles.inputIconFocused]}>
+          <Icon
+            size={16}
+            color={focused ? colors.blue : colors.muted}
+            strokeWidth={2.1}
+          />
+        </View>
         <Controller
           control={control}
           name={name}
@@ -275,13 +394,18 @@ function Field({
             <TextInput
               value={value}
               onChangeText={onChange}
-              onBlur={onBlur}
+              onBlur={() => {
+                setFocused(false);
+                onBlur();
+              }}
+              onFocus={() => setFocused(true)}
+              editable={!disabled}
               autoCapitalize={autoCapitalize}
-              keyboardType={keyboardType}
               autoCorrect={false}
+              keyboardType={keyboardType}
               placeholder={placeholder}
               placeholderTextColor={colors.mutedLight}
-              style={styles.input}
+              style={[styles.input, disabled && styles.inputDisabled]}
             />
           )}
         />
@@ -291,228 +415,404 @@ function Field({
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  page: {
-    flexGrow: 1,
-    paddingHorizontal: space.xl,
-    paddingTop: 62,
-    paddingBottom: 8,
-  },
-  top: {
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 3,
-  },
-  logo: { width: 138, height: 42 },
-  tagline: {
-    color: colors.ink,
-    textAlign: "center",
-    fontSize: 14,
-    fontWeight: "700",
-    marginTop: 5,
-  },
-  parentCaption: {
-    color: colors.muted,
-    textAlign: "center",
-    fontSize: 11,
-    lineHeight: 16,
-    maxWidth: 270,
-    marginTop: 2,
-  },
-  brandPill: {
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-  dot: {
-    width: 7,
-    height: 7,
-    backgroundColor: colors.cyan,
-    borderRadius: radius.pill,
-  },
-  brandText: {
-    fontSize: 10,
-    letterSpacing: 1,
-    fontWeight: "700",
-    color: colors.muted,
-  },
-  body: {
-    width: "100%",
-    maxWidth: 460,
-    alignSelf: "center",
-    marginTop: 15,
-    gap: 9,
-  },
-  eyebrow: {
-    color: colors.blue,
-    letterSpacing: 1.8,
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  title: {
-    color: colors.ink,
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: "800",
-    letterSpacing: -0.6,
-  },
-  subtitle: {
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 18,
-    marginBottom: 10,
-  },
-  form: { padding: 15, gap: 9 },
-  field: { gap: 4 },
-  label: { fontSize: 11, color: colors.ink, fontWeight: "700" },
-  inputWrap: {
-    minHeight: 43,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    backgroundColor: "#FBFCFE",
-    paddingHorizontal: 11,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  input: { flex: 1, color: colors.ink, fontSize: 13, paddingVertical: 9 },
-  fieldError: { fontSize: 12, color: colors.danger },
-  errorBox: {
-    padding: 12,
-    borderRadius: radius.sm,
-    backgroundColor: colors.dangerSoft,
-  },
-  errorText: { color: colors.danger, fontSize: 13, lineHeight: 19 },
-  back: { paddingVertical: 8, alignItems: "center" },
-  link: { color: colors.blue, fontSize: 14, fontWeight: "700" },
-  security: {
-    marginTop: 5,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  securityText: { flex: 1, fontSize: 10, lineHeight: 15, color: colors.muted },
-  forgot: {
-    textAlign: "center",
-    fontSize: 10,
-    color: colors.muted,
-    lineHeight: 15,
-  },
-  footer: {
-    marginTop: "auto",
-    textAlign: "center",
-    fontSize: 10,
-    color: colors.mutedLight,
-    paddingVertical: 9,
-  },
-});
-
-function SchoolIllustration() {
+function PasswordField({
+  control,
+  error,
+  visible,
+  onToggle,
+  disabled = false,
+}: {
+  control: Control<Credentials>;
+  error?: string;
+  visible: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
+}) {
+  const [focused, setFocused] = useState(false);
   return (
-    <View style={illustration.container} accessibilityElementsHidden>
-      <Svg width="100%" height="100%" viewBox="0 0 360 132">
-        <Circle cx="56" cy="36" r="17" fill="#DCEAFF" />
-        <Circle cx="76" cy="39" r="21" fill="#DCEAFF" />
-        <Circle cx="99" cy="37" r="16" fill="#DCEAFF" />
-        <Circle cx="269" cy="33" r="15" fill="#DCEAFF" />
-        <Circle cx="288" cy="36" r="20" fill="#DCEAFF" />
-        <Circle cx="309" cy="35" r="14" fill="#DCEAFF" />
-        <Rect x="45" y="87" width="7" height="33" rx="3" fill="#6F95E2" />
-        <Circle cx="49" cy="76" r="22" fill="#83A9EF" />
-        <Circle cx="40" cy="65" r="14" fill="#A6C4F8" />
-        <Circle cx="60" cy="65" r="14" fill="#A6C4F8" />
-        <Rect x="308" y="87" width="7" height="33" rx="3" fill="#6F95E2" />
-        <Circle cx="312" cy="76" r="22" fill="#83A9EF" />
-        <Circle cx="303" cy="65" r="14" fill="#A6C4F8" />
-        <Circle cx="323" cy="65" r="14" fill="#A6C4F8" />
-        <Rect
-          x="86"
-          y="57"
-          width="188"
-          height="73"
-          rx="3"
-          fill="#FFFFFF"
-          stroke="#BCD3FA"
-          strokeWidth="2"
+    <View style={styles.field}>
+      <Text style={styles.label}>Password</Text>
+      <View style={[styles.inputWrap, focused && styles.inputFocused]}>
+        <View style={[styles.inputIcon, focused && styles.inputIconFocused]}>
+          <LockKeyhole
+            size={16}
+            color={focused ? colors.blue : colors.muted}
+            strokeWidth={2.1}
+          />
+        </View>
+        <Controller
+          control={control}
+          name="password"
+          render={({ field: { onChange, onBlur, value } }) => (
+            <TextInput
+              value={value}
+              onChangeText={onChange}
+              onBlur={() => {
+                setFocused(false);
+                onBlur();
+              }}
+              onFocus={() => setFocused(true)}
+              editable={!disabled}
+              secureTextEntry={!visible}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="Your password"
+              placeholderTextColor={colors.mutedLight}
+              style={[styles.input, disabled && styles.inputDisabled]}
+            />
+          )}
         />
-        <Path d="M72 60 180 10l108 50H72Z" fill="#2563EB" />
-        <Rect x="158" y="35" width="44" height="38" rx="2" fill="#4E83F0" />
-        <Circle cx="180" cy="52" r="8" fill="#EAF2FF" />
-        <Path
-          d="M202 20v-14"
-          stroke="#164BB7"
-          strokeWidth="3"
-          strokeLinecap="round"
-        />
-        <Path d="M203 7h19l-7 6h-12Z" fill="#74A1F8" />
-        <Rect
-          x="101"
-          y="75"
-          width="24"
-          height="21"
-          rx="3"
-          fill="#D7E6FF"
-          stroke="#9DBCF5"
-        />
-        <Rect
-          x="135"
-          y="75"
-          width="24"
-          height="21"
-          rx="3"
-          fill="#D7E6FF"
-          stroke="#9DBCF5"
-        />
-        <Rect
-          x="201"
-          y="75"
-          width="24"
-          height="21"
-          rx="3"
-          fill="#D7E6FF"
-          stroke="#9DBCF5"
-        />
-        <Rect
-          x="235"
-          y="75"
-          width="24"
-          height="21"
-          rx="3"
-          fill="#D7E6FF"
-          stroke="#9DBCF5"
-        />
-        <Path
-          d="M113 75v21M147 75v21M213 75v21M247 75v21"
-          stroke="#A9C5F4"
-          strokeWidth="1"
-        />
-        <Rect x="164" y="94" width="32" height="36" rx="15" fill="#B8D0F8" />
-        <Path d="M86 129h188" stroke="#AFC9F5" strokeWidth="3" />
-      </Svg>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={visible ? "Hide password" : "Show password"}
+          hitSlop={8}
+          onPress={onToggle}
+          style={styles.eye}
+        >
+          {visible ? (
+            <EyeOff size={17} color={colors.muted} strokeWidth={2} />
+          ) : (
+            <Eye size={17} color={colors.muted} strokeWidth={2} />
+          )}
+        </Pressable>
+      </View>
+      {error ? <Text style={styles.fieldError}>{error}</Text> : null}
     </View>
   );
 }
 
-const illustration = StyleSheet.create({
-  container: {
-    height: 126,
-    width: "100%",
-    backgroundColor: "#EEF5FF",
-    borderRadius: 18,
+function ErrorBox({ message }: { message: string }) {
+  return (
+    <View style={styles.errorBox}>
+      <Text style={styles.errorText}>{message}</Text>
+    </View>
+  );
+}
+
+function PrimaryAction({
+  title,
+  busy,
+  onPress,
+  disabled,
+}: {
+  title: string;
+  busy: boolean;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <PressableScale
+      accessibilityLabel={title}
+      disabled={busy || disabled}
+      onPress={onPress}
+      style={[styles.primary, (busy || disabled) && styles.primaryDisabled]}
+    >
+      <LinearGradient
+        colors={["#155EEF", "#2D8CFF"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      {busy ? (
+        <>
+          <ActivityIndicator color="#FFFFFF" />
+          <Text style={styles.primaryText}>{title === "Sign in" ? "Signing in…" : "Checking…"}</Text>
+        </>
+      ) : (
+        <>
+          <Text style={styles.primaryText}>{title}</Text>
+          <ArrowRight size={17} color="#FFFFFF" strokeWidth={2.6} />
+        </>
+      )}
+    </PressableScale>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "#F4F8FD" },
+  page: {
+    flexGrow: 1,
+    paddingBottom: 30,
+  },
+  hero: {
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    paddingHorizontal: 18,
+    paddingBottom: 76,
     overflow: "hidden",
+  },
+  heroOrbLarge: {
+    position: "absolute",
+    width: 210,
+    height: 210,
+    borderRadius: 105,
+    top: -76,
+    right: -62,
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  heroOrbSmall: {
+    position: "absolute",
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    bottom: -48,
+    left: -32,
+    backgroundColor: "rgba(255,255,255,0.07)",
+  },
+  heroTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  logoCard: {
+    width: 140,
+    height: 49,
+    borderRadius: 13,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 9,
+    shadowColor: "#041D4A",
+    shadowOpacity: 0.16,
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  logo: { width: 124, height: 34 },
+  portalPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+  },
+  portalText: {
+    color: "#FFFFFF",
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+  heroBody: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 22,
+  },
+  heroCopy: { flex: 1, minWidth: 0 },
+  heroEyebrow: {
+    color: "rgba(255,255,255,0.58)",
+    fontSize: 8.5,
+    fontWeight: "800",
+    letterSpacing: 1.3,
+  },
+  heroTitle: {
+    color: "#FFFFFF",
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: "800",
+    letterSpacing: -1,
+    marginTop: 4,
+  },
+  heroText: {
+    color: "rgba(255,255,255,0.74)",
+    fontSize: 11.5,
+    lineHeight: 17,
+    marginTop: 5,
+    maxWidth: 220,
+  },
+  schoolWrap: {
+    width: 142,
+    height: 132,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  schoolImage: { width: 154, height: 136 },
+  formShell: {
+    marginTop: -48,
+    paddingHorizontal: 16,
+  },
+  formCard: {
+    borderRadius: 26,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E7EEF8",
+    padding: 18,
+    gap: 11,
+    shadowColor: "#0E356F",
+    shadowOpacity: 0.1,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 6,
+  },
+  formHeader: { gap: 2, marginBottom: 2 },
+  formEyebrow: {
+    color: colors.blue,
+    fontSize: 8.5,
+    fontWeight: "800",
+    letterSpacing: 1.2,
+  },
+  formTitle: {
+    color: colors.ink,
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: -0.55,
+    marginTop: 1,
+  },
+  formSubtitle: {
+    color: colors.muted,
+    fontSize: 10.5,
+    lineHeight: 15,
+    marginTop: 2,
+  },
+  field: { gap: 4 },
+  label: {
+    color: colors.ink,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  inputWrap: {
+    minHeight: 51,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E3EAF5",
+    backgroundColor: "#F8FBFF",
+  },
+  inputFocused: {
+    borderColor: colors.blue,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#155EEF",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  inputIcon: {
+    width: 29,
+    height: 29,
+    borderRadius: 9,
+    backgroundColor: "#EFF4FB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inputIconFocused: { backgroundColor: colors.blueSoft },
+  inputDisabled: { opacity: 0.6 },
+  input: {
+    flex: 1,
+    color: colors.ink,
+    fontSize: 12.5,
+    paddingVertical: 12,
+  },
+  eye: {
+    width: 30,
+    height: 38,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fieldError: {
+    color: colors.danger,
+    fontSize: 10,
+  },
+  codeWrap: {
+    minHeight: 58,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 13,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E3EAF5",
+    backgroundColor: "#F8FBFF",
+  },
+  codeInput: {
+    flex: 1,
+    color: colors.ink,
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: 8,
+    textAlign: "center",
+    paddingVertical: 10,
+  },
+  errorBox: {
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    borderRadius: 11,
+    backgroundColor: colors.dangerSoft,
+  },
+  errorText: {
+    color: colors.danger,
+    fontSize: 10.5,
+    lineHeight: 15,
+    fontWeight: "500",
+  },
+  primary: {
+    minHeight: 53,
+    borderRadius: 15,
+    overflow: "hidden",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 3,
+  },
+  primaryDisabled: { opacity: 0.55 },
+  primaryText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  helperRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    marginTop: 1,
+  },
+  helperText: {
+    color: colors.muted,
+    fontSize: 9.5,
+  },
+  helperLink: {
+    color: colors.blue,
+    fontSize: 9.5,
+    fontWeight: "800",
+  },
+  backLink: {
+    alignSelf: "center",
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+  },
+  backLinkText: {
+    color: colors.blue,
+    fontSize: 11.5,
+    fontWeight: "800",
+  },
+  secureRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 7,
+    marginTop: 2,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F0F4FA",
+  },
+  secureText: {
+    flex: 1,
+    color: colors.muted,
+    fontSize: 8.5,
+    lineHeight: 12.5,
+  },
+  footer: {
+    textAlign: "center",
+    color: colors.mutedLight,
+    fontSize: 9.5,
+    paddingTop: 16,
+    paddingHorizontal: 24,
   },
 });
