@@ -1,5 +1,6 @@
 import { Redirect, Stack, useRouter } from "expo-router";
 import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import * as Notifications from "expo-notifications";
 import { useAuth } from "../../src/services/auth";
 import { colors } from "../../src/theme/tokens";
@@ -8,9 +9,11 @@ import { registerPushToken } from "../../src/services/pushNotifications";
 import { OfflineBanner } from "../../src/components/ui";
 import { ParentAppTour } from "../../src/components/ParentAppTour";
 import { notificationRoute } from "../../src/lib/notificationRoutes";
+import { api } from "../../src/api/client";
 export default function ParentLayout() {
   const { parent, loading } = useAuth();
   const router = useRouter();
+  const queryClient = useQueryClient();
   useEffect(() => {
     if (!parent) return;
     void registerPushToken().catch(() => undefined);
@@ -24,6 +27,37 @@ export default function ParentLayout() {
     );
     return () => subscription.remove();
   }, [parent, router]);
+  useEffect(() => {
+    if (!parent) return;
+    let active = true;
+    let socket: WebSocket | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
+    const connect = async () => {
+      try {
+        const { data } = await api.post<{ ticket: string }>("/realtime/ticket");
+        if (!active) return;
+        const apiUrl = new URL(api.defaults.baseURL ?? "http://localhost:8001/api/v1");
+        apiUrl.protocol = apiUrl.protocol === "https:" ? "wss:" : "ws:";
+        apiUrl.pathname = `${apiUrl.pathname.replace(/\/$/, "")}/realtime/ws`;
+        apiUrl.search = new URLSearchParams({ ticket: data.ticket }).toString();
+        socket = new WebSocket(apiUrl.toString());
+        socket.onopen = () => { attempt = 0; };
+        socket.onmessage = () => {
+          void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+          void queryClient.invalidateQueries({ queryKey: ["family-requests"] });
+          void queryClient.invalidateQueries({ queryKey: ["announcements"] });
+        };
+        socket.onclose = () => {
+          if (active) timer = setTimeout(() => { void connect(); }, Math.min(1000 * 2 ** attempt++, 30_000));
+        };
+      } catch {
+        if (active) timer = setTimeout(() => { void connect(); }, Math.min(1000 * 2 ** attempt++, 30_000));
+      }
+    };
+    void connect();
+    return () => { active = false; if (timer) clearTimeout(timer); socket?.close(); };
+  }, [parent, queryClient]);
   if (loading) return null;
   if (!parent || parent.role !== "parent")
     return <Redirect href="/(auth)/login" />;
