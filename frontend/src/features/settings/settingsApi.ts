@@ -1,6 +1,15 @@
 import { apiRequest } from '../../shared/api/client'
 
 export type TotpSetup = { secret: string; otpauth_uri: string; qr_svg: string }
+export type SchoolContact = { phone: string | null }
+
+export function fetchSchoolContact(token: string) {
+  return apiRequest<SchoolContact>('/mobile/school-contact', {}, token)
+}
+
+export function updateSchoolContact(token: string, phone: string | null) {
+  return apiRequest<SchoolContact>('/mobile/school-contact', { method: 'PUT', body: JSON.stringify({ phone }) }, token)
+}
 
 export function fetchTotpStatus(token: string) {
   return apiRequest<{ enabled: boolean }>('/auth/totp/status', {}, token)

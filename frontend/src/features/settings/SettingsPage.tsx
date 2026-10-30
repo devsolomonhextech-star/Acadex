@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, Button, Input, Skeleton, Switch, Tabs, message } from 'antd'
 import { AppstoreOutlined, BellOutlined, BookOutlined, CheckCircleFilled, CreditCardOutlined, LockOutlined, SafetyCertificateOutlined, SettingOutlined, TeamOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -6,7 +6,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/authHooks'
 import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 import { formatApiError } from '../../shared/api/errors'
-import { beginTotpSetup, disableTotp, enableTotp, fetchTotpStatus, type TotpSetup } from './settingsApi'
+import { beginTotpSetup, disableTotp, enableTotp, fetchSchoolContact, fetchTotpStatus, updateSchoolContact, type TotpSetup } from './settingsApi'
 import SubscriptionSettings from './SubscriptionSettings'
 
 type SettingsTab = 'school' | 'users' | 'academic' | 'notifications' | 'billing' | 'system'
@@ -22,13 +22,17 @@ export default function SettingsPage() {
   const [enrollmentCode, setEnrollmentCode] = useState('')
   const [disableCode, setDisableCode] = useState('')
   const [disablePrompt, setDisablePrompt] = useState(false)
+  const [schoolPhone, setSchoolPhone] = useState('')
   const [toast, contextHolder] = message.useMessage()
   const client = useQueryClient()
   const status = useQuery({ queryKey: ['totp-status', user?.user_id], queryFn: () => fetchTotpStatus(accessToken!), enabled: Boolean(accessToken && user?.role === 'school_admin') })
+  const contact = useQuery({ queryKey: ['school-contact'], queryFn: () => fetchSchoolContact(accessToken!), enabled: Boolean(accessToken && user?.role === 'school_admin') })
+  useEffect(() => { if (contact.data) setSchoolPhone(contact.data.phone ?? '') }, [contact.data])
   const refreshStatus = () => client.invalidateQueries({ queryKey: ['totp-status', user?.user_id] })
   const setupMutation = useMutation({ mutationFn: () => beginTotpSetup(accessToken!), onSuccess: value => { setSetup(value); setEnrollmentCode('') }, onError: error => toast.error(formatApiError(error)) })
   const enableMutation = useMutation({ mutationFn: () => enableTotp(accessToken!, enrollmentCode), onSuccess: async () => { setSetup(null); setEnrollmentCode(''); await refreshStatus(); toast.success('Two-factor authentication is enabled') }, onError: error => toast.error(formatApiError(error)) })
   const disableMutation = useMutation({ mutationFn: () => disableTotp(accessToken!, disableCode), onSuccess: async () => { setDisablePrompt(false); setDisableCode(''); await refreshStatus(); toast.success('Two-factor authentication is disabled') }, onError: error => toast.error(formatApiError(error)) })
+  const saveContact = useMutation({ mutationFn: () => updateSchoolContact(accessToken!, schoolPhone.trim() || null), onSuccess: async () => { await client.invalidateQueries({ queryKey: ['school-contact'] }); toast.success('Parent app contact number saved') }, onError: error => toast.error(formatApiError(error)) })
 
   const tabs = [
     { key: 'school', label: <span className="settings-tab-label"><AppstoreOutlined/>School profile</span> },
@@ -57,7 +61,7 @@ export default function SettingsPage() {
         hours: { title: 'School hours', description: 'School-wide operating hours have not been configured yet.', rows: [['School days', 'Not configured'], ['Opening time', 'Not configured'], ['Closing time', 'Not configured']] },
       }
       const detail = profileDetails[profileSection]
-      return <section className="settings-panel settings-profile-layout"><nav className="settings-profile-nav" aria-label="School profile sections">{sections.map(section => <button type="button" key={section.key} className={profileSection === section.key ? 'active' : ''} onClick={() => setProfileSection(section.key)}>{section.label}</button>)}</nav><div className="settings-profile-detail"><div className="settings-section-title"><div><h2>{detail.title}</h2><p>{detail.description}</p></div></div><div className="settings-form-grid">{detail.rows.map(([label, value]) => <label key={label}><span>{label}</span><Input value={value} readOnly aria-label={label}/></label>)}</div><Alert type="info" showIcon message="These school profile fields are read-only in this version."/></div></section>
+      return <section className="settings-panel settings-profile-layout"><nav className="settings-profile-nav" aria-label="School profile sections">{sections.map(section => <button type="button" key={section.key} className={profileSection === section.key ? 'active' : ''} onClick={() => setProfileSection(section.key)}>{section.label}</button>)}</nav><div className="settings-profile-detail"><div className="settings-section-title"><div><h2>{detail.title}</h2><p>{detail.description}</p></div></div>{profileSection === 'contact' && user?.role === 'school_admin' ? <><div className="settings-form-grid">{detail.rows.slice(0, 2).map(([label, value]) => <label key={label}><span>{label}</span><Input value={value} readOnly aria-label={label}/></label>)}<label><span>Parent app call number</span><Input value={schoolPhone} onChange={event => setSchoolPhone(event.target.value)} placeholder="e.g. +233 20 123 4567" aria-label="Parent app call number" maxLength={32}/></label>{detail.rows.slice(3).map(([label, value]) => <label key={label}><span>{label}</span><Input value={value} readOnly aria-label={label}/></label>)}</div><Alert type="info" showIcon message="Parents can tap “Need to speak to someone?” in Parent Desk to call this number."/><Button type="primary" loading={saveContact.isPending} disabled={contact.isLoading} onClick={() => saveContact.mutate()}>Save contact number</Button></> : <><div className="settings-form-grid">{detail.rows.map(([label, value]) => <label key={label}><span>{label}</span><Input value={value} readOnly aria-label={label}/></label>)}</div><Alert type="info" showIcon message="These school profile fields are read-only in this version."/></>}</div></section>
     }
     if (activeTab === 'academic') return <section className="settings-panel settings-profile-panel"><div className="settings-section-title"><span className="settings-icon blue"><BookOutlined/></span><div><h2>Academic settings</h2><p>Review the academic period currently selected in your workspace.</p></div></div><div className="settings-info-grid"><div><small>Academic year</small><strong>{year?.name ?? 'No academic year selected'}</strong></div><div><small>Year dates</small><strong>{year ? `${year.starts_on} – ${year.ends_on}` : '—'}</strong></div><div><small>Current term</small><strong>{term?.name ?? 'All terms'}</strong></div><div><small>Term dates</small><strong>{term ? `${term.starts_on} – ${term.ends_on}` : '—'}</strong></div></div><Alert type="info" showIcon message="Change the academic period from the top bar to view the matching school data."/></section>
     if (activeTab === 'users') return <section className="settings-panel settings-profile-panel"><div className="settings-section-title"><span className="settings-icon blue"><TeamOutlined/></span><div><h2>Users & roles</h2><p>School access is organized by role.</p></div></div><div className="settings-role-grid">{[['School administrator','Manage school setup, staff access, and security.'],['Principal','Oversee academics and school operations.'],['Registrar','Manage student records and academic structure.'],['Teacher','Work with assigned classes, attendance, and results.'],['Finance','Manage fees, payments, and financial reports.']].map(([name,description]) => <article key={name}><strong>{name}</strong><span>{description}</span></article>)}</div></section>

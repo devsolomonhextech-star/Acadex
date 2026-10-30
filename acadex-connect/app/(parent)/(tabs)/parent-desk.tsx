@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -60,6 +61,11 @@ export default function ParentDeskScreen() {
     queryKey: ["family-requests"],
     queryFn: ({ signal }) => familyApi.requests(signal),
   });
+  const schoolContactQuery = useQuery({
+    queryKey: ["school-contact"],
+    queryFn: ({ signal }) => familyApi.schoolContact(signal),
+  });
+  const schoolPhone = schoolContactQuery.data?.phone;
   const requests = requestsQuery.data?.items ?? [];
   const unreadCount = requestsQuery.data?.counts.unread ?? 0;
 
@@ -100,11 +106,14 @@ export default function ParentDeskScreen() {
   }) => createRequest.mutate(input);
 
   const showHelp = () => {
-    Alert.alert(
-      "Contact your school",
-      `Reach ${schoolName} directly for urgent or sensitive matters. Parent Desk is best for non-urgent follow-ups and requests.`,
-      [{ text: "Got it" }],
-    );
+    if (!schoolPhone) {
+      Alert.alert("Phone number unavailable", `${schoolName} has not added a call number yet. You can still contact the school through Parent Desk.`);
+      return;
+    }
+    const dialable = schoolPhone.replace(/[^+\d]/g, "");
+    void Linking.openURL(`tel:${dialable}`).catch(() => {
+      Alert.alert("Could not open phone", "Please try calling the school office from your phone.");
+    });
   };
 
   const openThread = (requestId: string) => setThreadId(requestId);
@@ -347,7 +356,7 @@ export default function ParentDeskScreen() {
             <View style={styles.contactCopy}>
               <Text style={styles.contactTitle}>Need to speak to someone?</Text>
               <Text style={styles.contactBody}>
-                Contact your school office directly for urgent matters.
+                {schoolPhone ? `Call ${schoolPhone} for urgent matters.` : "Call the school office for urgent matters."}
               </Text>
             </View>
             <ChevronRight size={17} color={colors.blue} strokeWidth={2.2} />

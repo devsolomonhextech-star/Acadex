@@ -22,6 +22,8 @@ export type WeeklySummary = {
 };
 
 export const familyApi = {
+  schoolContact: async (signal?: AbortSignal) =>
+    (await api.get<{ phone: string | null }>("/mobile/school-contact", { signal })).data,
   children: async (signal?: AbortSignal) =>
     (await api.get<Child[]>("/family/children", { signal })).data,
   reports: async (studentId: string, signal?: AbortSignal) =>

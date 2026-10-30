@@ -53,6 +53,7 @@ class School(Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     slug: Mapped[str] = mapped_column(String(80), nullable=False)
+    contact_phone: Mapped[str | None] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
     trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

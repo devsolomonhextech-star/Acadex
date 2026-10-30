@@ -25,6 +25,7 @@ import {
 import { communicationsApi } from "../../../src/features/communicationsApi";
 import { familyApi } from "../../../src/features/familyApi";
 import { notificationRoute } from "../../../src/lib/notificationRoutes";
+import { formatRelativeTime } from "../../../src/lib/formatRelativeTime";
 import type { Notification } from "../../../src/types/models";
 import { colors, radius } from "../../../src/theme/tokens";
 
@@ -134,7 +135,7 @@ export default function NotificationsScreen() {
                 </Pressable>
               ) : null}
               <Text style={styles.date}>
-                {new Date(item.created_at).toLocaleString()}
+                {formatRelativeTime(item.created_at)}
               </Text>
             </View>
             {!item.read_at ? (
