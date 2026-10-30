@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useRouter } from "expo-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import {
   BadgeCheck,
@@ -17,7 +18,7 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react-native";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import Animated, {
   FadeInDown,
   FadeInUp,
@@ -39,6 +40,8 @@ import {
 import { useAuth } from "../../../src/services/auth";
 import { useChildren } from "../../../src/services/parentData";
 import { colors } from "../../../src/theme/tokens";
+import { accountApi, type ParentNotificationPreferences } from "../../../src/features/accountApi";
+import { apiErrorMessage } from "../../../src/api/client";
 
 const PAGE = "#F4F8FD";
 
@@ -46,12 +49,46 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { parent, signOut } = useAuth();
+  const queryClient = useQueryClient();
   const { children, isLoading: childrenLoading } = useChildren();
   const [defaultMethod, setDefaultMethod] = useState<PaymentMethodId | null>(
     "mtn",
   );
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetSelection, setSheetSelection] = useState<PaymentMethodId>("mtn");
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const preferencesQuery = useQuery({
+    queryKey: ["notification-preferences"],
+    queryFn: ({ signal }) => accountApi.notificationPreferences(signal),
+  });
+  const preferencesMutation = useMutation({
+    mutationFn: accountApi.saveNotificationPreferences,
+    onSuccess: (preferences) => queryClient.setQueryData(["notification-preferences"], preferences),
+    onError: (error) => {
+      void queryClient.invalidateQueries({ queryKey: ["notification-preferences"] });
+      Alert.alert("Could not save preferences", error instanceof Error ? error.message : "Please try again.");
+    },
+  });
+  const passwordMutation = useMutation({
+    mutationFn: () => accountApi.changePassword(currentPassword, newPassword),
+    onSuccess: () => {
+      setPasswordOpen(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      Alert.alert("Password updated", "For your security, sign in again with your new password.", [
+        { text: "Sign in", onPress: () => void signOut() },
+      ]);
+    },
+    onError: (error) => Alert.alert("Could not change password", apiErrorMessage(error)),
+  });
+  const preferences: ParentNotificationPreferences = preferencesQuery.data ?? {
+    attendance: true, announcements: true, parent_desk: true,
+  };
 
   const displayName = parent?.display_name ?? "Parent";
   const email = parent?.email ?? "Not available";
@@ -104,9 +141,15 @@ export default function ProfileScreen() {
   }[] = [
     {
       title: "Notifications",
-      subtitle: "School updates and reminders",
+      subtitle: "Choose which school alerts you receive",
       icon: Bell,
-      action: () => router.push("/(parent)/(tabs)/notifications"),
+      action: () => setNotificationsOpen(true),
+    },
+    {
+      title: "Change password",
+      subtitle: "Update your account sign-in password",
+      icon: LockKeyhole,
+      action: () => setPasswordOpen(true),
     },
     {
       title: "Privacy & security",
@@ -477,6 +520,53 @@ export default function ProfileScreen() {
           onSave={savePaymentMethod}
         />
       ) : null}
+      <Modal visible={notificationsOpen} transparent animationType="fade" onRequestClose={() => setNotificationsOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setNotificationsOpen(false)} accessibilityLabel="Close notification preferences" />
+          <View style={styles.dialog}>
+            <View style={styles.dialogTop}><View style={styles.dialogIcon}><Bell size={18} color={colors.blue}/></View><Pressable onPress={() => setNotificationsOpen(false)}><Text style={styles.dialogClose}>×</Text></Pressable></View>
+            <Text style={styles.dialogTitle}>Notification preferences</Text>
+            <Text style={styles.dialogDescription}>Choose the school updates you want to receive.</Text>
+            {preferencesQuery.isLoading ? <ActivityIndicator color={colors.blue} style={{ marginVertical: 20 }} /> : (
+              <View style={styles.toggleList}>
+                {([
+                  ["attendance", "Attendance alerts", "Absence and attendance updates"],
+                  ["announcements", "School announcements", "News, events and school notices"],
+                  ["parent_desk", "Parent Desk replies", "Replies to your requests and messages"],
+                ] as const).map(([key, title, description], index) => (
+                  <View key={key} style={[styles.toggleRow, index ? styles.toggleBorder : null]}>
+                    <View style={styles.toggleCopy}><Text style={styles.toggleTitle}>{title}</Text><Text style={styles.toggleDescription}>{description}</Text></View>
+                    <Switch value={preferences[key]} disabled={preferencesMutation.isPending || preferencesQuery.isError} trackColor={{ false: "#D8E1EF", true: colors.blue }} onValueChange={(value) => preferencesMutation.mutate({ ...preferences, [key]: value })} />
+                  </View>
+                ))}
+              </View>
+            )}
+            {preferencesQuery.isError ? <Text style={styles.dialogError}>Notification settings are unavailable right now. Please try again later.</Text> : null}
+            <Pressable style={styles.dialogDone} onPress={() => setNotificationsOpen(false)}><Text style={styles.dialogDoneText}>Done</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={passwordOpen} transparent animationType="fade" onRequestClose={() => setPasswordOpen(false)}>
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setPasswordOpen(false)} accessibilityLabel="Close change password" />
+          <View style={styles.dialog}>
+            <View style={styles.dialogTop}><View style={styles.dialogIcon}><LockKeyhole size={18} color={colors.blue}/></View><Pressable onPress={() => setPasswordOpen(false)}><Text style={styles.dialogClose}>×</Text></Pressable></View>
+            <Text style={styles.dialogTitle}>Change password</Text>
+            <Text style={styles.dialogDescription}>Choose a strong password to keep your parent account secure.</Text>
+            <View style={styles.passwordFields}>
+              <TextInput value={currentPassword} onChangeText={setCurrentPassword} placeholder="Current password" placeholderTextColor={colors.mutedLight} secureTextEntry autoComplete="current-password" style={styles.passwordInput}/>
+              <TextInput value={newPassword} onChangeText={setNewPassword} placeholder="New password (12 characters minimum)" placeholderTextColor={colors.mutedLight} secureTextEntry autoComplete="new-password" style={styles.passwordInput}/>
+              <TextInput value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Confirm new password" placeholderTextColor={colors.mutedLight} secureTextEntry autoComplete="new-password" style={styles.passwordInput}/>
+            </View>
+            <Text style={styles.passwordHint}>Use at least 12 characters. You’ll need to sign in again after changing it.</Text>
+            {confirmPassword.length > 0 && newPassword !== confirmPassword ? <Text style={styles.passwordMismatch}>The passwords don’t match yet.</Text> : null}
+            <Pressable disabled={passwordMutation.isPending || !currentPassword || newPassword.length < 12 || newPassword !== confirmPassword} style={[styles.dialogDone, (passwordMutation.isPending || !currentPassword || newPassword.length < 12 || newPassword !== confirmPassword) && styles.dialogDisabled]} onPress={() => passwordMutation.mutate()}>
+              {passwordMutation.isPending ? <ActivityIndicator color="#fff"/> : <Text style={styles.dialogDoneText}>Update password</Text>}
+            </Pressable>
+            <Pressable style={styles.dialogCancel} onPress={() => setPasswordOpen(false)}><Text style={styles.dialogCancelText}>Cancel</Text></Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -951,6 +1041,46 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     marginLeft: 47,
   },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: "center",
+    padding: 20,
+    backgroundColor: "rgba(7, 22, 48, 0.48)",
+  },
+  dialog: {
+    width: "100%",
+    maxWidth: 440,
+    alignSelf: "center",
+    padding: 20,
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#0B2454",
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 10,
+  },
+  dialogTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
+  dialogIcon: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: colors.blueSoft },
+  dialogClose: { color: colors.muted, fontSize: 29, lineHeight: 31, paddingHorizontal: 4 },
+  dialogTitle: { color: colors.ink, fontSize: 20, fontWeight: "800", letterSpacing: -0.35 },
+  dialogDescription: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 5, marginBottom: 16 },
+  toggleList: { borderRadius: 16, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 13 },
+  toggleRow: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 },
+  toggleBorder: { borderTopWidth: 1, borderTopColor: colors.border },
+  toggleCopy: { flex: 1, gap: 3 },
+  toggleTitle: { color: colors.ink, fontSize: 12.5, fontWeight: "700" },
+  toggleDescription: { color: colors.muted, fontSize: 10, lineHeight: 14 },
+  dialogError: { color: colors.danger, fontSize: 11, lineHeight: 16, marginTop: 12 },
+  dialogDone: { minHeight: 46, alignItems: "center", justifyContent: "center", borderRadius: 14, marginTop: 16, backgroundColor: colors.blue },
+  dialogDoneText: { color: "#FFFFFF", fontSize: 13, fontWeight: "800" },
+  dialogDisabled: { opacity: 0.48 },
+  dialogCancel: { minHeight: 40, alignItems: "center", justifyContent: "center", marginTop: 4 },
+  dialogCancelText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
+  passwordFields: { gap: 10, marginTop: 2 },
+  passwordInput: { minHeight: 48, paddingHorizontal: 13, borderRadius: 13, borderWidth: 1, borderColor: colors.border, color: colors.ink, fontSize: 12 },
+  passwordHint: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 11 },
+  passwordMismatch: { color: colors.danger, fontSize: 10, marginTop: 6 },
   logoutCard: {
     flexDirection: "row",
     alignItems: "center",

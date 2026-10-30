@@ -3,12 +3,13 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import TenantContext, require_roles
 from app.db import get_session
-from app.models import MembershipRole, MobilePushDevice, School
+from app.models import AuditEvent, MembershipRole, MobilePushDevice, RefreshSession, School, User, utcnow
+from app.security import hash_password, verify_password
 
 router = APIRouter(prefix="/api/v1/mobile", tags=["mobile app"])
 
@@ -24,6 +25,71 @@ class SchoolContactRequest(BaseModel):
 
 class SchoolContactResponse(BaseModel):
     phone: str | None
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=12, max_length=128)
+
+
+class ParentNotificationPreferences(BaseModel):
+    attendance: bool = True
+    announcements: bool = True
+    parent_desk: bool = True
+
+
+DEFAULT_NOTIFICATION_PREFERENCES = {
+    "attendance": True,
+    "announcements": True,
+    "parent_desk": True,
+}
+
+
+@router.get("/notification-preferences", response_model=ParentNotificationPreferences)
+async def get_notification_preferences(
+    context: Annotated[TenantContext, Depends(require_roles(MembershipRole.PARENT))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ParentNotificationPreferences:
+    user = await session.get(User, context.user_id)
+    stored = user.notification_preferences if user and user.notification_preferences else {}
+    return ParentNotificationPreferences(**{**DEFAULT_NOTIFICATION_PREFERENCES, **stored})
+
+
+@router.put("/notification-preferences", response_model=ParentNotificationPreferences)
+async def save_notification_preferences(
+    payload: ParentNotificationPreferences,
+    context: Annotated[TenantContext, Depends(require_roles(MembershipRole.PARENT))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> ParentNotificationPreferences:
+    user = await session.get(User, context.user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Parent account not found")
+    user.notification_preferences = payload.model_dump()
+    await session.commit()
+    return payload
+
+
+@router.post("/password/change", status_code=204)
+async def change_parent_password(
+    payload: PasswordChangeRequest,
+    context: Annotated[TenantContext, Depends(require_roles(MembershipRole.PARENT))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    user = await session.get(User, context.user_id, with_for_update=True)
+    if user is None or not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Your current password is incorrect")
+    if verify_password(payload.new_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Choose a password you have not used before")
+    user.password_hash = hash_password(payload.new_password)
+    now = utcnow()
+    await session.execute(update(RefreshSession).where(
+        RefreshSession.user_id == user.id, RefreshSession.revoked_at.is_(None),
+    ).values(revoked_at=now))
+    session.add(AuditEvent(
+        school_id=context.school_id, actor_user_id=user.id,
+        action="auth.password_changed", resource_type="user", resource_id=user.id,
+    ))
+    await session.commit()
 
 
 @router.get("/school-contact", response_model=SchoolContactResponse)

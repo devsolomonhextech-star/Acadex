@@ -255,7 +255,7 @@ async def reply_to_request(
         await publish_user_event(http_request, context.school_id, recipient)
     background.add_task(
         send_expo_push, context.school_id, recipients, title, body,
-        {"link": f"/parents?request={summary.request.id}"},
+        {"link": f"/parents?request={summary.request.id}", "preference_key": "parent_desk"},
     )
     return await _detail_response(session, summary)
 
@@ -296,7 +296,7 @@ async def update_request_status(
             await publish_user_event(http_request, context.school_id, recipient)
         background.add_task(
         send_expo_push, context.school_id, recipients, title, body,
-        {"link": f"/parents?request={request.id}"},
+        {"link": f"/parents?request={request.id}", "preference_key": "parent_desk"},
     )
     return await _detail_response(session, summary)
 

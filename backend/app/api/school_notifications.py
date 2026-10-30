@@ -132,6 +132,6 @@ async def send_notification(
         notice.recipients,
         notice.campaign.title,
         _push_body(payload.body),
-        {"link": "/notifications"},
+        {"link": "/notifications", "preference_key": "announcements"},
     )
     return _response(notice)

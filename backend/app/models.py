@@ -114,6 +114,7 @@ class User(Base):
     totp_last_counter: Mapped[int | None] = mapped_column(BigInteger)
     totp_setup_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notification_preferences: Mapped[dict | None] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     memberships: Mapped[list["SchoolMembership"]] = relationship(back_populates="user")

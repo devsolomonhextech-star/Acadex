@@ -15,7 +15,7 @@ from uuid import UUID
 from sqlalchemy import delete, select
 
 from app.db import session_factory
-from app.models import MobilePushDevice
+from app.models import MobilePushDevice, SchoolMembership, User
 
 logger = logging.getLogger(__name__)
 
@@ -85,16 +85,26 @@ async def _send(
     if not recipients:
         return 0
     async with session_factory() as session:
-        tokens = list(
-            (
-                await session.scalars(
-                    select(MobilePushDevice.push_token).where(
-                        MobilePushDevice.school_id == school_id,
-                        MobilePushDevice.user_id.in_(recipients),
-                    )
-                )
-            ).all()
-        )
+        category = (data or {}).get("preference_key")
+        token_rows = (await session.execute(
+            select(MobilePushDevice.push_token, User.notification_preferences)
+            .join(User, User.id == MobilePushDevice.user_id)
+            .join(SchoolMembership, SchoolMembership.user_id == User.id)
+            .where(
+                MobilePushDevice.school_id == school_id,
+                MobilePushDevice.user_id.in_(recipients),
+                SchoolMembership.school_id == school_id,
+                SchoolMembership.status == "active",
+            )
+        )).all()
+        tokens = [
+            token for token, preferences in token_rows
+            if not (
+                category
+                and preferences
+                and not preferences.get(category, True)
+            )
+        ]
     if not tokens:
         return 0
     payload = [{"to": token, "title": title, "body": body, "sound": "default", "data": data or {}} for token in tokens]

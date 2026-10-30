@@ -220,5 +220,5 @@ async def save_sheet(
         message = f"{', '.join(names)} {'were' if len(names) > 1 else 'was'} marked absent on {payload.attendance_date.isoformat()}."
         await publish_user_event(request, context.school_id, user_id)
         background.add_task(send_expo_push, context.school_id, [user_id], "Attendance update", message,
-                            {"link": "/notifications"})
+                            {"link": "/notifications", "preference_key": "attendance"})
     return await get_sheet(payload.class_group_id, payload.attendance_date, context, session)
