@@ -5,17 +5,19 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import TenantContext, require_roles
+from app.api.auth import TenantContext, _front_link, _make_action_token, require_roles
 from app.db import get_session
+from app.email import send_email
 from app.models import AuditEvent, ClassSubjectAssignment, MembershipRole, School, SchoolInvitation, SchoolMembership, User
 from app.rate_limit import limit_signup
 from app.security import hash_password
+from app.settings import get_settings
 
 router = APIRouter(prefix="/api/v1/staff", tags=["staff"])
 
@@ -35,7 +37,7 @@ class TeacherInvitationResponse(BaseModel):
     email: str
     role: str
     expires_at: datetime
-    invite_token: str
+    email_queued: bool
 
 
 class InvitationAccept(BaseModel):
@@ -54,6 +56,7 @@ class InvitationAccepted(BaseModel):
 @router.post("/invitations/teachers", response_model=TeacherInvitationResponse, status_code=status.HTTP_201_CREATED)
 async def invite_teacher(
     payload: TeacherInvitationCreate,
+    background: BackgroundTasks,
     context: Annotated[TenantContext, Depends(require_roles(MembershipRole.SCHOOL_ADMIN))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ):
@@ -82,18 +85,24 @@ async def invite_teacher(
     )
     session.add(invitation)
     session.add(AuditEvent(school_id=context.school_id, actor_user_id=context.user_id,
-                           action="staff.teacher_invited", resource_type="school_invitation", resource_id=invitation.id))
+                           action="staff.teacher_invited", resource_type="school_invitation", resource_id=invitation.id,
+                           details={"email": invitation.email, "delivery": "queued"}))
     try:
         await session.commit()
     except IntegrityError:
         await session.rollback()
         raise HTTPException(status_code=409, detail="Could not create this invitation") from None
-    return TeacherInvitationResponse(id=invitation.id, email=invitation.email, role="teacher", expires_at=expires, invite_token=raw_token)
+    school = await session.get(School, context.school_id)
+    link = f"{get_settings().frontend_url.rstrip('/')}/accept-invitation?token={raw_token}"
+    background.add_task(send_email, invitation.email, f"You’re invited to {school.name} on Acadex",
+        f"Hello {invitation.display_name},\n\nYou have been invited to join {school.name} as a teacher. Accept your invitation here:\n{link}\n\nThis link expires in seven days.")
+    return TeacherInvitationResponse(id=invitation.id, email=invitation.email, role="teacher", expires_at=expires, email_queued=True)
 
 
 @router.post("/invitations/support-staff", response_model=TeacherInvitationResponse, status_code=status.HTTP_201_CREATED)
 async def invite_support_staff(
     payload: TeacherInvitationCreate,
+    background: BackgroundTasks,
     context: Annotated[TenantContext, Depends(require_roles(MembershipRole.SCHOOL_ADMIN, MembershipRole.PRINCIPAL))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ):
@@ -121,13 +130,18 @@ async def invite_support_staff(
     )
     session.add(invitation)
     session.add(AuditEvent(school_id=context.school_id, actor_user_id=context.user_id,
-                           action="staff.support_staff_invited", resource_type="school_invitation", resource_id=invitation.id))
+                           action="staff.support_staff_invited", resource_type="school_invitation", resource_id=invitation.id,
+                           details={"email": invitation.email, "delivery": "queued"}))
     try:
         await session.commit()
     except IntegrityError:
         await session.rollback()
         raise HTTPException(status_code=409, detail="Could not create this invitation") from None
-    return TeacherInvitationResponse(id=invitation.id, email=invitation.email, role="staff", expires_at=expires, invite_token=raw_token)
+    school = await session.get(School, context.school_id)
+    link = f"{get_settings().frontend_url.rstrip('/')}/accept-invitation?token={raw_token}"
+    background.add_task(send_email, invitation.email, f"You’re invited to {school.name} on Acadex",
+        f"Hello {invitation.display_name},\n\nYou have been invited to join {school.name} as support staff. Accept your invitation here:\n{link}\n\nThis link expires in seven days.")
+    return TeacherInvitationResponse(id=invitation.id, email=invitation.email, role="staff", expires_at=expires, email_queued=True)
 
 
 @router.post("/invitations/accept", response_model=InvitationAccepted, dependencies=[Depends(limit_signup)])
@@ -149,6 +163,7 @@ async def accept_invitation(payload: InvitationAccept, session: Annotated[AsyncS
         user = User(email=invitation.email, display_name=invitation.display_name, password_hash=hash_password(payload.password))
         session.add(user)
         await session.flush()
+    user.email_verified_at = user.email_verified_at or now
     member = await session.scalar(select(SchoolMembership.id).where(
         SchoolMembership.school_id == invitation.school_id, SchoolMembership.user_id == user.id,
     ))
@@ -161,15 +176,29 @@ async def accept_invitation(payload: InvitationAccept, session: Annotated[AsyncS
     session.add(membership)
     invitation.status = "accepted"
     invitation.accepted_at = now
-    joined_action = "staff.support_staff_joined" if invitation.role == MembershipRole.STAFF else "staff.teacher_joined"
+    joined_action = {
+        MembershipRole.STAFF: "staff.support_staff_joined",
+        MembershipRole.PARENT: "parent.account_joined",
+    }.get(invitation.role, "staff.teacher_joined")
     session.add(AuditEvent(school_id=invitation.school_id, actor_user_id=user.id,
-                           action=joined_action, resource_type="school_membership", resource_id=membership.id))
+                           action=joined_action, resource_type="school_membership", resource_id=membership.id,
+                           details={"invitation_id": str(invitation.id), "role": invitation.role.value}))
+    if invitation.role == MembershipRole.PARENT:
+        from app.models import Guardian
+        guardians = list(await session.scalars(select(Guardian).where(
+            Guardian.school_id == invitation.school_id,
+            func.lower(Guardian.email) == invitation.email.lower(),
+        ).with_for_update()))
+        if any(guardian.user_id not in (None, user.id) for guardian in guardians):
+            raise HTTPException(status_code=409, detail="A matching guardian is already connected to another parent account")
+        for guardian in guardians:
+            guardian.user_id = user.id
     try:
         await session.commit()
     except IntegrityError:
         await session.rollback()
         raise HTTPException(status_code=409, detail="This invitation has already been used") from None
-    role_label = "support staff" if invitation.role == MembershipRole.STAFF else "teacher"
+    role_label = {MembershipRole.STAFF: "support staff", MembershipRole.PARENT: "parent"}.get(invitation.role, "teacher")
     return InvitationAccepted(email=user.email, school_name=school.name, school_slug=school.slug,
                               role=invitation.role.value,
                               message=f"Your {role_label} account is ready. Sign in with your email and password.")
@@ -251,6 +280,7 @@ async def list_teachers_admin(
 @router.post("/teachers", response_model=TeacherAdminResponse, status_code=status.HTTP_201_CREATED)
 async def create_teacher(
     payload: TeacherCreate,
+    background: BackgroundTasks,
     context: Annotated[TenantContext, Depends(require_roles(MembershipRole.SCHOOL_ADMIN))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ):
@@ -272,11 +302,15 @@ async def create_teacher(
     session.add(membership)
     session.add(AuditEvent(school_id=context.school_id, actor_user_id=context.user_id,
                            action="staff.teacher_created", resource_type="school_membership", resource_id=membership.id))
+    verify_token = _make_action_token(session, user, "email_verification", timedelta(hours=24))
     try:
         await session.commit()
     except IntegrityError:
         await session.rollback()
         raise HTTPException(status_code=409, detail="Could not create this teacher account") from None
+    link = _front_link("/verify-email", verify_token)
+    background.add_task(send_email, user.email, "Verify your Acadex account",
+        f"Hello {user.display_name},\n\nYour school created an Acadex teacher account for you. Verify your email before signing in:\n{link}\n\nThis link expires in 24 hours.")
     return TeacherAdminResponse(
         membership_id=membership.id, user_id=user.id, display_name=user.display_name,
         email=user.email, status=membership.status, class_count=0, subject_count=0,

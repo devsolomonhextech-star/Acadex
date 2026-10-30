@@ -84,6 +84,22 @@ export function signIn(schoolSlug: string, email: string, password: string) {
   return apiRequest<LoginResult>('/auth/login', { method: 'POST', body: JSON.stringify({ school_slug: schoolSlug, email, password }) })
 }
 
+export function requestPasswordReset(email: string) {
+  return apiRequest<{ message: string }>('/auth/password/forgot', { method: 'POST', body: JSON.stringify({ email }) })
+}
+
+export function completePasswordReset(token: string, password: string) {
+  return apiRequest<{ message: string }>('/auth/password/reset', { method: 'POST', body: JSON.stringify({ token, password }) })
+}
+
+export function confirmEmail(token: string) {
+  return apiRequest<{ message: string }>('/auth/email/verify', { method: 'POST', body: JSON.stringify({ token }) })
+}
+
+export function resendEmailVerification(email: string) {
+  return apiRequest<{ message: string }>('/auth/email/resend', { method: 'POST', body: JSON.stringify({ email }) })
+}
+
 export function verifySignInTotp(challengeToken: string, code: string) {
   return apiRequest<Session>('/auth/login/verify-totp', { method: 'POST', body: JSON.stringify({ challenge_token: challengeToken, code }) })
 }

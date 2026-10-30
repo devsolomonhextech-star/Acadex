@@ -164,6 +164,7 @@ async def save_sheet(
     record_by_student = {record.student_id: record for record in existing_records}
     changed = created
     newly_absent: set[UUID] = set()
+    audited_changes: list[dict[str, str | None]] = []
     for mark in payload.marks:
         record = record_by_student.get(mark.student_id)
         note = mark.note.strip() if mark.note and mark.note.strip() else None
@@ -171,9 +172,12 @@ async def save_sheet(
             session.add(AttendanceRecord(school_id=context.school_id, session_id=attendance.id,
                                          student_id=mark.student_id, status=mark.status, note=note))
             changed = True
+            audited_changes.append({"student_id": str(mark.student_id), "before_status": None, "after_status": mark.status})
             if mark.status == "absent":
                 newly_absent.add(mark.student_id)
         elif record.status != mark.status or record.note != note:
+            if record.status != mark.status:
+                audited_changes.append({"student_id": str(mark.student_id), "before_status": record.status, "after_status": mark.status})
             if record.status != "absent" and mark.status == "absent":
                 newly_absent.add(mark.student_id)
             record.status = mark.status
@@ -185,6 +189,8 @@ async def save_sheet(
             school_id=context.school_id, actor_user_id=context.user_id,
             action="attendance.recorded" if created else "attendance.corrected",
             resource_type="attendance_session", resource_id=attendance.id,
+            details={"attendance_date": payload.attendance_date.isoformat(), "class_group_id": str(group.id),
+                     "changed_students": audited_changes},
         ))
     recipients: dict[UUID, list[tuple[UUID, str]]] = {}
     if newly_absent:

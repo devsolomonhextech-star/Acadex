@@ -15,12 +15,13 @@ from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import TenantContext, require_roles
+from app.api.auth import TenantContext, _front_link, _make_action_token, require_roles
+from app.email import send_email
 from app.api.students import student_roles
 from app.api.subscriptions import subscription_limit_error
 from app.db import get_session
@@ -28,6 +29,7 @@ from app.domain.subscriptions import StudentSubscriptionRequired, require_studen
 from app.models import (
     AcademicTerm,
     AcademicYear,
+    AuditEvent,
     AttendanceRecord,
     AttendanceSession,
     BehaviorRecord,
@@ -699,6 +701,7 @@ class PasswordResetResult(BaseModel):
 async def set_student_password(
     student_id: UUID,
     payload: PasswordReset,
+    background: BackgroundTasks,
     context: Annotated[TenantContext, Depends(require_roles(MembershipRole.SCHOOL_ADMIN, MembershipRole.PRINCIPAL))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> PasswordResetResult:
@@ -709,6 +712,7 @@ async def set_student_password(
     """
     student = await _find_student(session, context.school_id, student_id)
     created_account = False
+    verify_token: str | None = None
 
     if student.user_id is not None:
         user = await session.get(User, student.user_id)
@@ -737,8 +741,16 @@ async def set_student_password(
         ))
         student.user_id = user.id
         created_account = True
+        verify_token = _make_action_token(session, user, "email_verification", timedelta(hours=24))
+        session.add(AuditEvent(school_id=context.school_id, actor_user_id=context.user_id,
+            action="student.portal_account_created", resource_type="user", resource_id=user.id,
+            details={"student_id": str(student.id), "verification_required": True}))
 
     await session.commit()
+    if verify_token:
+        link = _front_link("/verify-email", verify_token)
+        background.add_task(send_email, user.email, "Verify your Acadex student account",
+            f"Hello {user.display_name},\n\nVerify your email before signing in to the student portal:\n{link}\n\nThis link expires in 24 hours.")
     return PasswordResetResult(email=student.email or "", created_account=created_account)
 
 

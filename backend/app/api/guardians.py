@@ -1,14 +1,19 @@
-from uuid import UUID
+import hashlib
+import secrets
+from datetime import UTC, datetime, timedelta
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, field_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import models
 from app.api.auth import TenantContext, require_roles
 from app.db import get_session
+from app.email import send_email
 from app.schemas import GuardianCreate, GuardianLinkResponse
+from app.settings import get_settings
 
 router = APIRouter(prefix="/api/v1/guardians", tags=["guardians"])
 
@@ -118,6 +123,65 @@ async def update_guardian(
         relationship=guardian.relationship,
         is_primary=link.is_primary,
     )
+
+
+@router.post("/{guardian_id}/invite", status_code=status.HTTP_202_ACCEPTED)
+async def invite_guardian(
+    guardian_id: UUID,
+    background: BackgroundTasks,
+    context: TenantContext = Depends(require_roles("school_admin", "principal", "registrar")),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    guardian = await session.scalar(select(models.Guardian).where(
+        models.Guardian.id == guardian_id, models.Guardian.school_id == context.school_id,
+    ))
+    if guardian is None:
+        raise HTTPException(status_code=404, detail="Guardian not found")
+    if not guardian.email:
+        raise HTTPException(status_code=422, detail="Add an email address to this guardian before inviting them")
+    if guardian.user_id is not None:
+        raise HTTPException(status_code=409, detail="This guardian already has a parent account")
+    matching_linked_guardian = await session.scalar(select(models.Guardian.id).where(
+        models.Guardian.school_id == context.school_id,
+        func.lower(models.Guardian.email) == guardian.email.casefold(),
+        models.Guardian.user_id.is_not(None),
+    ))
+    if matching_linked_guardian:
+        raise HTTPException(status_code=409, detail="This email is already linked to a parent account at the school")
+    existing_user = await session.scalar(select(models.User).where(
+        func.lower(models.User.email) == guardian.email.casefold(),
+    ))
+    if existing_user and await session.scalar(select(models.SchoolMembership.id).where(
+        models.SchoolMembership.school_id == context.school_id,
+        models.SchoolMembership.user_id == existing_user.id,
+    )):
+        raise HTTPException(status_code=409, detail="This email already has an account at the school")
+    active_invite = await session.scalar(select(models.SchoolInvitation.id).where(
+        models.SchoolInvitation.school_id == context.school_id,
+        models.SchoolInvitation.email == guardian.email.casefold(),
+        models.SchoolInvitation.role == models.MembershipRole.PARENT,
+        models.SchoolInvitation.status == "pending",
+        models.SchoolInvitation.expires_at > datetime.now(UTC),
+    ))
+    if active_invite:
+        raise HTTPException(status_code=409, detail="An active parent invitation already exists for this email")
+    school = await session.get(models.School, context.school_id)
+    token = secrets.token_urlsafe(36)
+    invite = models.SchoolInvitation(
+        id=uuid4(), school_id=context.school_id, email=guardian.email.casefold(),
+        display_name=f"{guardian.first_name} {guardian.last_name}".strip(),
+        role=models.MembershipRole.PARENT, token_hash=hashlib.sha256(token.encode()).hexdigest(),
+        expires_at=datetime.now(UTC) + timedelta(days=7), created_by_user_id=context.user_id,
+    )
+    session.add(invite)
+    session.add(models.AuditEvent(school_id=context.school_id, actor_user_id=context.user_id,
+        action="parent.invitation_sent", resource_type="guardian", resource_id=guardian.id,
+        details={"email": guardian.email, "delivery": "queued"}))
+    await session.commit()
+    link = f"{get_settings().frontend_url.rstrip('/')}/accept-invitation?token={token}"
+    background.add_task(send_email, guardian.email, f"Connect with {school.name} on Acadex",
+        f"Hello {guardian.first_name},\n\n{school.name} has invited you to Acadex Connect to follow your child’s school updates. Accept your invitation and create your parent account here:\n{link}\n\nThis link expires in seven days.")
+    return {"message": "Parent invitation email queued", "email": guardian.email}
 
 
 @router.get("/student/{student_id}", response_model=list[GuardianLinkResponse])

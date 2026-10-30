@@ -28,7 +28,7 @@ export function setClassTeacher(token: string, classGroupId: string, teacherMemb
 }
 
 export function inviteTeacher(token: string, payload: { email: string; display_name: string }) {
-  return apiRequest<{ id: string; email: string; role: string; expires_at: string; invite_token: string }>(
+  return apiRequest<{ id: string; email: string; role: string; expires_at: string; email_queued: boolean }>(
     '/staff/invitations/teachers', { method: 'POST', body: JSON.stringify(payload) }, token,
   )
 }

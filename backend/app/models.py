@@ -112,9 +112,27 @@ class User(Base):
     totp_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     totp_last_counter: Mapped[int | None] = mapped_column(BigInteger)
     totp_setup_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     memberships: Mapped[list["SchoolMembership"]] = relationship(back_populates="user")
+
+
+class AccountActionToken(Base):
+    """Hashed, one-time email verification and password recovery tokens."""
+    __tablename__ = "account_action_tokens"
+    __table_args__ = (
+        Index("ix_account_action_tokens_user_kind", "user_id", "kind", "expires_at"),
+        CheckConstraint("kind IN ('email_verification', 'password_reset')", name="ck_account_action_tokens_kind"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class SchoolMembership(Base):
@@ -162,6 +180,7 @@ class AuditEvent(Base):
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     resource_type: Mapped[str] = mapped_column(String(80), nullable=False)
     resource_id: Mapped[UUID | None] = mapped_column(Uuid)
+    details: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

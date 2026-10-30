@@ -43,7 +43,7 @@ import {
   PressableScale,
 } from "../../src/components/insights/InsightVisuals";
 import { useAuth } from "../../src/services/auth";
-import { apiErrorMessage } from "../../src/api/client";
+import { api, apiErrorMessage } from "../../src/api/client";
 import { colors } from "../../src/theme/tokens";
 
 const logo = require("../../assets/images/acadex-logo.png");
@@ -71,6 +71,7 @@ export default function LoginScreen() {
   const {
     control,
     handleSubmit,
+    getValues,
     formState: { errors },
   } = useForm<Credentials>({
     resolver: zodResolver(credentialsSchema),
@@ -117,11 +118,18 @@ export default function LoginScreen() {
     });
   }, [errorSeq]);
 
-  const showHelp = () => {
-    Alert.alert(
-      "Need help signing in?",
-      "Contact your school administrator to reset your password or confirm your school workspace.",
-    );
+  const showHelp = async () => {
+    const email = getValues("email").trim().toLowerCase();
+    if (!email || !email.includes("@")) {
+      Alert.alert("Enter your email", "Add your account email above, then request a password reset.");
+      return;
+    }
+    try {
+      await api.post("/auth/password/forgot", { email });
+      Alert.alert("Check your email", "If an account exists for that address, we’ve sent a secure password reset link.");
+    } catch (cause) {
+      Alert.alert("Unable to send reset link", apiErrorMessage(cause));
+    }
   };
 
   return (
@@ -298,7 +306,7 @@ export default function LoginScreen() {
                       hitSlop={8}
                       onPress={showHelp}
                     >
-                      <Text style={styles.helperLink}>Contact school</Text>
+                    <Text style={styles.helperLink}>Email me a reset link</Text>
                     </Pressable>
                   </View>
                 </>

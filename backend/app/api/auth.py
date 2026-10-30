@@ -1,20 +1,23 @@
 import secrets
+import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID, uuid4
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.domain.subscriptions import trial_end_for
+from app.email import send_email
 from app.models import (
+    AccountActionToken,
     AuditEvent,
     MembershipRole,
     RefreshSession,
@@ -82,6 +85,37 @@ class TotpSetupResponse(BaseModel):
     qr_svg: str
 
 
+class EmailRequest(BaseModel):
+    email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: EmailStr) -> str:
+        return str(value).strip().casefold()
+
+
+class ActionTokenRequest(BaseModel):
+    token: str = Field(min_length=32, max_length=128)
+
+
+class PasswordResetRequest(ActionTokenRequest):
+    password: str = Field(min_length=12, max_length=128)
+
+
+def _make_action_token(session: AsyncSession, user: User, kind: str, lifetime: timedelta) -> str:
+    raw = secrets.token_urlsafe(36)
+    session.add(AccountActionToken(
+        user_id=user.id, token_hash=hashlib.sha256(raw.encode()).hexdigest(),
+        kind=kind, expires_at=datetime.now(UTC) + lifetime,
+    ))
+    return raw
+
+
+def _front_link(path: str, token: str) -> str:
+    from urllib.parse import urlencode
+    return f"{get_settings().frontend_url.rstrip('/')}{path}?{urlencode({'token': token})}"
+
+
 def set_refresh_cookies(response: Response, raw_token: str, csrf: str, expires: datetime) -> None:
     settings = get_settings()
     common = {"secure": settings.cookie_secure, "samesite": "lax", "expires": expires}
@@ -136,7 +170,8 @@ def require_roles(*roles: MembershipRole):
 
 
 @router.post("/onboarding/schools", status_code=status.HTTP_201_CREATED, dependencies=[Depends(limit_signup)])
-async def register_school(payload: SchoolRegistration, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, str]:
+async def register_school(payload: SchoolRegistration, background: BackgroundTasks,
+                          session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, str]:
     """Create a school and its initial administrator as one transaction."""
     email = str(payload.email)
     existing = await session.execute(select(User.id).where(User.email == email))
@@ -156,12 +191,15 @@ async def register_school(payload: SchoolRegistration, session: Annotated[AsyncS
         SchoolSubscription(school_id=school.id, student_limit=0, status="inactive"),
     ])
     session.add(AuditEvent(school_id=school.id, actor_user_id=user.id, action="school.registered", resource_type="school", resource_id=school.id))
+    verification_token = _make_action_token(session, user, "email_verification", timedelta(hours=24))
     try:
         await session.commit()
     except IntegrityError:
         await session.rollback()
         raise HTTPException(status_code=409, detail="That email address or school address is already registered") from None
-    return {"school_id": str(school.id), "school_slug": school.slug, "status": "active", "message": "School created. Sign in with your administrator account."}
+    link = _front_link("/verify-email", verification_token)
+    background.add_task(send_email, user.email, "Verify your Acadex email", f"Hello {user.display_name},\n\nVerify your email to activate sign-in for {school.name}:\n{link}\n\nThis link expires in 24 hours.")
+    return {"school_id": str(school.id), "school_slug": school.slug, "status": "pending_email", "message": "School created. Check your email to verify your account before signing in."}
 
 
 @router.post("/auth/login", response_model=LoginResponse, dependencies=[Depends(check_login_lockout), Depends(limit_login)])
@@ -178,6 +216,8 @@ async def login(payload: LoginRequest, request: Request, response: Response,
     if not valid_password or user is None or school is None or user.status != "active" or school.status != "active":
         await record_login_failure(request)
         raise HTTPException(status_code=401, detail="Invalid school, email, or password")
+    if user.email_verified_at is None:
+        raise HTTPException(status_code=403, detail="Verify your email before signing in", headers={"X-Auth-Error": "email_not_verified"})
     membership_result = await session.execute(select(SchoolMembership).where(
         SchoolMembership.user_id == user.id, SchoolMembership.school_id == school.id, SchoolMembership.status == "active",
     ))
@@ -194,6 +234,90 @@ async def login(payload: LoginRequest, request: Request, response: Response,
         response.headers["Cache-Control"] = "no-store"
         return LoginResponse(requires_two_factor=True, challenge_token=challenge)
     return await _complete_login(user, school, membership, response, session)
+
+
+@router.post("/auth/email/verify", dependencies=[Depends(limit_signup)])
+async def verify_email(payload: ActionTokenRequest, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, str]:
+    token = await session.scalar(select(AccountActionToken).where(
+        AccountActionToken.token_hash == hashlib.sha256(payload.token.encode()).hexdigest(),
+        AccountActionToken.kind == "email_verification", AccountActionToken.used_at.is_(None),
+    ).with_for_update())
+    now = datetime.now(UTC)
+    if token is None or token.expires_at.replace(tzinfo=UTC) <= now:
+        raise HTTPException(status_code=400, detail="This verification link is invalid or expired. Request a new one.")
+    user = await session.get(User, token.user_id, with_for_update=True)
+    if user is None:
+        raise HTTPException(status_code=400, detail="This verification link is no longer available")
+    user.email_verified_at = now
+    token.used_at = now
+    memberships = (await session.scalars(select(SchoolMembership).where(
+        SchoolMembership.user_id == user.id, SchoolMembership.status == "active",
+    ))).all()
+    for membership in memberships:
+        session.add(AuditEvent(school_id=membership.school_id, actor_user_id=user.id,
+            action="auth.email_verified", resource_type="user", resource_id=user.id))
+    await session.commit()
+    return {"message": "Email verified. You can now sign in."}
+
+
+@router.post("/auth/email/resend", dependencies=[Depends(limit_signup)])
+async def resend_verification(payload: EmailRequest, background: BackgroundTasks,
+                              session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, str]:
+    # Always return the same response to avoid exposing whether an address has an account.
+    user = await session.scalar(select(User).where(func.lower(User.email) == str(payload.email).lower()))
+    if user and user.status == "active" and user.email_verified_at is None:
+        await session.execute(update(AccountActionToken).where(
+            AccountActionToken.user_id == user.id, AccountActionToken.kind == "email_verification",
+            AccountActionToken.used_at.is_(None),
+        ).values(used_at=datetime.now(UTC)))
+        token = _make_action_token(session, user, "email_verification", timedelta(hours=24))
+        await session.commit()
+        link = _front_link("/verify-email", token)
+        background.add_task(send_email, user.email, "Verify your Acadex email", f"Verify your email to activate sign-in:\n{link}\n\nThis link expires in 24 hours.")
+    return {"message": "If that account needs verification, we’ve sent a new link."}
+
+
+@router.post("/auth/password/forgot", dependencies=[Depends(limit_signup)])
+async def request_password_reset(payload: EmailRequest, background: BackgroundTasks,
+                                 session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, str]:
+    user = await session.scalar(select(User).where(func.lower(User.email) == str(payload.email).lower()))
+    if user and user.status == "active" and user.email_verified_at is not None:
+        await session.execute(update(AccountActionToken).where(
+            AccountActionToken.user_id == user.id, AccountActionToken.kind == "password_reset",
+            AccountActionToken.used_at.is_(None),
+        ).values(used_at=datetime.now(UTC)))
+        token = _make_action_token(session, user, "password_reset", timedelta(minutes=30))
+        await session.commit()
+        link = _front_link("/reset-password", token)
+        background.add_task(send_email, user.email, "Reset your Acadex password", f"Use this secure link to reset your password:\n{link}\n\nIt expires in 30 minutes. If you did not request this, ignore this email.")
+    return {"message": "If an account exists for that email, password reset instructions have been sent."}
+
+
+@router.post("/auth/password/reset", dependencies=[Depends(limit_signup)])
+async def reset_password(payload: PasswordResetRequest, session: Annotated[AsyncSession, Depends(get_session)]) -> dict[str, str]:
+    token = await session.scalar(select(AccountActionToken).where(
+        AccountActionToken.token_hash == hashlib.sha256(payload.token.encode()).hexdigest(),
+        AccountActionToken.kind == "password_reset", AccountActionToken.used_at.is_(None),
+    ).with_for_update())
+    now = datetime.now(UTC)
+    if token is None or token.expires_at.replace(tzinfo=UTC) <= now:
+        raise HTTPException(status_code=400, detail="This password reset link is invalid or expired. Request another.")
+    user = await session.get(User, token.user_id, with_for_update=True)
+    if user is None or user.email_verified_at is None:
+        raise HTTPException(status_code=400, detail="This password reset link is no longer available")
+    user.password_hash = hash_password(payload.password)
+    token.used_at = now
+    await session.execute(update(RefreshSession).where(
+        RefreshSession.user_id == user.id, RefreshSession.revoked_at.is_(None),
+    ).values(revoked_at=now))
+    memberships = (await session.scalars(select(SchoolMembership).where(
+        SchoolMembership.user_id == user.id, SchoolMembership.status == "active",
+    ))).all()
+    for membership in memberships:
+        session.add(AuditEvent(school_id=membership.school_id, actor_user_id=user.id,
+            action="auth.password_reset", resource_type="user", resource_id=user.id))
+    await session.commit()
+    return {"message": "Password updated. Sign in with your new password."}
 
 
 async def _complete_login(user: User, school: School, membership: SchoolMembership,

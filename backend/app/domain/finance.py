@@ -166,6 +166,8 @@ async def generate_invoices(
             action="finance.invoices_generated",
             resource_type="student_invoice",
             resource_id=class_group_id,
+            details={"created_count": created, "skipped_count": len(students) - created,
+                     "total_amount": str(total_billed), "term_id": str(term_id)},
         )
     )
     await session.commit()
@@ -270,6 +272,10 @@ async def record_payment(
                     action="finance.payment_recorded",
                     resource_type="payment",
                     resource_id=payment.id,
+                    details={"receipt_number": payment.receipt_number, "amount": str(amount),
+                             "method": method, "payment_date": payment_date.isoformat(),
+                             "allocated_amount": str(allocated), "unallocated_amount": str(amount - allocated),
+                             "invoices_paid": invoices_paid},
                 )
             )
             await session.commit()

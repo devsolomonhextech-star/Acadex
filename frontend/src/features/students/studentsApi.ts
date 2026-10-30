@@ -134,3 +134,7 @@ export function updateGuardian(
   return apiRequest<{ guardian_id: string; student_id: string }>(`/guardians/${guardianId}`,
     { method: 'PATCH', body: JSON.stringify(payload) }, token)
 }
+
+export function inviteGuardian(token: string, guardianId: string) {
+  return apiRequest<{ message: string; email: string }>(`/guardians/${guardianId}/invite`, { method: 'POST' }, token)
+}

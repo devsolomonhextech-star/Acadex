@@ -5,7 +5,7 @@ import {
 } from 'antd'
 import type { TableColumnsType } from 'antd'
 import {
-  CopyOutlined, DownOutlined, IdcardOutlined, PlusOutlined, SolutionOutlined, TeamOutlined,
+  DownOutlined, IdcardOutlined, PlusOutlined, SolutionOutlined, TeamOutlined,
 } from '@ant-design/icons'
 import { useAuth } from '../auth/authHooks'
 import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
@@ -34,7 +34,7 @@ export default function TeachersPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [subjectTarget, setSubjectTarget] = useState<AdminTeacher | null>(null)
   const [classTeacherTarget, setClassTeacherTarget] = useState<AdminTeacher | null>(null)
-  const [inviteLink, setInviteLink] = useState('')
+  const [inviteSentTo, setInviteSentTo] = useState('')
   const [teacherForm] = Form.useForm<TeacherForm>()
   const [inviteForm] = Form.useForm<InviteForm>()
   const [subjectForm] = Form.useForm<SubjectForm>()
@@ -118,8 +118,8 @@ export default function TeachersPage() {
   const inviteMutation = useMutation({
     mutationFn: (values: InviteForm) => inviteTeacher(accessToken!, values),
     onSuccess: result => {
-      setInviteLink(`${window.location.origin}/accept-invitation?token=${encodeURIComponent(result.invite_token)}`)
-      toast.success('Invitation created')
+      setInviteSentTo(result.email)
+      toast.success('Invitation email queued')
     },
     onError: error => toast.error(formatApiError(error)),
   })
@@ -168,11 +168,6 @@ export default function TeachersPage() {
     classTeacherForm.resetFields()
     setClassTeacherTarget(teacher)
   }
-  const copyInvite = async () => {
-    await navigator.clipboard.writeText(inviteLink)
-    toast.success('Invitation link copied')
-  }
-
   const columns: TableColumnsType<AdminTeacher> = [
     {
       title: 'TEACHER',
@@ -285,7 +280,7 @@ export default function TeachersPage() {
         {canCreate && (
           <Button
             type="primary" icon={<PlusOutlined />}
-            onClick={() => { setInviteLink(''); teacherForm.resetFields(); inviteForm.resetFields(); setAddOpen(true) }}
+            onClick={() => { setInviteSentTo(''); teacherForm.resetFields(); inviteForm.resetFields(); setAddOpen(true) }}
           >
             Add teacher
           </Button>
@@ -405,22 +400,17 @@ export default function TeachersPage() {
             },
             {
               key: 'invite',
-              label: 'Invitation link',
-              children: inviteLink ? (
+              label: 'Invite by email',
+              children: inviteSentTo ? (
                 <div className="invite-success">
                   <Alert
-                    type="success" showIcon message="Invitation ready"
-                    description="Share this one-time link with the teacher. It expires in seven days."
+                    type="success" showIcon message="Invitation email queued"
+                    description={`A one-time invitation link has been emailed to ${inviteSentTo}. It expires in seven days.`}
                   />
-                  <Input value={inviteLink} readOnly />
-                  <Button icon={<CopyOutlined />} onClick={() => void copyInvite()}>Copy invitation link</Button>
-                  <p>The token is shown only once. If it is lost, create a new invitation.</p>
                 </div>
               ) : (
                 <Form form={inviteForm} layout="vertical" onFinish={values => inviteMutation.mutate(values)}>
-                  <p className="form-hint">
-                    The teacher joins this school with a teacher account and sets their own password.
-                  </p>
+                  <p className="form-hint">We’ll email a one-time invitation link. The teacher sets their own password when accepting it.</p>
                   <Form.Item name="display_name" label="Full name" rules={[{ required: true, min: 2, message: 'Enter the teacher name' }]}>
                     <Input maxLength={160} placeholder="Kofi Mensah" />
                   </Form.Item>

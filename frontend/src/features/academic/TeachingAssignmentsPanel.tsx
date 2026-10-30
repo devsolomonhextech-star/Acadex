@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Alert, Button, Dropdown, Empty, Form, Input, Modal, Popconfirm, Select, Table, Tabs, Tag, message } from 'antd'
 import type { TableColumnsType } from 'antd'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CopyOutlined, DownOutlined, IdcardOutlined, PlusOutlined, TeamOutlined, UsergroupAddOutlined } from '@ant-design/icons'
+import { DownOutlined, IdcardOutlined, MailOutlined, PlusOutlined, TeamOutlined, UsergroupAddOutlined } from '@ant-design/icons'
 import { useAuth } from '../auth/authHooks'
 import type { ClassGroup, Teacher, TeachingAssignment } from '../../shared/api/types'
 import { formatApiError } from '../../shared/api/errors'
@@ -83,10 +83,9 @@ export function TeachingAssignmentsPanel({ yearId, classes }: { yearId: string; 
     mutationFn: (values: InviteFields) => inviteTeacher(accessToken!, values),
     onSuccess: async result => {
       await invalidate()
-      const url = `${window.location.origin}/accept-invitation?token=${encodeURIComponent(result.invite_token)}`
-      setCreatedInviteUrl(url)
+      setCreatedInviteUrl(result.email)
       inviteForm.resetFields()
-      toast.success('Teacher invitation created')
+      toast.success('Invitation email queued')
     },
     onError: error => toast.error(formatApiError(error)),
   })
@@ -101,10 +100,6 @@ export function TeachingAssignmentsPanel({ yearId, classes }: { yearId: string; 
     },
     onError: error => toast.error(formatApiError(error)),
   })
-  const copyInvite = async () => {
-    await navigator.clipboard.writeText(createdInviteUrl)
-    toast.success('Invitation link copied')
-  }
   const assignmentColumns: TableColumnsType<TeachingAssignment> = [
     { title: 'CLASS', dataIndex: 'class_name', key: 'class' },
     { title: 'SUBJECT', dataIndex: 'subject_name', key: 'subject', render: (name: string, row) => <span>{name} <Tag>{row.subject_code}</Tag></span> },
@@ -147,7 +142,7 @@ export function TeachingAssignmentsPanel({ yearId, classes }: { yearId: string; 
     <div className="academic-card-heading"><div><span className="academic-card-icon"><TeamOutlined /></span><div><h2>Subjects &amp; teaching assignments</h2><p>Assign class teachers, connect subjects to teachers, and review every teacher's load.</p></div></div>
       <div className="teaching-actions">
         {canInvite && <Dropdown menu={{ items: [
-          { key: 'invite', label: 'Invite by email link', icon: <CopyOutlined /> },
+          { key: 'invite', label: 'Invite by email', icon: <MailOutlined /> },
           { key: 'create', label: 'Create account with password', icon: <UsergroupAddOutlined /> },
         ], onClick: ({ key }) => { setCreatedInviteUrl(''); if (key === 'invite') setInviteOpen(true); else setDirectOpen(true) } }}>
           <Button size="small">Invite teacher <DownOutlined /></Button>
@@ -205,7 +200,7 @@ export function TeachingAssignmentsPanel({ yearId, classes }: { yearId: string; 
       </Form>
     </Modal>
     <Modal title="Invite a teacher" open={inviteOpen} onCancel={() => { setInviteOpen(false); setCreatedInviteUrl('') }} footer={null} destroyOnClose>
-      {createdInviteUrl ? <div className="invite-success"><Alert type="success" showIcon message="Invitation ready" description="Share this one-time link with the teacher. It expires in seven days."/><Input value={createdInviteUrl} readOnly/><Button icon={<CopyOutlined />} onClick={() => void copyInvite()}>Copy invitation link</Button><p>The invitation token is shown only once. If it is lost, create a new invitation.</p></div>
+      {createdInviteUrl ? <div className="invite-success"><Alert type="success" showIcon message="Invitation email queued" description={`A one-time invitation link has been emailed to ${createdInviteUrl}. It expires in seven days.`}/></div>
         : <Form form={inviteForm} layout="vertical" onFinish={values => inviteMutation.mutate(values)}>
           <p className="form-hint">The teacher will join this school with a teacher account and can set a password if they are new to Acadex.</p>
           <Form.Item name="display_name" label="Teacher name" rules={[{ required: true, min: 2 }]}><Input maxLength={160} placeholder="Full name"/></Form.Item>

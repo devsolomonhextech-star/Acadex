@@ -215,10 +215,11 @@ def _conflict(detail: str, code: int = 409) -> HTTPException:
     return HTTPException(status_code=code, detail=detail)
 
 
-async def _audit(session: AsyncSession, context: TenantContext, action: str, resource_type: str, resource_id: UUID) -> None:
+async def _audit(session: AsyncSession, context: TenantContext, action: str, resource_type: str,
+                 resource_id: UUID, details: dict | None = None) -> None:
     session.add(AuditEvent(
         school_id=context.school_id, actor_user_id=context.user_id,
-        action=action, resource_type=resource_type, resource_id=resource_id,
+        action=action, resource_type=resource_type, resource_id=resource_id, details=details,
     ))
 
 
@@ -246,7 +247,8 @@ async def create_fee_category(
     except IntegrityError:
         await session.rollback()
         raise _conflict(f"A fee category named \"{row.name}\" already exists") from None
-    await _audit(session, context, "finance.fee_category_created", "fee_category", row.id)
+    await _audit(session, context, "finance.fee_category_created", "fee_category", row.id,
+                 {"name": row.name})
     await session.commit()
     return row
 
@@ -330,7 +332,8 @@ async def create_fee_structure(
         raise _conflict(
             "This fee is already defined for the class and term; edit the existing structure instead"
         ) from None
-    await _audit(session, context, "finance.fee_structure_created", "fee_structure", row.id)
+    await _audit(session, context, "finance.fee_structure_created", "fee_structure", row.id,
+                 {"class_group_id": str(group.id), "term_id": str(term.id), "amount": str(row.amount), "status": row.status})
     await session.commit()
     return FeeStructureResponse(
         id=row.id,
@@ -358,11 +361,13 @@ async def update_fee_structure(
     ))
     if row is None:
         raise _conflict("Fee structure not found", 404)
+    before = {"amount": str(row.amount), "status": row.status}
     if payload.amount is not None:
         row.amount = payload.amount
     if payload.status is not None:
         row.status = payload.status
-    await _audit(session, context, "finance.fee_structure_updated", "fee_structure", row.id)
+    await _audit(session, context, "finance.fee_structure_updated", "fee_structure", row.id,
+                 {"before": before, "after": {"amount": str(row.amount), "status": row.status}})
     await session.commit()
     listed = await list_fee_structures(context=context, session=session, class_group_id=row.class_group_id, include_archived=True)
     return next(item for item in listed if item.id == row.id)
@@ -658,9 +663,13 @@ async def refund_invoice_payment(
         await session.rollback()
         raise _conflict("The invoice’s payment history changed. Refresh and try the refund again.", 409)
 
+    previous_paid_amount, previous_status = invoice.paid_amount, invoice.status
     invoice.paid_amount = quantize(invoice.paid_amount - amount)
     invoice.status = "paid" if invoice.paid_amount >= invoice.total_amount else "partially_paid" if invoice.paid_amount > 0 else "issued"
-    await _audit(session, context, "finance.invoice_refunded", "payment_refund", refund.id)
+    await _audit(session, context, "finance.invoice_refunded", "payment_refund", refund.id,
+                 {"invoice_id": str(invoice.id), "amount": str(amount), "refund_number": refund.refund_number,
+                  "invoice_before": {"paid_amount": str(previous_paid_amount), "status": previous_status},
+                  "invoice_after": {"paid_amount": str(invoice.paid_amount), "status": invoice.status}})
     await session.commit()
     await session.refresh(refund)
     return InvoiceRefundResult(

@@ -32,6 +32,9 @@ const SchoolSetupPage = lazy(() => import('../features/onboarding/SchoolSetupPag
 const AcceptInvitationPage = lazy(() => import('../features/staff/AcceptInvitationPage'))
 const LoginPage = lazy(() => import('../features/auth/AuthPages').then(module => ({ default: module.LoginPage })))
 const RegisterPage = lazy(() => import('../features/auth/AuthPages').then(module => ({ default: module.RegisterPage })))
+const ForgotPasswordPage = lazy(() => import('../features/auth/AccountRecoveryPages').then(module => ({ default: module.ForgotPasswordPage })))
+const ResetPasswordPage = lazy(() => import('../features/auth/AccountRecoveryPages').then(module => ({ default: module.ResetPasswordPage })))
+const VerifyEmailPage = lazy(() => import('../features/auth/AccountRecoveryPages').then(module => ({ default: module.VerifyEmailPage })))
 const LandingPage = lazy(() => import('../features/marketing/LandingPage'))
 
 function LoadingPage() {
@@ -68,6 +71,9 @@ function AppRoutes() {
     <Route path="/" element={<HomeRoute />} />
     <Route path="/login" element={<LoginRoute />} />
     <Route path="/register" element={<RegisterRoute />} />
+    <Route path="/forgot-password" element={<Suspense fallback={<LoadingPage />}><ForgotPasswordPage /></Suspense>} />
+    <Route path="/reset-password" element={<Suspense fallback={<LoadingPage />}><ResetPasswordPage /></Suspense>} />
+    <Route path="/verify-email" element={<Suspense fallback={<LoadingPage />}><VerifyEmailPage /></Suspense>} />
     <Route path="/accept-invitation" element={<Suspense fallback={<LoadingPage />}><AcceptInvitationPage /></Suspense>} />
     <Route element={<AuthenticatedLayout />}>
       <Route path="/students" element={user && ['school_admin', 'principal', 'registrar'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><StudentsPage /></Suspense> : <Navigate to="/" replace />} />

@@ -14,6 +14,21 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: schoolos
+      PGPASSWORD: ${POSTGRES_PASSWORD:-local-only-change-me}
+      PGDATABASE: schoolos
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+    volumes:
+      - ${ACADEX_BACKUP_DIR:-./backups}:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["sh", "-ec", "umask 077; while true; do name=acadex-$$(date -u +%Y%m%dT%H%M%SZ).dump; pg_dump --format=custom --no-owner --no-acl > /backups/$$name.tmp; pg_restore --list /backups/$$name.tmp >/dev/null; mv /backups/$$name.tmp /backups/$$name; find /backups -type f -name 'acadex-*.dump' -mtime +$$BACKUP_RETENTION_DAYS -delete; sleep 86400; done"]
   redis:
     image: redis:7-alpine
     ports:
@@ -23,6 +38,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"
   api:
     build:
       context: ./backend
@@ -35,6 +54,12 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-acadex@localhost}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
     ports:
       - "${API_PORT:-8001}:8000"
     depends_on:
@@ -42,6 +67,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=2)"]
       interval: 10s

@@ -488,6 +488,7 @@ async def seed_demo_data(
                 email=email,
                 display_name=f"{given_name} {student.last_name}",
                 password_hash=hash_password(DEMO_PARENT_PASSWORD),
+                email_verified_at=datetime.now(UTC),
             )
             session.add(user)
             await session.flush()
@@ -533,6 +534,7 @@ async def seed_demo_data(
                     email=candidate_email,
                     display_name=DEMO_SHARED_PARENT_NAME,
                     password_hash=hash_password(DEMO_PARENT_PASSWORD),
+                    email_verified_at=datetime.now(UTC),
                 )
                 session.add(candidate_user)
                 await session.flush()
@@ -690,6 +692,7 @@ async def seed_demo_data(
                 user = User(
                     email=email, display_name=name,
                     password_hash=hash_password(DEMO_TEACHER_PASSWORD),
+                    email_verified_at=datetime.now(UTC),
                 )
                 session.add(user)
                 await session.flush()

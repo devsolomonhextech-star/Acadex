@@ -314,6 +314,7 @@ async def save_gradebook(
         AssessmentScore.school_id == context.school_id, AssessmentScore.assessment_id == assessment.id,
     ).with_for_update())
     existing = {row.student_id: row for row in current}
+    audited_changes: list[dict[str, str | None]] = []
     for student_id, mark in marks.items():
         comment = mark.comment.strip() if mark.comment and mark.comment.strip() else None
         score = existing.get(student_id)
@@ -324,13 +325,22 @@ async def save_gradebook(
                 submission_status=mark.submission_status,
                 updated_by_membership_id=member_id,
             ))
+            audited_changes.append({"student_id": str(student_id), "before_score": None,
+                                    "after_score": str(mark.score) if mark.score is not None else None,
+                                    "after_status": mark.submission_status})
         else:
+            if score.score != mark.score or score.submission_status != mark.submission_status:
+                audited_changes.append({"student_id": str(student_id),
+                    "before_score": str(score.score) if score.score is not None else None,
+                    "after_score": str(mark.score) if mark.score is not None else None,
+                    "before_status": score.submission_status, "after_status": mark.submission_status})
             score.score = mark.score
             score.comment = comment
             score.submission_status = mark.submission_status
             score.updated_by_membership_id = member_id
     session.add(AuditEvent(school_id=context.school_id, actor_user_id=context.user_id,
-                           action="assessment.scores_saved", resource_type="assessment", resource_id=assessment.id))
+                           action="assessment.scores_saved", resource_type="assessment", resource_id=assessment.id,
+                           details={"changed_scores": audited_changes}))
     try:
         await session.commit()
     except IntegrityError:

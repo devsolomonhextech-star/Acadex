@@ -8,7 +8,7 @@ import {
   Select, Spin, Tabs, Tag,
 } from 'antd'
 import {
-  ArrowLeftOutlined, DeleteOutlined, DownOutlined, EditOutlined, KeyOutlined,
+  ArrowLeftOutlined, DeleteOutlined, DownOutlined, EditOutlined, KeyOutlined, MailOutlined,
   PlusOutlined, PrinterOutlined, SendOutlined, StopOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
@@ -19,7 +19,7 @@ import type { ProfileGuardian, ProfileLesson, ProfileWeekdayLesson, StudentProfi
 import {
   fetchStudentProfile, fileStudentDocument,
   messageStudentGuardians, recordBehavior, removeStudentDocument, removeBehavior,
-  setStudentPassword, updateGuardian, updateStudent,
+  setStudentPassword, updateGuardian, inviteGuardian, updateStudent,
 } from './studentsApi'
 import type { StudentEdit } from './studentsApi'
 
@@ -281,6 +281,12 @@ export default function StudentProfilePage() {
     mutationFn: (payload: Parameters<typeof updateGuardian>[2]) =>
       updateGuardian(accessToken!, guardianEdit!.guardian_id, payload),
     onSuccess: () => { message.success('Guardian updated'); setGuardianEdit(null); void refresh() },
+    onError: error => message.error(formatApiError(error)),
+  })
+
+  const guardianInviteMutation = useMutation({
+    mutationFn: (guardianId: string) => inviteGuardian(accessToken!, guardianId),
+    onSuccess: result => message.success(`Invitation email queued for ${result.email}`),
     onError: error => message.error(formatApiError(error)),
   })
 
@@ -834,6 +840,11 @@ export default function StudentProfilePage() {
                   {guardian.email && <span>{guardian.email}</span>}
                 </div>
               </div>
+              {canEdit && guardian.email && <Button size="small" icon={<MailOutlined />}
+                loading={guardianInviteMutation.isPending}
+                onClick={() => guardianInviteMutation.mutate(guardian.guardian_id)}>
+                Invite to parent app
+              </Button>}
             </div>)}
           </div> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No guardians linked yet" />}
         </section>
