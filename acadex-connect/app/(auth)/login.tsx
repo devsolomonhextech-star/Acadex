@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ElementRef, type Ref } from "react";
 import { Controller, useForm, type Control } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -48,6 +48,7 @@ import { colors } from "../../src/theme/tokens";
 
 const logo = require("../../assets/images/acadex-logo.png");
 const school3d = require("../../assets/images/3d/school.webp");
+type NativeTextInput = ElementRef<typeof TextInput>;
 
 const credentialsSchema = z.object({
   school: z.string().trim().min(3, "Enter your school workspace address"),
@@ -59,6 +60,9 @@ type Credentials = z.infer<typeof credentialsSchema>;
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollViewInstance>(null);
+  const schoolInputRef = useRef<NativeTextInput>(null);
+  const emailInputRef = useRef<NativeTextInput>(null);
+  const passwordInputRef = useRef<NativeTextInput>(null);
   const formY = useRef(0);
   const { signIn, verifyCode } = useAuth();
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -143,6 +147,8 @@ export default function LoginScreen() {
           ref={scrollRef}
           contentContainerStyle={styles.page}
           keyboardShouldPersistTaps="always"
+          keyboardDismissMode="none"
+          removeClippedSubviews={false}
           showsVerticalScrollIndicator={false}
         >
           <Animated.View
@@ -275,6 +281,9 @@ export default function LoginScreen() {
                     error={errors.school?.message}
                     autoCapitalize="none"
                     disabled={busy}
+                    inputRef={schoolInputRef}
+                    returnKeyType="next"
+                    onSubmitEditing={() => emailInputRef.current?.focus()}
                   />
                   <Field
                     label="Email address"
@@ -286,6 +295,9 @@ export default function LoginScreen() {
                     autoCapitalize="none"
                     keyboardType="email-address"
                     disabled={busy}
+                    inputRef={emailInputRef}
+                    returnKeyType="next"
+                    onSubmitEditing={() => passwordInputRef.current?.focus()}
                   />
                   <PasswordField
                     control={control}
@@ -293,6 +305,8 @@ export default function LoginScreen() {
                     visible={passwordVisible}
                     onToggle={() => setPasswordVisible((value) => !value)}
                     disabled={busy}
+                    inputRef={passwordInputRef}
+                    onSubmitEditing={() => void submit()}
                   />
                   <PrimaryAction
                     title="Sign in"
@@ -372,6 +386,9 @@ function Field({
   autoCapitalize = "sentences",
   keyboardType = "default",
   disabled = false,
+  inputRef,
+  returnKeyType = "done",
+  onSubmitEditing,
 }: {
   label: string;
   name: "school" | "email";
@@ -382,6 +399,9 @@ function Field({
   autoCapitalize?: "none" | "sentences";
   keyboardType?: "default" | "email-address";
   disabled?: boolean;
+  inputRef?: Ref<NativeTextInput>;
+  returnKeyType?: "next" | "done";
+  onSubmitEditing?: () => void;
 }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -400,6 +420,7 @@ function Field({
           name={name}
           render={({ field: { onChange, onBlur, value } }) => (
             <TextInput
+              ref={inputRef}
               value={value}
               onChangeText={onChange}
               onBlur={() => {
@@ -411,6 +432,8 @@ function Field({
               autoCapitalize={autoCapitalize}
               autoCorrect={false}
               keyboardType={keyboardType}
+              returnKeyType={returnKeyType}
+              onSubmitEditing={onSubmitEditing}
               placeholder={placeholder}
               placeholderTextColor={colors.mutedLight}
               style={[styles.input, disabled && styles.inputDisabled]}
@@ -429,12 +452,16 @@ function PasswordField({
   visible,
   onToggle,
   disabled = false,
+  inputRef,
+  onSubmitEditing,
 }: {
   control: Control<Credentials>;
   error?: string;
   visible: boolean;
   onToggle: () => void;
   disabled?: boolean;
+  inputRef?: Ref<NativeTextInput>;
+  onSubmitEditing?: () => void;
 }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -453,6 +480,7 @@ function PasswordField({
           name="password"
           render={({ field: { onChange, onBlur, value } }) => (
             <TextInput
+              ref={inputRef}
               value={value}
               onChangeText={onChange}
               onBlur={() => {
@@ -464,6 +492,8 @@ function PasswordField({
               secureTextEntry={!visible}
               autoCapitalize="none"
               autoCorrect={false}
+              returnKeyType="done"
+              onSubmitEditing={onSubmitEditing}
               placeholder="Your password"
               placeholderTextColor={colors.mutedLight}
               style={[styles.input, disabled && styles.inputDisabled]}
