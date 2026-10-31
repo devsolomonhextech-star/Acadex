@@ -41,4 +41,3 @@ yarn-error.*
 /android
 
 # Firebase app configuration (provide locally or as an EAS file variable)
-/google-services.json
