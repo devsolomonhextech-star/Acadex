@@ -3,6 +3,8 @@ import { api } from "../api/client";
 export type ParentNotificationPreferences = {
   attendance: boolean;
   announcements: boolean;
+  fees: boolean;
+  reports: boolean;
   parent_desk: boolean;
 };
 

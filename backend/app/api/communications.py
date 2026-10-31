@@ -2,13 +2,15 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import models
 from app.api.auth import TenantContext, current_tenant, require_roles
 from app.db import get_session
+from app.domain.notifications import resolve_recipients
+from app.domain.parent_notifications import dispatch_parent_notifications
 from app.schemas import AnnouncementCreate, AnnouncementResponse, NotificationResponse
 
 router = APIRouter(prefix="/api/v1", tags=["communications"])
@@ -17,6 +19,8 @@ router = APIRouter(prefix="/api/v1", tags=["communications"])
 @router.post("/announcements", response_model=AnnouncementResponse, status_code=status.HTTP_201_CREATED)
 async def create_announcement(
     payload: AnnouncementCreate,
+    background: BackgroundTasks,
+    request: Request,
     context: Annotated[TenantContext, Depends(require_roles("school_admin", "principal"))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> AnnouncementResponse:
@@ -38,8 +42,36 @@ async def create_announcement(
         expires_at=payload.expires_at,
     )
     session.add(announcement)
+    parent_user_ids: list[UUID] = []
+    if payload.audience in ("all", "parents"):
+        parent_user_ids = await resolve_recipients(
+            session, context.school_id, audience="all_parents",
+        )
+    elif payload.audience == "class" and payload.class_group_id:
+        parent_user_ids = await resolve_recipients(
+            session, context.school_id, audience="class", class_group_id=payload.class_group_id,
+        )
+    for user_id in parent_user_ids:
+        session.add(models.Notification(
+            school_id=context.school_id,
+            user_id=user_id,
+            title=payload.title[:160],
+            body=payload.body,
+            type="announcement",
+            link="/announcements",
+        ))
     await session.commit()
     await session.refresh(announcement)
+    if parent_user_ids:
+        await dispatch_parent_notifications(
+            request, background,
+            school_id=context.school_id,
+            recipients=parent_user_ids,
+            title=payload.title,
+            push_body=payload.body,
+            link="/announcements",
+            preference_key="announcements",
+        )
     return AnnouncementResponse(
         id=announcement.id,
         title=announcement.title,

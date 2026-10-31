@@ -107,7 +107,18 @@ async def _send(
         ]
     if not tokens:
         return 0
-    payload = [{"to": token, "title": title, "body": body, "sound": "default", "data": data or {}} for token in tokens]
+    payload = [
+        {
+            "to": token,
+            "title": title,
+            "body": body,
+            "sound": "default",
+            "priority": "high",
+            "channelId": "school-updates",
+            "data": data or {},
+        }
+        for token in tokens
+    ]
     dead: set[str] = set()
     for start in range(0, len(payload), CHUNK_SIZE):
         dead.update(await _deliver(payload[start:start + CHUNK_SIZE]))

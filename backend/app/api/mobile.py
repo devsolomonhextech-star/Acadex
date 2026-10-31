@@ -35,12 +35,16 @@ class PasswordChangeRequest(BaseModel):
 class ParentNotificationPreferences(BaseModel):
     attendance: bool = True
     announcements: bool = True
+    fees: bool = True
+    reports: bool = True
     parent_desk: bool = True
 
 
 DEFAULT_NOTIFICATION_PREFERENCES = {
     "attendance": True,
     "announcements": True,
+    "fees": True,
+    "reports": True,
     "parent_desk": True,
 }
 

@@ -49,7 +49,19 @@ npx expo run:android
 npx expo run:ios
 ```
 
-For store builds, configure an EAS project and credentials, then run `npx eas-cli build --platform android` or `npx eas-cli build --platform ios`. Add the assigned EAS project ID under `expo.extra.eas.projectId` in `app.json` before expecting push-token registration to work in a build.
+For store builds, link an EAS project and set its ID in `expo.extra.eas.projectId` (or `EXPO_PUBLIC_EAS_PROJECT_ID`). Push registration intentionally does not proceed without this ID. Build a development or production client; Expo Go cannot receive remote push notifications on current Expo SDKs.
+
+### Remote notifications (Firebase Cloud Messaging + Expo Notifications)
+
+The app uses Expo Notifications for permission handling, foreground display and notification taps. The backend delivers push messages through the Expo Push Service; on Android, Expo delivers them through Firebase Cloud Messaging (FCM v1). This is the supported Expo flow and keeps Android FCM and iOS APNs delivery behind one notification API.
+
+1. In the dedicated Firebase project `acadex-connect`, register the Android app with package name `com.acadex.connect` and download `google-services.json`.
+2. For local builds, place it at `acadex-connect/google-services.json`. For EAS builds, upload it as an EAS file environment variable named `GOOGLE_SERVICES_JSON`. `app.config.ts` picks either source up automatically. Firebase config stays out of source control.
+3. Link this Expo app to an EAS project (`eas init`) and set `EXPO_PUBLIC_EAS_PROJECT_ID` to the resulting EAS project UUID in the local `.env` and EAS environment. The Expo project ID is different from Firebase's `acadex-connect` project ID. Add the Firebase FCM v1 service account key to the EAS Android push credentials. Keep that private key out of source control.
+4. For iOS builds, configure the Apple Push Notification service key in EAS. Firebase’s Android config file does not configure APNs.
+5. Rebuild and install a development or store client, grant notification permission, then sign in. The app registers its Expo push token with the Acadex backend; no notification token is stored in source control.
+
+Attendance, school announcement, and Parent Desk pushes honor the parent’s notification preferences. The Android channel is named “School updates”; foreground messages show a banner and sound, and taps follow their notification link.
 
 ## Backend contracts and remaining work
 
@@ -59,7 +71,7 @@ The following remain backend/product dependencies and are intentionally not repr
 
 - Password reset and parent profile/contact editing have no backend routes or email verification workflow.
 - The parent payment screen is read-only. No parent online checkout or school payment gateway confirmation flow exists.
-- Push tokens are registered, but the backend currently has no push-delivery worker/service. In-app notification history works independently.
+- Push delivery is implemented, but Firebase/EAS/Apple push credentials and a rebuilt device client are deployment setup requirements before real devices can receive pushes.
 - Parent messaging has no conversation or message API.
 - Attendance is shown as school-recorded rows and status counts. No documented school-day/holiday policy or date-filter endpoint exists, so the app does not invent an attendance percentage or calendar totals.
 - Fee currency is shown only when supplied by the API. The current fee models do not persist a currency field.

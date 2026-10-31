@@ -4,13 +4,15 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import TenantContext, require_roles
 from app.db import get_session
+from app.domain.notifications import resolve_recipients
+from app.domain.parent_notifications import dispatch_parent_notifications
 from app.domain.results import (
     PublicationError,
     active_default_scale,
@@ -32,6 +34,7 @@ from app.models import (
     ClassSubjectAssignment,
     GradingScale,
     MembershipRole,
+    Notification,
     ResultPublication,
     School,
     SchoolMembership,
@@ -473,6 +476,8 @@ async def get_student_breakdown(
 @router.post("/publish", response_model=ClassResultsResponse)
 async def publish_results(
     payload: PublishRequest,
+    background: BackgroundTasks,
+    request: Request,
     context: Annotated[TenantContext, Depends(require_roles(*publish_roles))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ):
@@ -514,7 +519,30 @@ async def publish_results(
     publication.withdrawn_at = None
     session.add(AuditEvent(school_id=context.school_id, actor_user_id=context.user_id,
                            action="results.published", resource_type="class_group", resource_id=group.id))
+    parent_user_ids = await resolve_recipients(
+        session, context.school_id, audience="class", class_group_id=group.id,
+    )
+    report_notice = f"{term.name} results are now available for {group.name}. Open Acadex Connect to view your child's report."
+    for user_id in parent_user_ids:
+        session.add(Notification(
+            school_id=context.school_id,
+            user_id=user_id,
+            title="Report card published",
+            body=report_notice,
+            type="report_published",
+            link="/academics",
+        ))
     await session.commit()
+    if parent_user_ids:
+        await dispatch_parent_notifications(
+            request, background,
+            school_id=context.school_id,
+            recipients=parent_user_ids,
+            title="Report card published",
+            push_body=report_notice,
+            link="/academics",
+            preference_key="reports",
+        )
     return await _build_response(session, context, group, term)
 
 

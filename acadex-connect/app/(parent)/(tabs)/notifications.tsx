@@ -38,6 +38,7 @@ export default function NotificationsScreen() {
     queryKey: ["notifications"],
     queryFn: ({ signal }) => communicationsApi.notifications(signal),
   });
+  const notificationGroups = query.data ? groupNotificationsByDate(query.data) : [];
   const markRead = async (id: string) => {
     await communicationsApi.markRead(id);
     await client.invalidateQueries({ queryKey: ["notifications"] });
@@ -108,48 +109,51 @@ export default function NotificationsScreen() {
           body="School notifications sent to your account will appear here."
         />
       ) : (
-        query.data.map((item) => (
-          <Pressable
-            key={item.id}
-            accessibilityRole="button"
-            accessibilityLabel={item.title}
-            onPress={() => openNotification(item)}
-          >
-          <Card style={{ ...styles.item, ...(item.read_at ? {} : styles.unread) }}>
-            <View style={styles.icon}>
-              <Bell size={17} color={colors.blue} />
-            </View>
-            <View style={{ flex: 1, gap: 4 }}>
-              <View style={styles.head}>
-                <Text style={styles.title}>{item.title}</Text>
-                {!item.read_at ? <View style={styles.dot} /> : null}
-              </View>
-              <Text style={styles.body}>{item.body}</Text>
-              {item.type === "attendance_absent" ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => openNotification(item)}
-                  style={styles.reasonButton}
-                >
-                  <Text style={styles.reasonButtonText}>Send absence reason</Text>
-                </Pressable>
-              ) : null}
-              <Text style={styles.date}>
-                {formatRelativeTime(item.created_at)}
-              </Text>
-            </View>
-            {!item.read_at ? (
+        notificationGroups.map((group) => (
+          <View key={group.label} style={styles.group}>
+            <Text style={styles.groupTitle}>{group.label}</Text>
+            {group.items.map((item) => (
               <Pressable
+                key={item.id}
                 accessibilityRole="button"
-                accessibilityLabel="Mark notification as read"
-                onPress={() => void markRead(item.id)}
-                style={styles.read}
+                accessibilityLabel={item.title}
+                onPress={() => openNotification(item)}
               >
-                <Check size={16} color={colors.blue} />
+                <Card style={{ ...styles.item, ...(item.read_at ? {} : styles.unread) }}>
+                  <View style={styles.icon}>
+                    <Bell size={17} color={colors.blue} />
+                  </View>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <View style={styles.head}>
+                      <Text style={styles.title}>{item.title}</Text>
+                      {!item.read_at ? <View style={styles.dot} /> : null}
+                    </View>
+                    <Text style={styles.body}>{item.body}</Text>
+                    {item.type === "attendance_absent" ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => openNotification(item)}
+                        style={styles.reasonButton}
+                      >
+                        <Text style={styles.reasonButtonText}>Send absence reason</Text>
+                      </Pressable>
+                    ) : null}
+                    <Text style={styles.date}>{formatRelativeTime(item.created_at)}</Text>
+                  </View>
+                  {!item.read_at ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Mark notification as read"
+                      onPress={() => void markRead(item.id)}
+                      style={styles.read}
+                    >
+                      <Check size={16} color={colors.blue} />
+                    </Pressable>
+                  ) : null}
+                </Card>
               </Pressable>
-            ) : null}
-          </Card>
-          </Pressable>
+            ))}
+          </View>
         ))
       )}
       <View style={styles.subhead}>
@@ -193,7 +197,44 @@ export default function NotificationsScreen() {
     </Screen>
   );
 }
+
+const GROUP_ORDER = ["Today", "Yesterday", "This week", "This month", "This year", "Older"] as const;
+
+function groupNotificationsByDate(items: Notification[], now = new Date()) {
+  const groups = new Map<string, Notification[]>();
+  for (const item of items) {
+    const date = new Date(item.created_at);
+    const label = notificationDateGroup(date, now);
+    const group = groups.get(label) ?? [];
+    group.push(item);
+    groups.set(label, group);
+  }
+  return [...groups.entries()]
+    .sort(([left], [right]) => GROUP_ORDER.indexOf(left as (typeof GROUP_ORDER)[number]) - GROUP_ORDER.indexOf(right as (typeof GROUP_ORDER)[number]))
+    .map(([label, groupItems]) => ({
+      label,
+      items: groupItems.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    }));
+}
+
+function notificationDateGroup(date: Date, now: Date): (typeof GROUP_ORDER)[number] {
+  if (!Number.isFinite(date.getTime())) return "Older";
+  const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const oneDay = 24 * 60 * 60 * 1000;
+  if (dateDay === today) return "Today";
+  if (dateDay === today - oneDay) return "Yesterday";
+  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+  if (dateDay >= weekStart.getTime() && dateDay < today - oneDay) return "This week";
+  if (date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth()) return "This month";
+  if (date.getFullYear() === now.getFullYear()) return "This year";
+  return "Older";
+}
+
 const styles = StyleSheet.create({
+  group: { gap: 9 },
+  groupTitle: { color: colors.ink, fontSize: 14, fontWeight: "800", marginTop: 4, marginBottom: 1 },
   item: {
     flexDirection: "row",
     alignItems: "flex-start",

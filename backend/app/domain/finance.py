@@ -7,6 +7,7 @@ the student's account. Numbering (INV-/RCT-) uses count-based sequences with
 the unique constraints as the race backstop and bounded retries on conflict.
 """
 from dataclasses import dataclass
+from collections.abc import Sequence
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
@@ -20,6 +21,7 @@ from app.models import (
     FeeCategory,
     FeeStructure,
     InvoiceLineItem,
+    Notification,
     Payment,
     PaymentAllocation,
     PaymentRefund,
@@ -190,6 +192,8 @@ async def record_payment(
     payment_date: date,
     reference: str | None,
     note: str | None,
+    parent_user_ids: Sequence[UUID] = (),
+    student_name: str | None = None,
 ) -> PaymentOutcome:
     """Record a payment and allocate it to the student's open invoices, oldest first.
 
@@ -278,6 +282,15 @@ async def record_payment(
                              "invoices_paid": invoices_paid},
                 )
             )
+            for parent_user_id in dict.fromkeys(parent_user_ids):
+                session.add(Notification(
+                    school_id=school_id,
+                    user_id=parent_user_id,
+                    title="Fee payment recorded",
+                    body=f"A fee payment of GHS {amount:.2f} was recorded for {student_name or 'your child'} (receipt {payment.receipt_number}).",
+                    type="fee_payment",
+                    link="/fees",
+                ))
             await session.commit()
             return PaymentOutcome(
                 payment=payment,

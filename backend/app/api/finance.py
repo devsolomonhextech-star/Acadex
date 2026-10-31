@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -20,6 +20,8 @@ from app.domain.finance import (
     quantize,
     record_payment,
 )
+from app.domain.notifications import resolve_recipients
+from app.domain.parent_notifications import dispatch_parent_notifications
 from app.models import (
     AcademicTerm as Term,
 )
@@ -689,6 +691,8 @@ async def refund_invoice_payment(
 @router.post("/payments", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 async def create_payment(
     payload: PaymentCreate,
+    background: BackgroundTasks,
+    request: Request,
     context: Annotated[TenantContext, Depends(require_roles(*finance_roles))],
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> PaymentResponse:
@@ -699,6 +703,9 @@ async def create_payment(
     ))
     if student is None:
         raise _conflict("Student not found", 404)
+    parent_user_ids = await resolve_recipients(
+        session, context.school_id, audience="student", student_id=student.id,
+    )
     try:
         outcome: PaymentOutcome = await record_payment(
             session,
@@ -710,9 +717,21 @@ async def create_payment(
             payload.payment_date,
             payload.reference.strip() if payload.reference else None,
             payload.note.strip() if payload.note else None,
+            parent_user_ids=parent_user_ids,
+            student_name=f"{student.first_name} {student.last_name}",
         )
     except FinanceError as error:
         raise _conflict(str(error), error.status_code) from None
+    if parent_user_ids:
+        await dispatch_parent_notifications(
+            request, background,
+            school_id=context.school_id,
+            recipients=parent_user_ids,
+            title="Fee payment recorded",
+            push_body=f"A fee payment of GHS {outcome.payment.amount:.2f} was recorded for {student.first_name} {student.last_name} (receipt {outcome.payment.receipt_number}).",
+            link="/fees",
+            preference_key="fees",
+        )
     return PaymentResponse(
         id=outcome.payment.id,
         receipt_number=outcome.payment.receipt_number,

@@ -87,7 +87,7 @@ export default function ProfileScreen() {
     onError: (error) => Alert.alert("Could not change password", apiErrorMessage(error)),
   });
   const preferences: ParentNotificationPreferences = preferencesQuery.data ?? {
-    attendance: true, announcements: true, parent_desk: true,
+    attendance: true, announcements: true, fees: true, reports: true, parent_desk: true,
   };
 
   const displayName = parent?.display_name ?? "Parent";
@@ -532,6 +532,8 @@ export default function ProfileScreen() {
                 {([
                   ["attendance", "Attendance alerts", "Absence and attendance updates"],
                   ["announcements", "School announcements", "News, events and school notices"],
+                  ["fees", "Fee payment updates", "Receipts and payment confirmations"],
+                  ["reports", "Published reports", "When your child’s report is ready"],
                   ["parent_desk", "Parent Desk replies", "Replies to your requests and messages"],
                 ] as const).map(([key, title, description], index) => (
                   <View key={key} style={[styles.toggleRow, index ? styles.toggleBorder : null]}>

@@ -17,15 +17,30 @@ export default function ParentLayout() {
   useEffect(() => {
     if (!parent) return;
     void registerPushToken().catch(() => undefined);
+    const handledResponses = new Set<string>();
+    const handleResponse = (response: Notifications.NotificationResponse) => {
+      const responseId = `${response.notification.request.identifier}:${response.actionIdentifier}`;
+      if (handledResponses.has(responseId)) return;
+      handledResponses.add(responseId);
+      const route = notificationRoute(
+        response.notification.request.content.data?.link,
+      );
+      if (route) router.push(route);
+      void Notifications.clearLastNotificationResponseAsync();
+    };
     const subscription = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
-        const route = notificationRoute(
-          response.notification.request.content.data?.link,
-        );
-        if (route) router.push(route);
-      },
+      handleResponse,
     );
-    return () => subscription.remove();
+    const tokenSubscription = Notifications.addPushTokenListener(() => {
+      void registerPushToken().catch(() => undefined);
+    });
+    void Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response) handleResponse(response);
+    });
+    return () => {
+      subscription.remove();
+      tokenSubscription.remove();
+    };
   }, [parent, router]);
   useEffect(() => {
     if (!parent) return;

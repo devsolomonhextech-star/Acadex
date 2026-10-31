@@ -10,7 +10,7 @@ Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowBanner: true,
     shouldShowList: true,
-    shouldPlaySound: false,
+    shouldPlaySound: true,
     shouldSetBadge: true,
   }),
 });
@@ -18,6 +18,17 @@ Notifications.setNotificationHandler({
 export async function registerPushToken(): Promise<void> {
   if (!Device.isDevice || (Platform.OS !== "ios" && Platform.OS !== "android"))
     return;
+  if (Platform.OS === "android") {
+    await Notifications.setNotificationChannelAsync("school-updates", {
+      name: "School updates",
+      description: "Attendance alerts, school announcements and Parent Desk replies",
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 180, 250],
+      sound: "default",
+      enableVibrate: true,
+      showBadge: true,
+    });
+  }
   const permissions = await Notifications.getPermissionsAsync();
   const finalStatus = permissions.granted
     ? permissions.status
@@ -25,8 +36,16 @@ export async function registerPushToken(): Promise<void> {
   if (finalStatus !== "granted") return;
   const projectId =
     Constants.easConfig?.projectId ??
-    Constants.expoConfig?.extra?.eas?.projectId;
-  if (!projectId) return;
+    Constants.expoConfig?.extra?.eas?.projectId ??
+    process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
+  if (!projectId) {
+    if (__DEV__) {
+      console.warn(
+        "Push notifications need an EAS project ID. Set expo.extra.eas.projectId or EXPO_PUBLIC_EAS_PROJECT_ID.",
+      );
+    }
+    return;
+  }
   const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
   await api.put("/mobile/push-token", { token, platform: Platform.OS });
   await SecureStore.setItemAsync(TOKEN_KEY, token);
