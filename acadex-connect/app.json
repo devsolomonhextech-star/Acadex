@@ -29,7 +29,14 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      ["expo-notifications", { "defaultChannel": "school-updates" }],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#155EEF",
+          "defaultChannel": "school-updates"
+        }
+      ],
       [
         "expo-splash-screen",
         {
