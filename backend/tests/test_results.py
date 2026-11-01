@@ -1,5 +1,70 @@
 """Grading scales, weighted term aggregation, and result publication behaviour."""
-from uuid import uuid4
+import os
+from uuid import UUID, uuid4
+
+from sqlalchemy import func, select, update
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from app.models import (
+    Guardian,
+    MembershipRole,
+    School,
+    SchoolMembership,
+    User,
+    utcnow,
+)
+from app.security import hash_password
+
+PARENT_PASSWORD = "parent-portal-pass-123"
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://schoolos:schoolos-local-test-only@localhost:5433/schoolos_test",
+)
+
+
+def _engine():
+    return create_async_engine(TEST_DATABASE_URL)
+
+
+async def _mark_email_verified(email: str) -> None:
+    """Sign-in requires a verified address; tests skip the emailed link."""
+    engine = _engine()
+    async with async_sessionmaker(engine)() as session:
+        await session.execute(
+            update(User)
+            .where(func.lower(User.email) == email.lower())
+            .values(email_verified_at=utcnow())
+        )
+        await session.commit()
+    await engine.dispose()
+
+
+async def _parent_with_portal_access(client, admin_headers, student_id: str, slug: str) -> str:
+    """Link a guardian to the student and give them an active parent login."""
+    email = f"parent-{slug}@example.com"
+    created = await client.post("/api/v1/guardians", headers=admin_headers, json={
+        "student_id": student_id, "first_name": "Adwoa", "last_name": "Mensah",
+        "relationship": "parent", "email": email, "is_primary": True,
+    })
+    assert created.status_code == 201, created.text
+    guardian_id = UUID(created.json()["guardian_id"])
+    engine = _engine()
+    async with async_sessionmaker(engine)() as session:
+        guardian = await session.get(Guardian, guardian_id)
+        assert guardian is not None
+        user = User(
+            email=email, display_name="Adwoa Mensah",
+            password_hash=hash_password(PARENT_PASSWORD), email_verified_at=utcnow(),
+        )
+        session.add(user)
+        await session.flush()
+        session.add(SchoolMembership(
+            school_id=guardian.school_id, user_id=user.id, role=MembershipRole.PARENT,
+        ))
+        guardian.user_id = user.id
+        await session.commit()
+    await engine.dispose()
+    return email
 
 
 async def _admin_session(client, slug="results-school"):
@@ -9,6 +74,7 @@ async def _admin_session(client, slug="results-school"):
         "password": "correct-horse-battery-staple",
     })
     assert created.status_code == 201, created.text
+    await _mark_email_verified(f"admin-{slug}@example.com")
     signed_in = await client.post("/api/v1/auth/login", json={
         "school_slug": slug, "email": f"admin-{slug}@example.com",
         "password": "correct-horse-battery-staple",
@@ -18,15 +84,23 @@ async def _admin_session(client, slug="results-school"):
 
 
 async def _invite_teacher(client, admin_headers, slug="results-school", email="teacher@example.com"):
-    invitation = await client.post("/api/v1/staff/invitations/teachers", headers=admin_headers, json={
-        "email": email, "display_name": "Teacher One",
-    })
-    assert invitation.status_code == 201, invitation.text
+    """Give the school a teacher account; the invitation email flow is covered elsewhere."""
     password = "teacher-long-secure-password"
-    accepted = await client.post("/api/v1/staff/invitations/accept", json={
-        "token": invitation.json()["invite_token"], "password": password,
-    })
-    assert accepted.status_code == 200, accepted.text
+    engine = _engine()
+    async with async_sessionmaker(engine)() as session:
+        school = await session.scalar(select(School).where(School.slug == slug))
+        assert school is not None
+        user = User(
+            email=email, display_name="Teacher One",
+            password_hash=hash_password(password), email_verified_at=utcnow(),
+        )
+        session.add(user)
+        await session.flush()
+        session.add(SchoolMembership(
+            school_id=school.id, user_id=user.id, role=MembershipRole.TEACHER,
+        ))
+        await session.commit()
+    await engine.dispose()
     login = await client.post("/api/v1/auth/login", json={
         "school_slug": slug, "email": email, "password": password,
     })
@@ -446,3 +520,56 @@ async def test_report_card_requires_published_results_and_scopes_access(client):
     assert withdrawn.status_code == 200, withdrawn.text
     after_withdraw = await client.get("/api/v1/results/report-card", headers=admin_headers, params=params)
     assert after_withdraw.status_code == 409, after_withdraw.text
+
+
+async def test_exam_result_publication_notifies_linked_parent(client):
+    slug = "results-notify"
+    admin_headers = await _admin_session(client, slug)
+    teacher_headers = await _invite_teacher(
+        client, admin_headers, slug=slug, email="teacher-notify@example.com",
+    )
+    ctx = await _setup_context(client, admin_headers, teacher_headers)
+    student = ctx["students"][0]
+    parent_email = await _parent_with_portal_access(client, admin_headers, student["id"], slug)
+    signed_in = await client.post("/api/v1/auth/login", json={
+        "school_slug": slug, "email": parent_email, "password": PARENT_PASSWORD,
+    })
+    assert signed_in.status_code == 200, signed_in.text
+    parent_headers = {"Authorization": f"Bearer {signed_in.json()['access_token']}"}
+
+    scale = await client.post("/api/v1/grading/scales", headers=admin_headers, json={
+        "name": "Primary scale", "is_default": True, "include_positions": True, "bands": BANDS,
+    })
+    assert scale.status_code == 201, scale.text
+    await _create_approved_assessment(
+        client, teacher_headers, ctx, "Science quiz", "quiz", 30, 40, [24, 15],
+        reviewer_headers=admin_headers,
+    )
+    await _create_approved_assessment(
+        client, teacher_headers, ctx, "Science exam", "examination", 100, 60, [80, 45],
+        reviewer_headers=admin_headers,
+    )
+
+    before = await client.get("/api/v1/notifications", headers=parent_headers)
+    assert before.status_code == 200, before.text
+    assert [item for item in before.json() if item["type"] == "report_published"] == []
+
+    published = await client.post("/api/v1/results/publish", headers=admin_headers, json={
+        "class_group_id": ctx["group"]["id"], "term_id": ctx["term"]["id"],
+        "confirm_class_name": ctx["group"]["name"],
+    })
+    assert published.status_code == 200, published.text
+
+    inbox = await client.get("/api/v1/notifications", headers=parent_headers)
+    assert inbox.status_code == 200, inbox.text
+    notices = [item for item in inbox.json() if item["type"] == "report_published"]
+    assert len(notices) == 1, inbox.text
+    notice = notices[0]
+    assert notice["title"] == "New examination results published"
+    assert "Adwoa Mensah" in notice["body"]
+    assert "Term 1" in notice["body"]
+    assert "Primary 4" in notice["body"]
+    assert "Average 80.00%" in notice["body"]
+    assert "grade A" in notice["body"]
+    assert "position 1 of 2" in notice["body"]
+    assert notice["link"] == f"/academics/{student['id']}"

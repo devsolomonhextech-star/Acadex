@@ -1,4 +1,31 @@
 """Finance: fee structures, invoice generation, decimal allocation, and tenant safety."""
+import os
+from uuid import UUID
+
+from sqlalchemy import func, update
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from app.models import Guardian, MembershipRole, SchoolMembership, User, utcnow
+from app.security import hash_password
+
+PARENT_PASSWORD = "parent-portal-pass-123"
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://schoolos:schoolos-local-test-only@localhost:5433/schoolos_test",
+)
+
+
+async def _mark_email_verified(email: str) -> None:
+    """Sign-in requires a verified address; tests skip the emailed link."""
+    engine = create_async_engine(TEST_DATABASE_URL)
+    async with async_sessionmaker(engine)() as session:
+        await session.execute(
+            update(User)
+            .where(func.lower(User.email) == email.lower())
+            .values(email_verified_at=utcnow())
+        )
+        await session.commit()
+    await engine.dispose()
 
 
 async def _admin_session(client, slug="finance-school"):
@@ -8,6 +35,7 @@ async def _admin_session(client, slug="finance-school"):
         "password": "correct-horse-battery-staple",
     })
     assert created.status_code == 201, created.text
+    await _mark_email_verified(f"admin-{slug}@example.com")
     signed_in = await client.post("/api/v1/auth/login", json={
         "school_slug": slug, "email": f"admin-{slug}@example.com",
         "password": "correct-horse-battery-staple",
@@ -335,3 +363,81 @@ async def test_tenant_isolation_and_roles(client):
 
     anonymous = await client.get("/api/v1/finance/summary")
     assert anonymous.status_code == 401
+
+
+async def _parent_with_portal_access(client, headers, student_id: str, slug: str) -> str:
+    """Link a guardian to the student and give them a parent login (as the invite flow would)."""
+    email = f"parent-{slug}@example.com"
+    created = await client.post("/api/v1/guardians", headers=headers, json={
+        "student_id": student_id, "first_name": "Ama", "last_name": "Mensah",
+        "relationship": "parent", "email": email, "is_primary": True,
+    })
+    assert created.status_code == 201, created.text
+    guardian_id = created.json()["guardian_id"]
+    engine = create_async_engine(TEST_DATABASE_URL)
+    async with async_sessionmaker(engine)() as session:
+        guardian = await session.get(Guardian, UUID(guardian_id))
+        assert guardian is not None
+        user = User(
+            email=email, display_name="Ama Mensah",
+            password_hash=hash_password(PARENT_PASSWORD), email_verified_at=utcnow(),
+        )
+        session.add(user)
+        await session.flush()
+        session.add(SchoolMembership(
+            school_id=guardian.school_id, user_id=user.id, role=MembershipRole.PARENT,
+        ))
+        guardian.user_id = user.id
+        await session.commit()
+    await engine.dispose()
+    return email
+
+
+async def test_payment_notifications_reach_linked_parent(client):
+    slug = "finance-notify"
+    headers = await _admin_session(client, slug=slug)
+    context = await _setup_billing(client, headers, student_names=(("Ama", "Mensah"),))
+    student_id = context["students"][0]["id"]
+    email = await _parent_with_portal_access(client, headers, student_id, slug)
+    signed_in = await client.post("/api/v1/auth/login", json={
+        "school_slug": slug, "email": email, "password": PARENT_PASSWORD,
+    })
+    assert signed_in.status_code == 200, signed_in.text
+    parent_headers = {"Authorization": f"Bearer {signed_in.json()['access_token']}"}
+
+    generated = await client.post("/api/v1/finance/invoices/generate", headers=headers, json={
+        "class_group_id": context["group"]["id"], "term_id": context["term"]["id"],
+    })
+    assert generated.status_code == 201, generated.text
+
+    partial = await client.post("/api/v1/finance/payments", headers=headers, json={
+        "student_id": student_id, "amount": "250.00", "method": "mobile_money",
+        "payment_date": "2026-09-10", "reference": "MOMO-NOTIFY-1",
+    })
+    assert partial.status_code == 201, partial.text
+    receipt = partial.json()["receipt_number"]
+
+    inbox = await client.get("/api/v1/notifications", headers=parent_headers)
+    assert inbox.status_code == 200, inbox.text
+    fee_notices = [item for item in inbox.json() if item["type"] == "fee_payment"]
+    assert len(fee_notices) == 1, inbox.text
+    notice = fee_notices[0]
+    assert notice["title"] == "Fee payment received"
+    assert "GHS 250.00" in notice["body"]
+    assert "mobile money" in notice["body"]
+    assert receipt in notice["body"]
+    assert "Remaining balance: GHS 350.00" in notice["body"]
+    assert notice["link"] == f"/fees?student_id={student_id}"
+
+    settle = await client.post("/api/v1/finance/payments", headers=headers, json={
+        "student_id": student_id, "amount": "350.00", "method": "cheque",
+        "payment_date": "2026-09-20",
+    })
+    assert settle.status_code == 201, settle.text
+
+    inbox = await client.get("/api/v1/notifications", headers=parent_headers)
+    latest = inbox.json()[0]
+    assert latest["type"] == "fee_payment"
+    assert latest["title"] == "Fees fully paid"
+    assert "GHS 350.00" in latest["body"]
+    assert "fully paid" in latest["body"]

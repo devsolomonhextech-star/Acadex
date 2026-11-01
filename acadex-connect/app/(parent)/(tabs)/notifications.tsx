@@ -1,6 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { Bell, Check, Megaphone } from "lucide-react-native";
+import {
+  Bell,
+  Check,
+  GraduationCap,
+  Megaphone,
+  MessageSquareText,
+  Wallet,
+} from "lucide-react-native";
 import { useState } from "react";
 import {
   Alert,
@@ -120,8 +127,22 @@ export default function NotificationsScreen() {
                 onPress={() => openNotification(item)}
               >
                 <Card style={{ ...styles.item, ...(item.read_at ? {} : styles.unread) }}>
-                  <View style={styles.icon}>
-                    <Bell size={17} color={colors.blue} />
+                  <View
+                    style={[
+                      styles.icon,
+                      item.type === "fee_payment" ? styles.iconFee : null,
+                      item.type === "report_published" ? styles.iconReport : null,
+                    ]}
+                  >
+                    {item.type === "fee_payment" ? (
+                      <Wallet size={17} color={colors.success} />
+                    ) : item.type === "report_published" ? (
+                      <GraduationCap size={17} color={colors.blue} />
+                    ) : item.type === "parent_request_reply" ? (
+                      <MessageSquareText size={17} color={colors.blue} />
+                    ) : (
+                      <Bell size={17} color={colors.blue} />
+                    )}
                   </View>
                   <View style={{ flex: 1, gap: 4 }}>
                     <View style={styles.head}>
@@ -250,6 +271,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.blueSoft,
   },
+  iconFee: { backgroundColor: colors.successSoft },
+  iconReport: { backgroundColor: colors.infoSoft },
   head: { flexDirection: "row", alignItems: "center", gap: 7 },
   title: { color: colors.ink, fontWeight: "700", fontSize: 14, flex: 1 },
   dot: {

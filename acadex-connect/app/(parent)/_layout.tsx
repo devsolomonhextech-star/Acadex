@@ -61,6 +61,7 @@ export default function ParentLayout() {
         socket.onmessage = () => {
           void queryClient.invalidateQueries({ queryKey: ["notifications"] });
           void queryClient.invalidateQueries({ queryKey: ["family-requests"] });
+          void queryClient.invalidateQueries({ queryKey: ["family-request"] });
           void queryClient.invalidateQueries({ queryKey: ["announcements"] });
         };
         socket.onclose = () => {

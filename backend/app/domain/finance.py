@@ -6,8 +6,8 @@ exceed an invoice balance, and an overpayment stays as unallocated credit on
 the student's account. Numbering (INV-/RCT-) uses count-based sequences with
 the unique constraints as the race backstop and bounded retries on conflict.
 """
-from dataclasses import dataclass
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
@@ -33,6 +33,16 @@ from app.models import (
 
 MONEY = Decimal("0.01")
 ZERO = Decimal(0)
+CURRENCY = "GHS"
+
+PAYMENT_METHOD_LABELS = {
+    "cash": "cash",
+    "mobile_money": "mobile money",
+    "bank_transfer": "bank transfer",
+    "card": "card",
+    "cheque": "cheque",
+    "other": "other",
+}
 
 
 class FinanceError(Exception):
@@ -53,6 +63,11 @@ class PaymentOutcome:
     allocated: Decimal
     unallocated: Decimal
     invoices_paid: int
+    outstanding: Decimal = ZERO
+    notification_title: str = ""
+    notification_body: str = ""
+    push_body: str = ""
+    notification_link: str = "/fees"
 
 
 async def _next_sequence(session: AsyncSession, school_id: UUID, model) -> int:
@@ -282,14 +297,61 @@ async def record_payment(
                              "invoices_paid": invoices_paid},
                 )
             )
+            outstanding = quantize(sum(
+                (
+                    balance
+                    for balance in (
+                        quantize(invoice.total_amount - invoice.paid_amount)
+                        for invoice in open_invoices
+                    )
+                    if balance > ZERO
+                ),
+                ZERO,
+            ))
+            currency = CURRENCY
+            amount_text = f"{currency} {amount:,.2f}"
+            method_label = PAYMENT_METHOD_LABELS.get(method, method.replace("_", " "))
+            student_label = student_name or "your child"
+            if open_invoices and outstanding <= ZERO:
+                title = "Fees fully paid"
+                body = (
+                    f"We received {amount_text} for {student_label} by {method_label}. "
+                    f"Receipt {payment.receipt_number}. All fees are now fully paid. Thank you."
+                )
+                push_body = (
+                    f"{amount_text} received for {student_label}. "
+                    f"Receipt {payment.receipt_number}. All fees are now fully paid."
+                )
+            elif allocated <= ZERO:
+                title = "Payment received"
+                body = (
+                    f"We received {amount_text} for {student_label} by {method_label}. "
+                    f"Receipt {payment.receipt_number}. This amount is held as credit on the account."
+                )
+                push_body = (
+                    f"{amount_text} received for {student_label}. "
+                    f"Receipt {payment.receipt_number}. Held as credit on the account."
+                )
+            else:
+                title = "Fee payment received"
+                body = (
+                    f"We received {amount_text} for {student_label} by {method_label}. "
+                    f"Receipt {payment.receipt_number}. "
+                    f"Remaining balance: {currency} {outstanding:,.2f}."
+                )
+                push_body = (
+                    f"{amount_text} received for {student_label}. "
+                    f"Receipt {payment.receipt_number}. Balance {currency} {outstanding:,.2f}."
+                )
+            link = f"/fees?student_id={student_id}"
             for parent_user_id in dict.fromkeys(parent_user_ids):
                 session.add(Notification(
                     school_id=school_id,
                     user_id=parent_user_id,
-                    title="Fee payment recorded",
-                    body=f"A fee payment of GHS {amount:.2f} was recorded for {student_name or 'your child'} (receipt {payment.receipt_number}).",
+                    title=title,
+                    body=body,
                     type="fee_payment",
-                    link="/fees",
+                    link=link,
                 ))
             await session.commit()
             return PaymentOutcome(
@@ -297,6 +359,11 @@ async def record_payment(
                 allocated=quantize(allocated),
                 unallocated=quantize(amount - allocated),
                 invoices_paid=invoices_paid,
+                outstanding=outstanding,
+                notification_title=title,
+                notification_body=body,
+                push_body=push_body,
+                notification_link=link,
             )
         except IntegrityError as error:
             await session.rollback()

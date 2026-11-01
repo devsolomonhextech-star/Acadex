@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   BarChart3,
@@ -70,10 +70,18 @@ export default function FeesScreen() {
   const { parent } = useAuth();
   const {
     selectedChild,
+    selectChild,
     isLoading: childrenLoading,
     error: childrenError,
   } = useChildren();
+  const { student_id: studentIdParam } = useLocalSearchParams<{ student_id?: string }>();
   const [tab, setTab] = useState<FeeTab>("Overview");
+
+  // A fee-payment notification opens the statement for the child it was about.
+  useEffect(() => {
+    if (typeof studentIdParam !== "string" || !studentIdParam) return;
+    if (studentIdParam !== selectedChild?.id) selectChild(studentIdParam);
+  }, [studentIdParam, selectedChild?.id, selectChild]);
   const scrollRef = useRef<ScrollViewInstance>(null);
 
   const query = useQuery({

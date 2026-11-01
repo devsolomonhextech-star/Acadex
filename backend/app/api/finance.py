@@ -727,9 +727,9 @@ async def create_payment(
             request, background,
             school_id=context.school_id,
             recipients=parent_user_ids,
-            title="Fee payment recorded",
-            push_body=f"A fee payment of GHS {outcome.payment.amount:.2f} was recorded for {student.first_name} {student.last_name} (receipt {outcome.payment.receipt_number}).",
-            link="/fees",
+            title=outcome.notification_title,
+            push_body=outcome.push_body,
+            link=outcome.notification_link,
             preference_key="fees",
         )
     return PaymentResponse(

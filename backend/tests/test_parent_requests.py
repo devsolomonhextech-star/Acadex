@@ -2,12 +2,26 @@
 import os
 from uuid import UUID
 
+from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.models import Guardian, MembershipRole, SchoolMembership, User
+from app.models import Guardian, MembershipRole, SchoolMembership, User, utcnow
 from app.security import hash_password
 
 PARENT_PASSWORD = "parent-portal-pass-123"
+
+
+async def _mark_email_verified(email: str) -> None:
+    """Sign-in requires a verified address; tests skip the emailed link."""
+    engine = create_async_engine(os.environ["TEST_DATABASE_URL"])
+    async with async_sessionmaker(engine)() as session:
+        await session.execute(
+            update(User)
+            .where(func.lower(User.email) == email.lower())
+            .values(email_verified_at=utcnow())
+        )
+        await session.commit()
+    await engine.dispose()
 
 
 async def _admin_session(client, slug: str):
@@ -19,6 +33,7 @@ async def _admin_session(client, slug: str):
         "password": "correct-horse-battery-staple",
     })
     assert created.status_code == 201, created.text
+    await _mark_email_verified(f"admin-{slug}@example.com")
     signed_in = await client.post("/api/v1/auth/login", json={
         "school_slug": slug,
         "email": f"admin-{slug}@example.com",
@@ -76,7 +91,10 @@ async def _give_portal_access(guardian_id: str, email: str, display_name: str) -
     async with async_sessionmaker(engine)() as session:
         guardian = await session.get(Guardian, UUID(guardian_id))
         assert guardian is not None
-        user = User(email=email, display_name=display_name, password_hash=hash_password(PARENT_PASSWORD))
+        user = User(
+            email=email, display_name=display_name,
+            password_hash=hash_password(PARENT_PASSWORD), email_verified_at=utcnow(),
+        )
         session.add(user)
         await session.flush()
         session.add(SchoolMembership(
@@ -105,7 +123,8 @@ async def _family(client, slug: str, admission="PR-101"):
 
 
 async def test_parent_request_flows_to_school_and_reply_reaches_parent(client):
-    headers, parent, context = await _family(client, "req-flow")
+    slug_flow = "req-flow"
+    headers, parent, context = await _family(client, slug_flow)
 
     created = await client.post("/api/v1/family/requests", headers=parent, json={
         "topic": "meeting",
@@ -157,6 +176,10 @@ async def test_parent_request_flows_to_school_and_reply_reaches_parent(client):
     assert alerts.status_code == 200, alerts.text
     reply_alert = next(item for item in alerts.json() if item["type"] == "parent_request_reply")
     assert reply_alert["link"] == f"/parents?request={request['id']}", reply_alert
+    assert reply_alert["title"] == f"New reply from Requests {slug_flow}"
+    # The alert names the request and previews the reply, so it stands on its own.
+    assert reply_alert["body"].startswith("Request to meet the class teacher")
+    assert "Friday at 3pm works" in reply_alert["body"]
 
     admin_alerts = await client.get("/api/v1/notifications", headers=headers)
     assert any(item["type"] == "parent_request" and request["id"] in (item["link"] or "") for item in admin_alerts.json())
@@ -201,6 +224,18 @@ async def test_parent_request_flows_to_school_and_reply_reaches_parent(client):
     assert final.json()["counts"]["open"] == 1
     assert final.json()["counts"]["resolved"] == 0
     assert final.json()["items"][0]["message_count"] == 4
+
+    # Every school reply alerts the parent, not just the first one.
+    second_reply = await client.post(
+        f"/api/v1/communications/requests/{request['id']}/messages", headers=headers,
+        json={"body": "Here is the updated reading list you asked about."},
+    )
+    assert second_reply.status_code == 200, second_reply.text
+    latest_alerts = await client.get("/api/v1/notifications", headers=parent)
+    replies = [item for item in latest_alerts.json() if item["type"] == "parent_request_reply"]
+    assert len(replies) == 2, replies
+    assert "updated reading list" in replies[0]["body"]
+    assert all(item["link"] == f"/parents?request={request['id']}" for item in replies)
 
 
 async def test_requests_are_scoped_to_the_school_and_the_family(client):

@@ -239,7 +239,8 @@ async def reply_to_request(
         raise HTTPException(status_code=422, detail=str(error)) from None
     school = await request_domain.school_name(session, context.school_id)
     title = f"New reply from {school}"
-    body = _push_body(payload.body)
+    # Name the request so the parent knows which conversation was answered.
+    body = _push_body(f"{summary.request.subject} · {payload.body}")
     recipients = [summary.guardian.user_id] if summary.guardian.user_id else []
     _notify(
         session,

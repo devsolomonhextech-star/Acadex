@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -23,6 +23,7 @@ import {
 } from "lucide-react-native";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   FloatingOrb,
@@ -49,6 +50,7 @@ const PAGE = "#F4F8FD";
 
 export default function ParentDeskScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { parent } = useAuth();
   const { children, selectedChild } = useChildren();
   const client = useQueryClient();
@@ -56,6 +58,14 @@ export default function ParentDeskScreen() {
   const [sheetTopic, setSheetTopic] = useState<RequestTopicId>("other");
   const [threadId, setThreadId] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const { request: requestParam } = useLocalSearchParams<{ request?: string }>();
+
+  // A reply notification links to one conversation: `/parents?request=<id>`.
+  useEffect(() => {
+    if (typeof requestParam !== "string" || !requestParam) return;
+    setThreadId(requestParam);
+    router.setParams({ request: "" });
+  }, [requestParam, router]);
 
   const requestsQuery = useQuery({
     queryKey: ["family-requests"],

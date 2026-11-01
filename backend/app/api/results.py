@@ -1,6 +1,6 @@
 """Weighted term totals, result preview, publication, and printable report cards."""
 from datetime import UTC, date, datetime
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated
 from uuid import UUID
 
@@ -519,28 +519,57 @@ async def publish_results(
     publication.withdrawn_at = None
     session.add(AuditEvent(school_id=context.school_id, actor_user_id=context.user_id,
                            action="results.published", resource_type="class_group", resource_id=group.id))
-    parent_user_ids = await resolve_recipients(
-        session, context.school_id, audience="class", class_group_id=group.id,
-    )
-    report_notice = f"{term.name} results are now available for {group.name}. Open Acadex Connect to view your child's report."
-    for user_id in parent_user_ids:
-        session.add(Notification(
-            school_id=context.school_id,
-            user_id=user_id,
-            title="Report card published",
-            body=report_notice,
-            type="report_published",
-            link="/academics",
-        ))
+    # One notice per child, naming the child, their average, grade and class
+    # position, so a parent with several children can tell which set of results
+    # was just published and open that child's report card.
+    result_rows = (await session.execute(
+        select(TermResult, Student.first_name, Student.last_name)
+        .join(Student, (Student.id == TermResult.student_id) & (Student.school_id == TermResult.school_id))
+        .where(
+            TermResult.school_id == context.school_id,
+            TermResult.term_id == term.id,
+            TermResult.class_group_id == group.id,
+        )
+        .order_by(Student.first_name, Student.last_name)
+    )).all()
+    class_size = len(result_rows)
+    notices: list[tuple[str, str, list[UUID]]] = []
+    for result, first_name, last_name in result_rows:
+        recipients = await resolve_recipients(
+            session, context.school_id, audience="student", student_id=result.student_id,
+        )
+        if not recipients:
+            continue
+        student_name = f"{first_name} {last_name}"
+        details = f"Average {result.aggregate_percent:.2f}%"
+        if result.grade:
+            details += f", grade {result.grade}"
+        if result.position:
+            details += f", position {result.position} of {class_size}"
+        body = (
+            f"{student_name}'s {term.name} results for {group.name} are now available. "
+            f"{details}. Open Acadex Connect to view the report card."
+        )
+        link = f"/academics/{result.student_id}"
+        for user_id in recipients:
+            session.add(Notification(
+                school_id=context.school_id,
+                user_id=user_id,
+                title="New examination results published",
+                body=body,
+                type="report_published",
+                link=link,
+            ))
+        notices.append((body, link, recipients))
     await session.commit()
-    if parent_user_ids:
+    for body, link, recipients in notices:
         await dispatch_parent_notifications(
             request, background,
             school_id=context.school_id,
-            recipients=parent_user_ids,
-            title="Report card published",
-            push_body=report_notice,
-            link="/academics",
+            recipients=recipients,
+            title="New examination results published",
+            push_body=body,
+            link=link,
             preference_key="reports",
         )
     return await _build_response(session, context, group, term)
