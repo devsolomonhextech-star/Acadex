@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Alert, Button, Input, Skeleton, Switch, Tabs, message } from 'antd'
-import { AppstoreOutlined, BellOutlined, BookOutlined, CheckCircleFilled, CreditCardOutlined, LockOutlined, SafetyCertificateOutlined, SettingOutlined, TeamOutlined } from '@ant-design/icons'
+import { AppstoreOutlined, BellOutlined, BookOutlined, CheckCircleFilled, ClockCircleOutlined, CreditCardOutlined, LockOutlined, SafetyCertificateOutlined, SettingOutlined, TeamOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/authHooks'
 import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 import { formatApiError } from '../../shared/api/errors'
 import { beginTotpSetup, disableTotp, enableTotp, fetchSchoolContact, fetchTotpStatus, updateSchoolContact, type TotpSetup } from './settingsApi'
+import DismissalSettings from './DismissalSettings'
+import NotificationSettings from './NotificationSettings'
 import SubscriptionSettings from './SubscriptionSettings'
 
-type SettingsTab = 'school' | 'users' | 'academic' | 'notifications' | 'billing' | 'system'
+type SettingsTab = 'school' | 'users' | 'academic' | 'notifications' | 'dismissal' | 'billing' | 'system'
 type ProfileSection = 'general' | 'contact' | 'branding' | 'social' | 'location' | 'hours'
 
 export default function SettingsPage() {
@@ -39,6 +41,7 @@ export default function SettingsPage() {
     { key: 'users', label: <span className="settings-tab-label"><TeamOutlined/>Users & roles</span> },
     { key: 'academic', label: <span className="settings-tab-label"><BookOutlined/>Academic settings</span> },
     { key: 'notifications', label: <span className="settings-tab-label"><BellOutlined/>Notifications</span> },
+    { key: 'dismissal', label: <span className="settings-tab-label"><ClockCircleOutlined/>Smart dismissal</span> },
     ...(user?.role === 'school_admin' ? [{ key: 'billing', label: <span className="settings-tab-label"><CreditCardOutlined/>Billing & subscription</span> }] : []),
     { key: 'system', label: <span className="settings-tab-label"><SettingOutlined/>System</span> },
   ]
@@ -65,7 +68,8 @@ export default function SettingsPage() {
     }
     if (activeTab === 'academic') return <section className="settings-panel settings-profile-panel"><div className="settings-section-title"><span className="settings-icon blue"><BookOutlined/></span><div><h2>Academic settings</h2><p>Review the academic period currently selected in your workspace.</p></div></div><div className="settings-info-grid"><div><small>Academic year</small><strong>{year?.name ?? 'No academic year selected'}</strong></div><div><small>Year dates</small><strong>{year ? `${year.starts_on} – ${year.ends_on}` : '—'}</strong></div><div><small>Current term</small><strong>{term?.name ?? 'All terms'}</strong></div><div><small>Term dates</small><strong>{term ? `${term.starts_on} – ${term.ends_on}` : '—'}</strong></div></div><Alert type="info" showIcon message="Change the academic period from the top bar to view the matching school data."/></section>
     if (activeTab === 'users') return <section className="settings-panel settings-profile-panel"><div className="settings-section-title"><span className="settings-icon blue"><TeamOutlined/></span><div><h2>Users & roles</h2><p>School access is organized by role.</p></div></div><div className="settings-role-grid">{[['School administrator','Manage school setup, staff access, and security.'],['Principal','Oversee academics and school operations.'],['Registrar','Manage student records and academic structure.'],['Teacher','Work with assigned classes, attendance, and results.'],['Finance','Manage fees, payments, and financial reports.']].map(([name,description]) => <article key={name}><strong>{name}</strong><span>{description}</span></article>)}</div></section>
-    if (activeTab === 'notifications') return <section className="settings-panel settings-placeholder"><span className="settings-icon blue"><BellOutlined/></span><div><small>NOTIFICATIONS</small><h2>School alerts</h2><p>Important attendance, finance, and school updates are available in the notification center.</p><span className="settings-soon">Notification preferences coming soon</span></div></section>
+    if (activeTab === 'notifications') return <NotificationSettings />
+    if (activeTab === 'dismissal') return <DismissalSettings />
     return <section className="settings-panel settings-security-panel">
       <div className="settings-section-title"><span className="settings-icon blue"><SafetyCertificateOutlined/></span><div><h2>Security & access</h2><p>Protect your school administrator account with a second sign-in step.</p></div></div>
       <div className="settings-security-card">

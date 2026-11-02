@@ -16,6 +16,22 @@ export type Child = {
   status: string;
   class_name?: string | null;
 };
+export type ParentInsight = {
+  id: string;
+  kind: string;
+  tone: "attention" | "positive" | "neutral";
+  title: string;
+  detail: string;
+  evidence: string;
+  source: string;
+  link: string;
+};
+export type ParentIntelligence = {
+  student_id: string;
+  student_name: string;
+  generated_at: string;
+  items: ParentInsight[];
+};
 export type ReportSummary = {
   term_id: string;
   term_name: string;

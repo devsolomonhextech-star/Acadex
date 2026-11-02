@@ -54,6 +54,8 @@ class School(Base):
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     slug: Mapped[str] = mapped_column(String(80), nullable=False)
     contact_phone: Mapped[str | None] = mapped_column(String(32))
+    notification_settings: Mapped[dict | None] = mapped_column(JSON)
+    dismissal_settings: Mapped[dict | None] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
     trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -190,6 +192,7 @@ class Student(Base):
     __tablename__ = "students"
     __table_args__ = (
         UniqueConstraint("school_id", "admission_number", name="uq_students_school_admission"),
+        UniqueConstraint("school_id", "ghana_card_number", name="uq_students_school_ghana_card"),
         UniqueConstraint("school_id", "id", name="uq_students_school_id"),
         Index("ix_students_school_status_name", "school_id", "status", "last_name", "first_name"),
     )
@@ -201,6 +204,7 @@ class Student(Base):
     last_name: Mapped[str] = mapped_column(String(80), nullable=False)
     date_of_birth: Mapped[date | None] = mapped_column(Date)
     gender: Mapped[str | None] = mapped_column(String(16))
+    ghana_card_number: Mapped[str | None] = mapped_column(String(20))
     phone: Mapped[str | None] = mapped_column(String(40))
     email: Mapped[str | None] = mapped_column(String(254))
     user_id: Mapped[UUID | None] = mapped_column(Uuid, ForeignKey("users.id", ondelete="RESTRICT"))
@@ -978,6 +982,7 @@ class Guardian(Base):
     phone: Mapped[str | None] = mapped_column(String(40))
     relationship: Mapped[str | None] = mapped_column(String(40))
     address: Mapped[str | None] = mapped_column(String(255))
+    ghana_card_number: Mapped[str | None] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

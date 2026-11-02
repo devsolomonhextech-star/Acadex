@@ -4,6 +4,7 @@ import type {
   Child,
   DailyActivity,
   FeesSummary,
+  ParentIntelligence,
   ParentRequestDetail,
   ParentRequestInbox,
   ParentRequestTopic,
@@ -47,6 +48,12 @@ export const familyApi = {
     ).data,
   weeklySummary: async (studentId: string, signal?: AbortSignal) =>
     (await api.get<WeeklySummary>(`/family/weekly-summary/${studentId}`, { signal })).data,
+  intelligence: async (studentId: string, signal?: AbortSignal) =>
+    (
+      await api.get<ParentIntelligence>(`/family/intelligence/${studentId}`, {
+        signal,
+      })
+    ).data,
   fees: async (studentId: string, signal?: AbortSignal) =>
     (await api.get<FeesSummary>(`/family/fees/${studentId}`, { signal })).data,
   timetable: async (studentId: string, signal?: AbortSignal) =>

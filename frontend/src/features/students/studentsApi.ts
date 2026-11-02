@@ -5,13 +5,34 @@ import type {
   Student, StudentPage, StudentProfile,
 } from '../../shared/api/types'
 
-type NewStudent = { admission_number: string; first_name: string; last_name: string; date_of_birth?: string }
+export type AdmissionGuardian = {
+  first_name: string
+  last_name: string
+  relationship?: string | null
+  phone?: string | null
+  email?: string | null
+  address?: string | null
+  ghana_card_number?: string | null
+}
+
+export type NewStudent = {
+  admission_number?: string
+  first_name: string
+  last_name: string
+  date_of_birth?: string
+  gender?: 'male' | 'female' | 'other'
+  ghana_card_number?: string | null
+  guardian?: AdmissionGuardian
+  academic_year_id?: string
+  class_group_id?: string
+}
 
 export type StudentEdit = {
   first_name?: string
   last_name?: string
   date_of_birth?: string | null
   gender?: 'male' | 'female' | 'other' | null
+  ghana_card_number?: string | null
   phone?: string | null
   email?: string | null
   status?: 'active' | 'transferred' | 'graduated' | 'withdrawn'
@@ -52,6 +73,10 @@ export function fetchStudentProfile(token: string, studentId: string) {
 
 export function createStudent(token: string, payload: NewStudent) {
   return apiRequest<Student>('/students', { method: 'POST', body: JSON.stringify(payload) }, token)
+}
+
+export function fetchNextAdmissionNumber(token: string) {
+  return apiRequest<{ admission_number: string }>('/students/next-admission-number', {}, token)
 }
 
 export function uploadImportPreview(token: string, file: File) {
@@ -129,7 +154,10 @@ export function messageStudentGuardians(
 
 export function updateGuardian(
   token: string, guardianId: string,
-  payload: { first_name?: string; last_name?: string; email?: string | null; phone?: string | null; relationship?: string | null },
+  payload: {
+    first_name?: string; last_name?: string; email?: string | null; phone?: string | null
+    relationship?: string | null; ghana_card_number?: string | null; address?: string | null
+  },
 ) {
   return apiRequest<{ guardian_id: string; student_id: string }>(`/guardians/${guardianId}`,
     { method: 'PATCH', body: JSON.stringify(payload) }, token)

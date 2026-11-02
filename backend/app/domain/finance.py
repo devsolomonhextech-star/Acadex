@@ -209,6 +209,7 @@ async def record_payment(
     note: str | None,
     parent_user_ids: Sequence[UUID] = (),
     student_name: str | None = None,
+    notify_parents: bool = True,
 ) -> PaymentOutcome:
     """Record a payment and allocate it to the student's open invoices, oldest first.
 
@@ -344,15 +345,16 @@ async def record_payment(
                     f"Receipt {payment.receipt_number}. Balance {currency} {outstanding:,.2f}."
                 )
             link = f"/fees?student_id={student_id}"
-            for parent_user_id in dict.fromkeys(parent_user_ids):
-                session.add(Notification(
-                    school_id=school_id,
-                    user_id=parent_user_id,
-                    title=title,
-                    body=body,
-                    type="fee_payment",
-                    link=link,
-                ))
+            if notify_parents:
+                for parent_user_id in dict.fromkeys(parent_user_ids):
+                    session.add(Notification(
+                        school_id=school_id,
+                        user_id=parent_user_id,
+                        title=title,
+                        body=body,
+                        type="fee_payment",
+                        link=link,
+                    ))
             await session.commit()
             return PaymentOutcome(
                 payment=payment,

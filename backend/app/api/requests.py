@@ -17,6 +17,7 @@ from app import models
 from app.api.auth import TenantContext, require_roles
 from app.db import get_session
 from app.domain import requests as request_domain
+from app.domain.alert_settings import alert_enabled
 from app.domain.requests import RequestSummary
 from app.push import send_expo_push
 from app.realtime import publish_user_event
@@ -242,22 +243,25 @@ async def reply_to_request(
     # Name the request so the parent knows which conversation was answered.
     body = _push_body(f"{summary.request.subject} · {payload.body}")
     recipients = [summary.guardian.user_id] if summary.guardian.user_id else []
-    _notify(
-        session,
-        school_id=context.school_id,
-        user_ids=recipients,
-        title=title,
-        body=body,
-        kind="parent_request_reply",
-        link=f"/parents?request={summary.request.id}",
-    )
+    alerts_on = await alert_enabled(session, context.school_id, "parent_desk")
+    if alerts_on:
+        _notify(
+            session,
+            school_id=context.school_id,
+            user_ids=recipients,
+            title=title,
+            body=body,
+            kind="parent_request_reply",
+            link=f"/parents?request={summary.request.id}",
+        )
     await session.commit()
-    for recipient in recipients:
-        await publish_user_event(http_request, context.school_id, recipient)
-    background.add_task(
-        send_expo_push, context.school_id, recipients, title, body,
-        {"link": f"/parents?request={summary.request.id}", "preference_key": "parent_desk"},
-    )
+    if alerts_on:
+        for recipient in recipients:
+            await publish_user_event(http_request, context.school_id, recipient)
+        background.add_task(
+            send_expo_push, context.school_id, recipients, title, body,
+            {"link": f"/parents?request={summary.request.id}", "preference_key": "parent_desk"},
+        )
     return await _detail_response(session, summary)
 
 
@@ -281,7 +285,8 @@ async def update_request_status(
     title = "Request resolved"
     body = f"{request.subject} · {request.reference}"
     recipients = [summary.guardian.user_id] if summary.guardian.user_id else []
-    if changed:
+    alerts_on = changed and await alert_enabled(session, context.school_id, "parent_desk")
+    if alerts_on:
         _notify(
             session,
             school_id=context.school_id,
@@ -292,13 +297,13 @@ async def update_request_status(
             link=f"/parents?request={request.id}",
         )
     await session.commit()
-    if changed:
+    if alerts_on:
         for recipient in recipients:
             await publish_user_event(http_request, context.school_id, recipient)
         background.add_task(
-        send_expo_push, context.school_id, recipients, title, body,
-        {"link": f"/parents?request={request.id}", "preference_key": "parent_desk"},
-    )
+            send_expo_push, context.school_id, recipients, title, body,
+            {"link": f"/parents?request={request.id}", "preference_key": "parent_desk"},
+        )
     return await _detail_response(session, summary)
 
 

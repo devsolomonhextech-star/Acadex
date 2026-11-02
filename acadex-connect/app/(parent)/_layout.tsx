@@ -96,6 +96,7 @@ export default function ParentLayout() {
           options={{ title: "My Children", headerBackTitle: "Back" }}
         />
         <Stack.Screen name="attendance" options={{ headerShown: false }} />
+        <Stack.Screen name="intelligence" options={{ headerShown: false }} />
         <Stack.Screen name="fees" options={{ headerShown: false }} />
         <Stack.Screen name="timetable" options={{ title: "Class timetable" }} />
         <Stack.Screen

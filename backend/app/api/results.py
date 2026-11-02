@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import TenantContext, require_roles
 from app.db import get_session
+from app.domain.alert_settings import alert_enabled
 from app.domain.notifications import resolve_recipients
 from app.domain.parent_notifications import dispatch_parent_notifications
 from app.domain.results import (
@@ -534,7 +535,8 @@ async def publish_results(
     )).all()
     class_size = len(result_rows)
     notices: list[tuple[str, str, list[UUID]]] = []
-    for result, first_name, last_name in result_rows:
+    alerts_on = await alert_enabled(session, context.school_id, "results")
+    for result, first_name, last_name in (result_rows if alerts_on else ()):
         recipients = await resolve_recipients(
             session, context.school_id, audience="student", student_id=result.student_id,
         )

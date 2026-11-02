@@ -1,9 +1,10 @@
 import re
-
-from datetime import date, datetime
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from app.domain.students import GHANA_CARD_ERROR, normalize_ghana_card
 
 
 class SchoolRegistration(BaseModel):
@@ -62,8 +63,17 @@ class GuardianCreate(BaseModel):
     phone: str | None = Field(default=None, max_length=40)
     relationship: str | None = Field(default=None, max_length=40)
     address: str | None = Field(default=None, max_length=255)
+    ghana_card_number: str | None = Field(default=None, max_length=20)
     student_id: UUID
     is_primary: bool = False
+
+    @field_validator("ghana_card_number")
+    @classmethod
+    def normalize_card(cls, value: str | None) -> str | None:
+        try:
+            return normalize_ghana_card(value)
+        except ValueError as error:
+            raise ValueError(GHANA_CARD_ERROR) from error
 
 
 class GuardianLinkResponse(BaseModel):
@@ -74,6 +84,7 @@ class GuardianLinkResponse(BaseModel):
     email: str | None = None
     phone: str | None = None
     relationship: str | None = None
+    ghana_card_number: str | None = None
     is_primary: bool
 
 

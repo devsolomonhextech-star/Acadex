@@ -4,13 +4,14 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import models
 from app.api.auth import TenantContext, require_roles
 from app.db import get_session
+from app.domain.students import GHANA_CARD_ERROR, normalize_ghana_card
 from app.email import send_email
 from app.schemas import GuardianCreate, GuardianLinkResponse
 from app.settings import get_settings
@@ -28,6 +29,8 @@ class GuardianUpdate(BaseModel):
     email: str | None = None
     phone: str | None = None
     relationship: str | None = None
+    ghana_card_number: str | None = None
+    address: str | None = Field(default=None, max_length=255)
 
     @field_validator("first_name", "last_name")
     @classmethod
@@ -35,6 +38,14 @@ class GuardianUpdate(BaseModel):
         if value is not None and not value:
             raise ValueError("Name cannot be empty")
         return value
+
+    @field_validator("ghana_card_number")
+    @classmethod
+    def normalize_card(cls, value: str | None) -> str | None:
+        try:
+            return normalize_ghana_card(value)
+        except ValueError as error:
+            raise ValueError(GHANA_CARD_ERROR) from error
 
 
 @router.post("", response_model=GuardianLinkResponse, status_code=status.HTTP_201_CREATED)
@@ -56,6 +67,7 @@ async def create_guardian(
         phone=payload.phone,
         relationship=payload.relationship,
         address=payload.address,
+        ghana_card_number=payload.ghana_card_number,
     )
     session.add(guardian)
     await session.flush()
@@ -78,6 +90,7 @@ async def create_guardian(
         email=guardian.email,
         phone=guardian.phone,
         relationship=guardian.relationship,
+        ghana_card_number=guardian.ghana_card_number,
         is_primary=link.is_primary,
     )
 
@@ -121,6 +134,7 @@ async def update_guardian(
         email=guardian.email,
         phone=guardian.phone,
         relationship=guardian.relationship,
+        ghana_card_number=guardian.ghana_card_number,
         is_primary=link.is_primary,
     )
 
@@ -213,6 +227,7 @@ async def list_guardians_for_student(
                 email=guardian.email,
                 phone=guardian.phone,
                 relationship=guardian.relationship,
+                ghana_card_number=guardian.ghana_card_number,
                 is_primary=link.is_primary,
             )
         )

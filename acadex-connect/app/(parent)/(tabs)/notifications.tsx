@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   Bell,
   Check,
@@ -8,7 +8,7 @@ import {
   MessageSquareText,
   Wallet,
 } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -41,6 +41,24 @@ export default function NotificationsScreen() {
   const router = useRouter();
   const [absence, setAbsence] = useState<{ studentId: string; date: string; detail: string } | null>(null);
   const [reason, setReason] = useState("");
+  const params = useLocalSearchParams<{ student_id?: string; date?: string }>();
+
+  // Tapping an absence push opens the reason sheet for that child and day.
+  useEffect(() => {
+    if (typeof params.student_id !== "string" || !params.student_id) return;
+    if (typeof params.date !== "string" || !params.date) return;
+    const readable = new Date(`${params.date}T00:00:00`).toLocaleDateString(
+      undefined,
+      { weekday: "long", day: "numeric", month: "long" },
+    );
+    setReason("");
+    setAbsence({
+      studentId: params.student_id,
+      date: params.date,
+      detail: `Your child was marked absent on ${readable}. The school would like to know why.`,
+    });
+    router.setParams({ student_id: "", date: "" });
+  }, [params.date, params.student_id, router]);
   const query = useQuery({
     queryKey: ["notifications"],
     queryFn: ({ signal }) => communicationsApi.notifications(signal),

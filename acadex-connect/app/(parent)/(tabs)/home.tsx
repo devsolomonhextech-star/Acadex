@@ -10,6 +10,7 @@ import {
   Check,
   ChevronRight,
   GraduationCap,
+  Sparkles,
   TrendingUp,
   Wallet,
   X,
@@ -80,6 +81,12 @@ export default function HomeScreen() {
     enabled: !!selectedChild,
     staleTime: 60_000,
   });
+  const intelligence = useQuery({
+    queryKey: ["intelligence", selectedChild?.id],
+    queryFn: ({ signal }) => familyApi.intelligence(selectedChild!.id, signal),
+    enabled: !!selectedChild,
+    staleTime: 60_000,
+  });
   const events = useQuery({
     queryKey: ["events", selectedChild?.id],
     queryFn: ({ signal }) => familyApi.events(selectedChild!.id, signal),
@@ -99,6 +106,7 @@ export default function HomeScreen() {
     void fees.refetch();
     void attendance.refetch();
     void weeklySummary.refetch();
+    void intelligence.refetch();
     void announcements.refetch();
     void events.refetch();
     void notifications.refetch();
@@ -129,6 +137,7 @@ export default function HomeScreen() {
             fees.isRefetching ||
             attendance.isRefetching ||
             weeklySummary.isRefetching ||
+            intelligence.isRefetching ||
             announcements.isRefetching ||
             events.isRefetching ||
             notifications.isRefetching
@@ -301,7 +310,96 @@ export default function HomeScreen() {
           </Animated.View>
 
           <Animated.View
-            entering={FadeInUp.delay(320).duration(320)}
+            entering={FadeInUp.delay(300).duration(320)}
+            style={styles.sectionHeading}
+          >
+            <View style={styles.sectionLabel}>
+              <View style={styles.sectionIcon}>
+                <Sparkles
+                  size={19}
+                  color={colors.blue}
+                  strokeWidth={2.1}
+                />
+              </View>
+              <View style={styles.sectionCopy}>
+                <Text style={styles.sectionTitle}>Parent Intelligence</Text>
+                <Text style={styles.sectionCaption}>
+                  What needs attention, from school records
+                </Text>
+              </View>
+            </View>
+            <Pressable
+              onPress={() => router.push("/(parent)/intelligence")}
+              hitSlop={8}
+            >
+              <ViewAllLabel />
+            </Pressable>
+          </Animated.View>
+          <Animated.View entering={FadeInUp.delay(330).duration(320)}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open Parent Intelligence"
+              onPress={() => router.push("/(parent)/intelligence")}
+              style={styles.intelCard}
+            >
+              {intelligence.isLoading ? (
+                <Text style={styles.mutedText}>
+                  Checking your child’s school records…
+                </Text>
+              ) : intelligence.error ? (
+                <Text style={styles.mutedText}>
+                  Intelligence is unavailable right now.
+                </Text>
+              ) : intelligence.data?.items.length ? (
+                intelligence.data.items.slice(0, 3).map((item, index, shown) => (
+                  <View
+                    key={item.id}
+                    style={[
+                      styles.intelRow,
+                      index === shown.length - 1 && styles.intelRowLast,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.intelDot,
+                        item.tone === "attention"
+                          ? styles.intelDotAttention
+                          : item.tone === "positive"
+                            ? styles.intelDotPositive
+                            : styles.intelDotNeutral,
+                      ]}
+                    />
+                    <View style={styles.intelCopy}>
+                      <Text style={styles.intelTitle} numberOfLines={2}>
+                        {item.title}
+                      </Text>
+                      <Text style={styles.intelEvidence} numberOfLines={1}>
+                        {item.source} · {item.evidence}
+                      </Text>
+                    </View>
+                    <ArrowUpRight
+                      size={15}
+                      color={colors.muted}
+                      strokeWidth={2.1}
+                    />
+                  </View>
+                ))
+              ) : (
+                <View style={styles.intelEmpty}>
+                  <Text style={styles.intelEmptyTitle}>
+                    Nothing needs attention right now
+                  </Text>
+                  <Text style={styles.intelEmptyBody}>
+                    Acadex only flags something when your school’s records
+                    support it.
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          </Animated.View>
+
+          <Animated.View
+            entering={FadeInUp.delay(360).duration(320)}
             style={styles.sectionHeading}
           >
             <View style={styles.sectionLabel}>
@@ -1049,6 +1147,41 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  intelCard: {
+    marginTop: 12,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: "#DCE9FA",
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+  },
+  intelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#E7EEF8",
+  },
+  intelRowLast: {
+    borderBottomWidth: 0,
+  },
+  intelDot: { width: 8, height: 8, borderRadius: 4 },
+  intelDotAttention: { backgroundColor: "#F5A623" },
+  intelDotPositive: { backgroundColor: "#1FA968" },
+  intelDotNeutral: { backgroundColor: colors.blue },
+  intelCopy: { flex: 1, minWidth: 0, gap: 2 },
+  intelTitle: {
+    color: colors.ink,
+    fontSize: 12.5,
+    fontWeight: "700",
+    lineHeight: 17,
+  },
+  intelEvidence: { color: colors.muted, fontSize: 10, fontWeight: "500" },
+  intelEmpty: { paddingVertical: 12, gap: 3 },
+  intelEmptyTitle: { color: colors.ink, fontSize: 12.5, fontWeight: "700" },
+  intelEmptyBody: { color: colors.muted, fontSize: 11, lineHeight: 16 },
   weeklySummaryCard: {
     marginTop: 13,
     padding: 15,

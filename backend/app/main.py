@@ -20,13 +20,13 @@ from app.api.finance import router as finance_router
 from app.api.grading import router as grading_router
 from app.api.guardians import router as guardians_router
 from app.api.mobile import router as mobile_router
-from app.api.overview import router as overview_router
 from app.api.onboarding import router as onboarding_router
+from app.api.overview import router as overview_router
 from app.api.requests import family_router as family_requests_router
 from app.api.requests import school_router as school_requests_router
 from app.api.results import router as results_router
-from app.realtime import router as realtime_router
 from app.api.school_notifications import router as school_notifications_router
+from app.api.school_settings import router as school_settings_router
 from app.api.staff import router as staff_router
 from app.api.student_imports import router as student_imports_router
 from app.api.student_profile import router as student_profile_router
@@ -36,6 +36,7 @@ from app.api.subscriptions import router as subscriptions_router
 from app.api.tasks import router as tasks_router
 from app.api.timetable import router as timetable_router
 from app.db import engine
+from app.realtime import router as realtime_router
 from app.settings import get_settings
 
 settings = get_settings()
@@ -80,6 +81,7 @@ app.include_router(guardians_router)
 app.include_router(communications_router)
 app.include_router(school_requests_router)
 app.include_router(school_notifications_router)
+app.include_router(school_settings_router)
 app.include_router(family_requests_router)
 app.include_router(family_router)
 app.include_router(overview_router)

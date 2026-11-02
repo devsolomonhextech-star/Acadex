@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import TenantContext, require_roles
 from app.db import get_session
+from app.domain.alert_settings import alert_enabled
 from app.domain.finance import (
     FinanceError,
     PaymentOutcome,
@@ -706,6 +707,7 @@ async def create_payment(
     parent_user_ids = await resolve_recipients(
         session, context.school_id, audience="student", student_id=student.id,
     )
+    fee_alerts = await alert_enabled(session, context.school_id, "fees")
     try:
         outcome: PaymentOutcome = await record_payment(
             session,
@@ -719,10 +721,11 @@ async def create_payment(
             payload.note.strip() if payload.note else None,
             parent_user_ids=parent_user_ids,
             student_name=f"{student.first_name} {student.last_name}",
+            notify_parents=fee_alerts,
         )
     except FinanceError as error:
         raise _conflict(str(error), error.status_code) from None
-    if parent_user_ids:
+    if parent_user_ids and fee_alerts:
         await dispatch_parent_notifications(
             request, background,
             school_id=context.school_id,

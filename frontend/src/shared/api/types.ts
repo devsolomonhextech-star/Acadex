@@ -22,6 +22,8 @@ export type Student = {
   first_name: string
   last_name: string
   date_of_birth: string | null
+  gender?: string | null
+  ghana_card_number?: string | null
   status: 'active' | 'transferred' | 'graduated' | 'withdrawn'
   class_name?: string | null
   guardian_name?: string | null
@@ -32,12 +34,14 @@ export type StudentPage = { items: Student[]; page: number; page_size: number; t
 export type ProfileGuardian = {
   guardian_id: string; full_name: string; relationship: string
   email: string | null; phone: string | null; is_primary: boolean
+  ghana_card_number: string | null; address: string | null
   has_portal_login: boolean
 }
 export type ProfileStudentInfo = {
   id: string; admission_number: string; first_name: string; last_name: string
   display_name: string; date_of_birth: string | null; age_years: number | null
-  gender: string | null; phone: string | null; email: string | null
+  gender: string | null; ghana_card_number: string | null
+  phone: string | null; email: string | null
   status: string; has_portal_login: boolean
 }
 export type ProfileSubject = {

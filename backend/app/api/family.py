@@ -11,6 +11,7 @@ from app import models
 from app.api.auth import TenantContext, require_roles
 from app.api.students import StudentResponse
 from app.db import get_session
+from app.domain import parent_insights
 
 router = APIRouter(prefix="/api/v1/family", tags=["family"])
 
@@ -216,6 +217,47 @@ async def child_weekly_summary(
         "attendance": {key: attendance.get(key, 0) for key in ("present", "late", "absent", "excused")},
         "results": results,
         "average_score_percent": average,
+    }
+
+
+@router.get("/intelligence/{student_id}")
+async def child_intelligence(
+    student_id: UUID,
+    context: Annotated[TenantContext, Depends(require_roles(models.MembershipRole.PARENT))],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    """Explain what needs attention, using only records the school entered.
+
+    Each insight points back at its evidence (attendance register, gradebook,
+    assessment list or fee ledger) so a parent can verify the claim.
+    """
+    await _guardian_for_child(session, context, student_id)
+    student = await session.scalar(select(models.Student).where(
+        models.Student.school_id == context.school_id,
+        models.Student.id == student_id,
+    ))
+    if student is None:
+        raise HTTPException(status_code=404, detail="Student not found")
+    insights = await parent_insights.insights_for_student(
+        session, school_id=context.school_id, student=student,
+    )
+    return {
+        "student_id": student.id,
+        "student_name": f"{student.first_name} {student.last_name}",
+        "generated_at": datetime.now(UTC),
+        "items": [
+            {
+                "id": f"{insight.kind}:{student.id}:{index}",
+                "kind": insight.kind,
+                "tone": insight.tone,
+                "title": insight.title,
+                "detail": insight.detail,
+                "evidence": insight.evidence,
+                "source": insight.source,
+                "link": insight.link,
+            }
+            for index, insight in enumerate(insights)
+        ],
     }
 
 

@@ -11,8 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import TenantContext, require_roles
 from app.db import get_session
-from app.push import send_expo_push
-from app.realtime import publish_user_event
+from app.domain.alert_settings import alert_enabled
 from app.models import (
     AcademicYear,
     AttendanceRecord,
@@ -24,13 +23,27 @@ from app.models import (
     Notification,
     SchoolMembership,
     Student,
-    StudentGuardian,
     StudentEnrollment,
+    StudentGuardian,
 )
+from app.push import send_expo_push
+from app.realtime import publish_user_event
 
 router = APIRouter(prefix="/api/v1/attendance", tags=["attendance"])
 attendance_roles = (MembershipRole.SCHOOL_ADMIN, MembershipRole.PRINCIPAL, MembershipRole.REGISTRAR, MembershipRole.TEACHER)
 AttendanceStatus = Literal["present", "absent", "late", "excused"]
+
+ABSENCE_TITLE = "Absence recorded"
+WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+MONTHS = (
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+)
+
+
+def _long_date(day: date) -> str:
+    """A date a parent can read at a glance in a push notification."""
+    return f"{WEEKDAYS[day.weekday()]}, {day.day} {MONTHS[day.month - 1]} {day.year}"
 
 
 class AttendanceStudent(BaseModel):
@@ -193,7 +206,7 @@ async def save_sheet(
                      "changed_students": audited_changes},
         ))
     recipients: dict[UUID, list[tuple[UUID, str]]] = {}
-    if newly_absent:
+    if newly_absent and await alert_enabled(session, context.school_id, "attendance"):
         rows = (await session.execute(
             select(Guardian.user_id, Student.id, Student.first_name, Student.last_name)
             .join(StudentGuardian, StudentGuardian.guardian_id == Guardian.id)
@@ -201,12 +214,13 @@ async def save_sheet(
             .where(Guardian.school_id == context.school_id, StudentGuardian.school_id == context.school_id,
                    Student.id.in_(newly_absent), Guardian.user_id.is_not(None))
         )).all()
+        long_date = _long_date(payload.attendance_date)
         for user_id, student_id, first_name, last_name in rows:
             name = f"{first_name} {last_name}"
             recipients.setdefault(user_id, []).append((student_id, name))
             session.add(Notification(
-                school_id=context.school_id, user_id=user_id, title="Attendance update",
-                body=f"{name} was marked absent on {payload.attendance_date.isoformat()}.",
+                school_id=context.school_id, user_id=user_id, title=ABSENCE_TITLE,
+                body=f"{name} was marked absent on {long_date}. Send a reason from Acadex.",
                 type="attendance_absent",
                 link=f"/notifications?student_id={student_id}&date={payload.attendance_date.isoformat()}",
             ))
@@ -217,8 +231,11 @@ async def save_sheet(
         raise HTTPException(status_code=409, detail="Attendance was updated at the same time. Reload and try again") from None
     for user_id, children in recipients.items():
         names = sorted({name for _, name in children})
-        message = f"{', '.join(names)} {'were' if len(names) > 1 else 'was'} marked absent on {payload.attendance_date.isoformat()}."
+        message = (f"{', '.join(names)} {'were' if len(names) > 1 else 'was'} marked absent on "
+                   f"{_long_date(payload.attendance_date)}. Send a reason from Acadex.")
+        # Carry the child and date so tapping the push opens the reason flow.
+        link = f"/notifications?student_id={children[0][0]}&date={payload.attendance_date.isoformat()}"
         await publish_user_event(request, context.school_id, user_id)
-        background.add_task(send_expo_push, context.school_id, [user_id], "Attendance update", message,
-                            {"link": "/notifications", "preference_key": "attendance"})
+        background.add_task(send_expo_push, context.school_id, [user_id], ABSENCE_TITLE, message,
+                            {"link": link, "preference_key": "attendance"})
     return await get_sheet(payload.class_group_id, payload.attendance_date, context, session)

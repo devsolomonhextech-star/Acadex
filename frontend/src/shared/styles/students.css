@@ -170,3 +170,33 @@
 @media print{.fee-receipt-document{width:100%;max-width:none;border:0;border-radius:0}.fee-receipt-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}.fee-receipt-amount,.fee-receipt-method,.fee-receipt-status,.fee-receipt-note{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 .students-page .students-heading h1{margin:4px 0 5px;color:#18294b;font-size:24px;letter-spacing:-.7px}.students-page .students-heading p{font-size:12px}.student-row-action{display:inline-flex;align-items:center;justify-content:center;min-width:48px;height:27px;padding:0 10px;border:1px solid #e4eaf4;border-radius:7px;color:#3866e9;background:#fff;font-size:12px;font-weight:600;text-decoration:none}.student-row-action:hover{border-color:#b9c8f6;background:#f6f8ff;color:#315bd4}.students-panel .ant-table-tbody>tr:hover>td{background:#fafbff}@media(max-width:700px){.students-page .students-heading h1{font-size:21px}}
 .student-guardian-cell{display:flex;flex-direction:column;gap:3px}.student-guardian-cell strong{color:#49536b;font-size:12px;font-weight:600}.student-guardian-cell small{color:#969cac;font-size:12px}.students-panel .ant-table-thead>tr>th{white-space:nowrap}.students-panel .ant-table-tbody>tr>td{vertical-align:middle}
+
+.admit-steps{margin:2px 0 18px}
+.admit-steps .ant-steps-item-title{font-size:12px!important}
+.admit-form .ant-select{width:100%;font-size:12px}
+.admit-form .ant-select .ant-select-selector{min-height:35px!important;border-radius:7px!important;align-items:center}
+.admit-form .ant-input{font-size:12px;min-height:35px;border-radius:7px}
+.admit-form .ant-picker{border-radius:7px}
+.admit-number-hint{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;border:1px dashed #cdd6ee;border-radius:9px;background:#f7f9ff;margin:2px 0 6px}
+.admit-number-hint span{display:flex;flex-direction:column;gap:2px}
+.admit-number-hint small{font-size:12px;letter-spacing:.5px;color:#8e97ad}
+.admit-number-hint strong{font-family:Manrope,sans-serif;font-size:15px;color:#2f3b5c;letter-spacing:.4px}
+.admit-number-hint em{font-style:normal;font-size:12px;color:#6d7ea8;background:#e9eeff;border-radius:20px;padding:4px 9px;white-space:nowrap}
+.admit-help{font-size:12px;color:#9ba1ae;line-height:1.5;margin-bottom:2px}
+.admit-step-intro{margin:0 0 4px;font-size:12px;color:#858c9e;line-height:1.6}
+.admit-review{display:grid;gap:10px;padding:13px;border:1px solid #edf0f6;border-radius:9px;background:#fbfcff;margin:2px 0 8px}
+.admit-review>div{display:flex;flex-direction:column;gap:3px}
+.admit-review small{font-size:12px;letter-spacing:.5px;color:#9aa1b2}
+.admit-review strong{font-size:13px;color:#2f3648}
+.admit-review span{font-size:12px;color:#7b8397}
+.admit-done{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding:10px 4px 2px}
+.admit-done-icon{height:46px;width:46px;display:grid;place-items:center;border-radius:50%;background:#e8f7ef;color:#1f9d63;font-size:20px}
+.admit-done h3{margin:4px 0 0;font-family:Manrope,sans-serif;font-size:17px;color:#272d40}
+.admit-number{display:flex;flex-direction:column;gap:4px;align-items:center;padding:12px 18px;border-radius:10px;background:#f4f7ff;border:1px solid #e4eafc;margin:6px 0 2px}
+.admit-number small{font-size:12px;letter-spacing:1px;color:#8e97ad}
+.admit-number strong{font-family:Manrope,sans-serif;font-size:19px;letter-spacing:1px;color:#32406b}
+.admit-number span{font-size:12px;color:#8b93a6;max-width:300px;line-height:1.5}
+.admit-done-facts{display:flex;gap:22px;margin:4px 0 6px}
+.admit-done-facts>span{display:flex;flex-direction:column;gap:3px}
+.admit-done-facts small{font-size:12px;letter-spacing:.5px;color:#9aa1b2}
+.admit-done-facts strong{font-size:13px;color:#2f3648}

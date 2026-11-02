@@ -376,6 +376,7 @@ export default function StudentProfilePage() {
         : '—' },
     { icon: 'users', label: 'Gender', value: student.gender
         ? student.gender[0].toUpperCase() + student.gender.slice(1) : '—' },
+    { icon: 'id-badge-2', label: 'Ghana Card', value: student.ghana_card_number ?? 'Not provided' },
     { icon: 'phone', label: 'Phone', value: student.phone ?? '—' },
     { icon: 'mail', label: 'Email', value: student.email ?? '—' },
     { icon: 'users', label: 'Parent / guardian', value: primaryGuardian?.full_name ?? 'Not linked',
@@ -838,6 +839,8 @@ export default function StudentProfilePage() {
                   <strong>{guardian.full_name} <small>({guardian.relationship})</small></strong>
                   {guardian.phone && <span>{guardian.phone}</span>}
                   {guardian.email && <span>{guardian.email}</span>}
+                  {guardian.ghana_card_number && <span>Ghana Card {guardian.ghana_card_number}</span>}
+                  {guardian.address && <span>{guardian.address}</span>}
                 </div>
               </div>
               {canEdit && guardian.email && <Button size="small" icon={<MailOutlined />}
@@ -903,6 +906,7 @@ export default function StudentProfilePage() {
           last_name: student.last_name,
           date_of_birth: student.date_of_birth ? dayjs(student.date_of_birth) : null,
           gender: student.gender ?? undefined,
+          ghana_card_number: student.ghana_card_number ?? '',
           phone: student.phone ?? '',
           email: student.email ?? '',
           status: student.status,
@@ -912,6 +916,7 @@ export default function StudentProfilePage() {
           last_name: values.last_name,
           date_of_birth: values.date_of_birth ? (values.date_of_birth as Dayjs).format('YYYY-MM-DD') : null,
           gender: values.gender ?? null,
+          ghana_card_number: values.ghana_card_number || null,
           phone: values.phone || null,
           email: values.email || null,
           status: values.status,
@@ -932,10 +937,12 @@ export default function StudentProfilePage() {
           </Form.Item></div>
         </div>
         <div className="student-form-row">
+          <div><Form.Item name="ghana_card_number" label="Ghana Card">
+            <Input placeholder="GHA-123456789-0" /></Form.Item></div>
           <div><Form.Item name="phone" label="Phone"><Input placeholder="+233 …" /></Form.Item></div>
-          <div><Form.Item name="email" label="Email" rules={[{ type: 'email', message: 'Not a valid email' }]}>
-            <Input placeholder="student@school.example.com" /></Form.Item></div>
         </div>
+        <Form.Item name="email" label="Email" rules={[{ type: 'email', message: 'Not a valid email' }]}>
+          <Input placeholder="student@school.example.com" /></Form.Item>
         <Form.Item name="status" label="Status">
           <Select options={[
             { value: 'active', label: 'Active' }, { value: 'transferred', label: 'Transferred' },
@@ -1070,6 +1077,8 @@ export default function StudentProfilePage() {
           relationship: guardianEdit?.relationship ?? undefined,
           phone: guardianEdit?.phone ?? '',
           email: guardianEdit?.email ?? '',
+          ghana_card_number: guardianEdit?.ghana_card_number ?? '',
+          address: guardianEdit?.address ?? '',
         }}
         onFinish={values => guardianMutation.mutate({
           first_name: values.first_name,
@@ -1077,6 +1086,8 @@ export default function StudentProfilePage() {
           relationship: values.relationship || null,
           phone: values.phone || null,
           email: values.email || null,
+          ghana_card_number: values.ghana_card_number || null,
+          address: values.address || null,
         })}>
         <div className="student-form-row">
           <div><Form.Item name="first_name" label="First name" rules={[{ required: true, message: 'Required' }]}>
@@ -1095,6 +1106,12 @@ export default function StudentProfilePage() {
         <Form.Item name="email" label="Email" rules={[{ type: 'email', message: 'Not a valid email' }]}>
           <Input placeholder="parent@example.com" />
         </Form.Item>
+        <div className="student-form-row">
+          <div><Form.Item name="ghana_card_number" label="Ghana Card">
+            <Input placeholder="GHA-123456789-0" /></Form.Item></div>
+          <div><Form.Item name="address" label="Address">
+            <Input placeholder="Area, town" /></Form.Item></div>
+        </div>
         <div className="student-form-actions">
           <Button onClick={() => setGuardianEdit(null)}>Cancel</Button>
           <Button type="primary" htmlType="submit" loading={guardianMutation.isPending}>Save guardian</Button>

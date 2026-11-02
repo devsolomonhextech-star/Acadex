@@ -16,22 +16,24 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import TenantContext, _front_link, _make_action_token, require_roles
-from app.email import send_email
 from app.api.students import student_roles
 from app.api.subscriptions import subscription_limit_error
 from app.db import get_session
+from app.domain.students import GHANA_CARD_ERROR, normalize_ghana_card
 from app.domain.subscriptions import StudentSubscriptionRequired, require_student_capacity
+from app.email import send_email
 from app.models import (
     AcademicTerm,
     AcademicYear,
-    AuditEvent,
     AttendanceRecord,
     AttendanceSession,
+    AuditEvent,
     BehaviorRecord,
     ClassGroup,
     ClassSubjectAssignment,
@@ -72,6 +74,7 @@ class ProfileStudent(BaseModel):
     date_of_birth: date | None
     age_years: int | None
     gender: str | None
+    ghana_card_number: str | None
     phone: str | None
     email: str | None
     status: str
@@ -93,6 +96,8 @@ class ProfileGuardian(BaseModel):
     relationship: str
     email: str | None
     phone: str | None
+    ghana_card_number: str | None
+    address: str | None
     is_primary: bool
     has_portal_login: bool
 
@@ -321,6 +326,7 @@ async def student_profile(
         guardian_id=guardian.id,
         full_name=f"{guardian.first_name} {guardian.last_name}",
         relationship=guardian.relationship, email=guardian.email, phone=guardian.phone,
+        ghana_card_number=guardian.ghana_card_number, address=guardian.address,
         is_primary=link.is_primary, has_portal_login=guardian.user_id is not None,
     ) for link, guardian in guardian_rows]
     if context.role == MembershipRole.TEACHER:
@@ -524,6 +530,7 @@ async def student_profile(
             display_name=f"{student.first_name} {student.last_name}",
             date_of_birth=student.date_of_birth, age_years=age,
             gender=student.gender,
+            ghana_card_number=student.ghana_card_number,
             phone=None if context.role == MembershipRole.TEACHER else student.phone,
             email=None if context.role == MembershipRole.TEACHER else student.email,
             status=student.status, has_portal_login=student.user_id is not None,
@@ -622,6 +629,7 @@ class StudentUpdate(BaseModel):
     last_name: str | None = Field(default=None, min_length=1, max_length=80)
     date_of_birth: date | None = None
     gender: Literal["male", "female", "other"] | None = None
+    ghana_card_number: str | None = Field(default=None, max_length=20)
     phone: str | None = Field(default=None, max_length=40)
     email: str | None = Field(default=None, max_length=254)
     status: Literal["active", "transferred", "graduated", "withdrawn"] | None = None
@@ -651,6 +659,14 @@ class StudentUpdate(BaseModel):
             raise ValueError("Date of birth cannot be in the future")
         return value
 
+    @field_validator("ghana_card_number")
+    @classmethod
+    def normalize_card(cls, value: str | None) -> str | None:
+        try:
+            return normalize_ghana_card(value)
+        except ValueError as error:
+            raise ValueError(GHANA_CARD_ERROR) from error
+
 
 @router.patch("/{student_id}", response_model=ProfileStudent)
 async def edit_student(
@@ -669,7 +685,14 @@ async def edit_student(
             raise subscription_limit_error(error) from None
     for field, value in changes.items():
         setattr(student, field, value)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="That Ghana Card number is already on another student record",
+        ) from None
     await session.refresh(student)
     today = date.today()
     age = None
@@ -682,7 +705,8 @@ async def edit_student(
         first_name=student.first_name, last_name=student.last_name,
         display_name=f"{student.first_name} {student.last_name}",
         date_of_birth=student.date_of_birth, age_years=age,
-        gender=student.gender, phone=student.phone, email=student.email,
+        gender=student.gender, ghana_card_number=student.ghana_card_number,
+        phone=student.phone, email=student.email,
         status=student.status, has_portal_login=student.user_id is not None,
     )
 

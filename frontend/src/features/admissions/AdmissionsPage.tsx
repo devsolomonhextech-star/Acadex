@@ -9,6 +9,7 @@ import { useAcademicPeriod } from '../../shared/academic/AcademicPeriodContext'
 import { formatApiError } from '../../shared/api/errors'
 import type { Student } from '../../shared/api/types'
 import { fetchStudents } from '../students/studentsApi'
+import AddStudentWizard from '../students/AddStudentWizard'
 
 const statuses = [
   { value: 'all', label: 'All students' }, { value: 'active', label: 'Active' },
@@ -22,6 +23,7 @@ export default function AdmissionsPage() {
   const [status, setStatus] = useState('all')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [admitOpen, setAdmitOpen] = useState(false)
   const query = useQuery({
     queryKey: ['admissions-directory', yearId, status, search, page],
     queryFn: () => fetchStudents(accessToken!, page, search, status === 'all' ? undefined : status, yearId || undefined),
@@ -55,7 +57,7 @@ export default function AdmissionsPage() {
   ]
 
   return <div className="page-content report-page">
-    <div className="report-heading"><div><div className="eyebrow">SCHOOL WORKSPACE · ENROLLMENT</div><h1>Admissions</h1><p className="welcome-subtitle">Review student records and keep enrollment information up to date.</p></div><SpaceActions/></div>
+    <div className="report-heading"><div><div className="eyebrow">SCHOOL WORKSPACE · ENROLLMENT</div><h1>Admissions</h1><p className="welcome-subtitle">Admit new students and keep enrollment information up to date.</p></div><div className="admissions-actions"><Link to="/students"><Button>Student directory</Button></Link><Button type="primary" icon={<UserAddOutlined/>} onClick={() => setAdmitOpen(true)}>Add student</Button></div></div>
     <div className="report-context"><span className="report-context-mark"><UserAddOutlined/></span><span><strong>{years.find(item => item.id === yearId)?.name ?? 'Selected academic year'}</strong><small>Enrollment view follows the academic year selected in the top bar.</small></span><span className="report-context-count">{query.data?.total ?? '—'} student records</span></div>
     <section className="admissions-stats" aria-label="Enrollment status summary">{cards.map(card => <article className="admissions-stat" key={card.title}><span className={`admissions-stat-icon ${card.tone}`}>{card.icon}</span><div><small>{card.title}</small><strong>{statusCounts.isLoading ? '—' : (card.value ?? 0).toLocaleString()}</strong><span>{card.note}</span></div></article>)}</section>
     <section className="panel admissions-panel"><div className="admissions-toolbar"><div><h2>Student enrollment</h2><p>Search school records by student name or admission number.</p></div><div className="admissions-filters"><Select aria-label="Filter by enrollment status" value={status} options={statuses} onChange={value => { setStatus(value); setPage(1) }}/><Input allowClear prefix={<SearchOutlined/>} placeholder="Search students" value={search} onChange={event => { setSearch(event.target.value); setPage(1) }}/></div></div>
@@ -63,9 +65,6 @@ export default function AdmissionsPage() {
       {query.isLoading ? <div className="admissions-loading"><Spin/><span>Loading student records…</span></div> : <Table<Student> rowKey="id" columns={columns} dataSource={query.data?.items ?? []} pagination={false} locale={{ emptyText: 'No student records match these filters.' }}/>}
       {!query.isLoading && query.data && <div className="admissions-table-foot">Showing {query.data.items.length ? (page - 1) * query.data.page_size + 1 : 0}–{Math.min(page * query.data.page_size, query.data.total)} of {query.data.total} students <div className="admissions-pagination"><Button size="small" disabled={page <= 1} onClick={() => setPage(value => Math.max(1, value - 1))}>Previous</Button><span>Page {page} of {Math.max(1, Math.ceil(query.data.total / query.data.page_size))}</span><Button size="small" disabled={page * query.data.page_size >= query.data.total} onClick={() => setPage(value => value + 1)}>Next</Button><Link to="/students">Open full directory →</Link></div></div>}
     </section>
+    <AddStudentWizard open={admitOpen} onClose={() => setAdmitOpen(false)}/>
   </div>
-}
-
-function SpaceActions() {
-  return <div className="admissions-actions"><Link to="/students"><Button>Student directory</Button></Link><Link to="/students"><Button type="primary" icon={<UserAddOutlined/>}>Add student</Button></Link></div>
 }
