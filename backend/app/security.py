@@ -42,6 +42,28 @@ def decode_access_token(token: str) -> dict[str, str]:
     return jwt.decode(token, get_settings().secret_key, algorithms=["HS256"], options={"require": ["exp", "sub", "school_id", "type"]})
 
 
+def create_platform_access_token(user_id: UUID, role: str) -> str:
+    """A console token. It carries no school scope, so tenant endpoints reject it."""
+    settings = get_settings()
+    now = datetime.now(UTC)
+    return jwt.encode(
+        {"sub": str(user_id), "scope": "platform", "role": role, "iat": now,
+         "exp": now + timedelta(minutes=settings.access_token_minutes), "type": "access"},
+        settings.secret_key,
+        algorithm="HS256",
+    )
+
+
+def decode_platform_access_token(token: str) -> dict[str, str]:
+    claims = jwt.decode(
+        token, get_settings().secret_key, algorithms=["HS256"],
+        options={"require": ["exp", "sub", "scope", "type"]},
+    )
+    if claims.get("scope") != "platform" or claims.get("type") != "access":
+        raise jwt.InvalidTokenError("not a platform token")
+    return claims
+
+
 def new_refresh_token() -> str:
     return secrets.token_urlsafe(48)
 

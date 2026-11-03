@@ -21,6 +21,7 @@ from app.api.grading import router as grading_router
 from app.api.guardians import router as guardians_router
 from app.api.mobile import router as mobile_router
 from app.api.onboarding import router as onboarding_router
+from app.api.platform import router as platform_router
 from app.api.overview import router as overview_router
 from app.api.requests import family_router as family_requests_router
 from app.api.requests import school_router as school_requests_router
@@ -63,6 +64,7 @@ app.add_middleware(
 )
 app.include_router(identity_router)
 app.include_router(onboarding_router)
+app.include_router(platform_router)
 app.include_router(realtime_router)
 app.include_router(students_router)
 app.include_router(student_profile_router)

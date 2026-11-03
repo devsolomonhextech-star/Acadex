@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { Spin } from 'antd'
 import { AuthProvider, useAuth } from '../features/auth/authHooks'
+import { SuperAdminAuthProvider } from '../features/superadmin/SuperAdminAuth'
 import { SchoolLayout } from '../shared/layout/SchoolLayout'
 import { AcademicPeriodProvider } from '../shared/academic/AcademicPeriodContext'
 
@@ -36,6 +37,10 @@ const ForgotPasswordPage = lazy(() => import('../features/auth/AccountRecoveryPa
 const ResetPasswordPage = lazy(() => import('../features/auth/AccountRecoveryPages').then(module => ({ default: module.ResetPasswordPage })))
 const VerifyEmailPage = lazy(() => import('../features/auth/AccountRecoveryPages').then(module => ({ default: module.VerifyEmailPage })))
 const LandingPage = lazy(() => import('../features/marketing/LandingPage'))
+const SuperAdminLoginPage = lazy(() => import('../features/superadmin/SuperAdminLoginPage'))
+const SuperAdminLayout = lazy(() => import('../features/superadmin/SuperAdminLayout'))
+const SuperAdminOverviewPage = lazy(() => import('../features/superadmin/SuperAdminOverviewPage'))
+const SuperAdminSchoolsPage = lazy(() => import('../features/superadmin/SuperAdminSchoolsPage'))
 
 function LoadingPage() {
   return <main className="auth-loading"><Spin size="large"/><span>Checking your school workspace…</span></main>
@@ -75,6 +80,11 @@ function AppRoutes() {
     <Route path="/reset-password" element={<Suspense fallback={<LoadingPage />}><ResetPasswordPage /></Suspense>} />
     <Route path="/verify-email" element={<Suspense fallback={<LoadingPage />}><VerifyEmailPage /></Suspense>} />
     <Route path="/accept-invitation" element={<Suspense fallback={<LoadingPage />}><AcceptInvitationPage /></Suspense>} />
+    <Route path="/superadmin/login" element={<Suspense fallback={<LoadingPage />}><SuperAdminLoginPage /></Suspense>} />
+    <Route path="/superadmin" element={<Suspense fallback={<LoadingPage />}><SuperAdminLayout /></Suspense>}>
+      <Route index element={<Suspense fallback={<LoadingPage />}><SuperAdminOverviewPage /></Suspense>} />
+      <Route path="schools" element={<Suspense fallback={<LoadingPage />}><SuperAdminSchoolsPage /></Suspense>} />
+    </Route>
     <Route element={<AuthenticatedLayout />}>
       <Route path="/students" element={user && ['school_admin', 'principal', 'registrar'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><StudentsPage /></Suspense> : <Navigate to="/" replace />} />
       <Route path="/students/:studentId" element={user && ['school_admin', 'principal', 'registrar', 'teacher'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><StudentProfilePage /></Suspense> : <Navigate to="/" replace />} />
@@ -104,5 +114,5 @@ function AppRoutes() {
 }
 
 export default function App() {
-  return <AuthProvider><AppRoutes /></AuthProvider>
+  return <AuthProvider><SuperAdminAuthProvider><AppRoutes /></SuperAdminAuthProvider></AuthProvider>
 }

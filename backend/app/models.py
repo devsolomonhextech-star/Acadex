@@ -157,6 +157,43 @@ class SchoolMembership(Base):
     user: Mapped[User] = relationship(back_populates="memberships")
 
 
+class PlatformAdmin(Base):
+    """An Acadex employee who administers the platform across every school.
+
+    Platform admins are deliberately separate from school memberships: they
+    hold no school role and their sessions never carry a school scope.
+    """
+
+    __tablename__ = "platform_admins"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_platform_admins_user"),
+        CheckConstraint("role IN ('superadmin', 'support')", name="ck_platform_admins_role"),
+        CheckConstraint("status IN ('active', 'suspended')", name="ck_platform_admins_status"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    role: Mapped[str] = mapped_column(String(24), nullable=False, default="superadmin", server_default="superadmin")
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active", server_default="active")
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    user: Mapped[User] = relationship()
+
+
+class PlatformSession(Base):
+    """Rotating refresh sessions for the superadmin console."""
+
+    __tablename__ = "platform_sessions"
+    __table_args__ = (Index("ix_platform_sessions_admin_expiry", "platform_admin_id", "expires_at"),)
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    platform_admin_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("platform_admins.id", ondelete="CASCADE"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
 class RefreshSession(Base):
     __tablename__ = "refresh_sessions"
     __table_args__ = (
