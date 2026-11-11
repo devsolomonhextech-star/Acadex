@@ -10,9 +10,25 @@ from app.domain.students import GHANA_CARD_ERROR, normalize_ghana_card
 class SchoolRegistration(BaseModel):
     school_name: str = Field(min_length=2, max_length=160)
     school_slug: str = Field(min_length=3, max_length=80)
+    logo_url: str | None = Field(default=None, max_length=2048)
     administrator_name: str = Field(min_length=2, max_length=160)
     email: EmailStr
     password: str = Field(min_length=12, max_length=128)
+
+    @field_validator("logo_url")
+    @classmethod
+    def logo_url_is_safe(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        from pydantic import HttpUrl, TypeAdapter, ValidationError
+        try:
+            parsed = TypeAdapter(HttpUrl).validate_python(value)
+            if parsed.scheme != "https":
+                raise ValueError("Enter a valid https:// logo link")
+            return str(parsed)
+        except ValidationError as error:
+            raise ValueError("Enter a valid https:// logo link") from error
 
     @field_validator("school_slug")
     @classmethod
@@ -50,6 +66,7 @@ class UserContextResponse(BaseModel):
     user_id: str
     school_id: str
     school_name: str
+    school_logo_url: str | None = None
     school_slug: str
     display_name: str
     email: str

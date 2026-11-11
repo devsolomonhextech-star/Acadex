@@ -30,3 +30,7 @@
 .register-card .back-link{color:#6b7490;font-weight:600}
 .auth-footer a{color:#2f5be0}
 @media(max-width:480px){.auth-card h2{font-size:23px}.auth-submit{height:44px!important}}
+.field-hint-inline{margin-left:5px;color:#969cac;font-size:11px;font-weight:400}
+.register-logo-preview{position:relative;display:flex;align-items:center;gap:10px;min-height:58px;margin-top:4px;padding:9px 12px;border:1px solid #e9edf5;border-radius:10px;background:#fafbfe;color:#81889a;font-size:11px}
+.register-logo-preview img{position:absolute;left:12px;width:38px;height:38px;padding:3px;border-radius:9px;background:#fff;object-fit:contain;box-shadow:0 0 0 1px #e7eaf2}
+.register-logo-mark{display:grid;width:38px;height:38px;place-items:center;border-radius:9px;background:#e9edff;color:#425bcf;font-weight:700}

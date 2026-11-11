@@ -1,6 +1,5 @@
 import { ApiRequestError } from '../../shared/api/client'
-
-const apiBase = import.meta.env.VITE_API_URL ?? ''
+import { API_BASE_URL } from '../../shared/api/config'
 
 export type PlatformAdmin = {
   id: string
@@ -54,7 +53,7 @@ async function consoleRequest<T>(path: string, options: RequestInit = {}, token?
   const headers = new Headers(options.headers)
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (token) headers.set('Authorization', `Bearer ${token}`)
-  const response = await fetch(`${apiBase}/api/v1/platform${path}`, { ...options, headers, credentials: 'include' })
+  const response = await fetch(`${API_BASE_URL}/api/v1/platform${path}`, { ...options, headers, credentials: 'include' })
   if (!response.ok) {
     let detail = `Request failed (${response.status})`
     try {
@@ -112,4 +111,10 @@ export function fetchPlatformSchools(token: string, params: {
   if (params.offset) query.set('offset', String(params.offset))
   const suffix = query.toString()
   return consoleRequest<PlatformSchoolsPage>(`/schools${suffix ? `?${suffix}` : ''}`, {}, token)
+}
+
+export function setPlatformSchoolStatus(token: string, schoolId: string, status: 'active' | 'inactive') {
+  return consoleRequest<{ id: string; status: string }>(`/schools/${encodeURIComponent(schoolId)}/status`, {
+    method: 'PATCH', body: JSON.stringify({ status }),
+  }, token)
 }

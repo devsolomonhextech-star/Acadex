@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { Alert, Button, Input, Segmented, Table, Tag } from 'antd'
+import { Alert, Button, Input, message, Popconfirm, Segmented, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { formatApiError } from '../../shared/api/errors'
 import { useSuperAdmin } from './SuperAdminAuth'
-import { fetchPlatformSchools, type PlatformSchool } from './superadminApi'
+import { fetchPlatformSchools, setPlatformSchoolStatus, type PlatformSchool } from './superadminApi'
 
 const PAGE_SIZE = 20
 
@@ -52,7 +52,9 @@ const columns: ColumnsType<PlatformSchool> = [
 ]
 
 export default function SuperAdminSchoolsPage() {
-  const { token } = useSuperAdmin()
+  const { token, admin } = useSuperAdmin()
+  const client = useQueryClient()
+  const [toast, contextHolder] = message.useMessage()
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all')
@@ -65,12 +67,39 @@ export default function SuperAdminSchoolsPage() {
     }),
     enabled: Boolean(token),
   })
+  const statusMutation = useMutation({
+    mutationFn: ({ school, status }: { school: PlatformSchool; status: 'active' | 'inactive' }) =>
+      setPlatformSchoolStatus(token!, school.id, status),
+    onSuccess: async (_result, { school, status: nextStatus }) => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ['platform-schools'] }),
+        client.invalidateQueries({ queryKey: ['platform-overview'] }),
+      ])
+      toast.success(`${school.name} ${nextStatus === 'active' ? 'activated' : 'deactivated'}`)
+    },
+    onError: error => toast.error(formatApiError(error)),
+  })
+  const schoolColumns: ColumnsType<PlatformSchool> = admin?.role === 'superadmin' ? [
+    ...columns,
+    {
+      title: 'Access', key: 'access', width: 140, fixed: 'right',
+      render: (_, school) => <Popconfirm
+        title={`${school.status === 'active' ? 'Deactivate' : 'Activate'} ${school.name}?`}
+        description={school.status === 'active' ? 'School members will no longer be able to sign in.' : 'School members will be able to sign in again.'}
+        okText={school.status === 'active' ? 'Deactivate' : 'Activate'}
+        okButtonProps={{ danger: school.status === 'active', loading: statusMutation.isPending }}
+        onConfirm={() => statusMutation.mutate({ school, status: school.status === 'active' ? 'inactive' : 'active' })}
+      ><Button size="small" danger={school.status === 'active'} disabled={statusMutation.isPending}>
+        {school.status === 'active' ? 'Deactivate' : 'Activate'}
+      </Button></Popconfirm>,
+    },
+  ] : columns
 
   const total = schools.data?.total ?? 0
   const first = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
   const last = Math.min(page * PAGE_SIZE, total)
 
-  return <div className="sa-page">
+  return <div className="sa-page">{contextHolder}
     <div className="sa-page-heading">
       <div>
         <span className="sa-eyebrow">SCHOOL DIRECTORY</span>
@@ -116,7 +145,7 @@ export default function SuperAdminSchoolsPage() {
         rowKey="id"
         size="middle"
         loading={schools.isLoading}
-        columns={columns}
+        columns={schoolColumns}
         dataSource={schools.data?.items ?? []}
         scroll={{ x: 1100 }}
         locale={{ emptyText: search || status !== 'all' ? 'No schools match these filters.' : 'No schools yet.' }}

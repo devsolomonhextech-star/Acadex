@@ -14,7 +14,7 @@ function InfoCell({ label, value }: { label: string; value: string }) {
 }
 
 export default function ReportCardPage() {
-  const { accessToken } = useAuth()
+  const { accessToken, user } = useAuth()
   const navigate = useNavigate()
   const [search] = useSearchParams()
   const studentId = search.get('student_id') ?? ''
@@ -53,7 +53,7 @@ export default function ReportCardPage() {
 
     {card && <article className="rc-sheet">
       <header className="rc-header">
-        <div className="rc-school">{card.school_name}</div>
+        <div className="rc-school">{user?.school_logo_url && <img src={user.school_logo_url} alt="" loading="eager" decoding="async"/>}{card.school_name}</div>
         <div className="rc-title">
           <strong>Term Report Card</strong>
           <span>{card.academic_year_name} · {card.term_name}</span>

@@ -126,6 +126,8 @@
 .lp-trusted-card{box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-width:0;min-height:148px;padding:22px 14px 18px;background:#fff;border:1px solid var(--lp-line);border-radius:14px;box-shadow:0 2px 8px #1b213608;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
 .lp-trusted-card:hover{transform:translateY(-2px);border-color:#c3cdf1;box-shadow:0 10px 22px -14px #1b213633}
 .lp-trusted-mark{display:grid;place-items:center;width:42px;height:42px;flex:none;border:1px solid #d9e0fb;border-radius:12px;background:var(--lp-brand-tint);color:var(--lp-brand-ink);font:800 14px Manrope,sans-serif;letter-spacing:.03em}
+.lp-trusted-mark img{display:block;width:100%;height:100%;padding:4px;border-radius:inherit;background:#fff;object-fit:contain}
+.lp-trusted-empty{margin:24px 0 0;color:#81889a;font-size:13px;text-align:center}
 .lp-trusted-card strong{font-size:13px;font-weight:750;line-height:1.35;color:var(--lp-ink)}
 .lp-trusted-card small{font-size:11px;font-weight:600;color:var(--lp-mute)}
 /* carousel controls: brand-blue arrows and dots (antd injects its own styles) */

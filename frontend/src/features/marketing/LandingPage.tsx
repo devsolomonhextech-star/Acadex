@@ -27,6 +27,8 @@ import {
   HomeOutlined,
 } from '@ant-design/icons'
 import { HeroCarousel } from './HeroCarousel'
+import { useQuery } from '@tanstack/react-query'
+import { apiRequest } from '../../shared/api/client'
 
 const navLinks = [
   { label: 'Product', href: '#product' },
@@ -47,14 +49,16 @@ const stats = [
   { icon: <SafetyCertificateOutlined />, value: 'By role', label: 'Workspace access' },
 ]
 
-const trustedSchools = [
-  { mark: 'GP', name: 'Golden Palm Academy', location: 'Accra' },
-  { mark: 'CI', name: 'Crestfield International', location: 'Tema' },
-  { mark: 'HH', name: 'Heritage Hill College', location: 'Kumasi' },
-  { mark: 'PP', name: 'Pinecrest Preparatory', location: 'Cape Coast' },
-  { mark: 'AI', name: 'Aurora International Academy', location: 'Accra' },
-  { mark: 'RM', name: 'Ridgeview Montessori', location: 'Aburi' },
-]
+type PublicSchool = { name: string; logo_url: string | null }
+
+function usePublicSchools() {
+  return useQuery({
+    queryKey: ['public-schools'],
+    queryFn: () => apiRequest<PublicSchool[]>('/platform/public/schools'),
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  })
+}
 
 const features = [
   {
@@ -272,6 +276,7 @@ function ParentMobilePreview() {
 }
 
 export default function LandingPage() {
+  const schoolsQuery = usePublicSchools()
   const [menuOpen, setMenuOpen] = useState(false)
   const [demoOpen, setDemoOpen] = useState(false)
   const [demoPhone, setDemoPhone] = useState('+233')
@@ -390,8 +395,10 @@ export default function LandingPage() {
 
         <section className="lp-trusted" aria-labelledby="lp-trusted-title">
           <p className="lp-kicker">Trusted across Ghana</p>
-          <h2 id="lp-trusted-title">Elite schools already running on Acadex</h2>
-          <Carousel
+          <h2 id="lp-trusted-title">Schools on Acadex</h2>
+          {schoolsQuery.isLoading ? <p className="lp-trusted-empty">Loading registered schools…</p> : schoolsQuery.isError
+            ? <p className="lp-trusted-empty">School profiles are temporarily unavailable.</p>
+            : schoolsQuery.data?.length ? <Carousel
             className="lp-trusted-carousel"
             autoplay
             autoplaySpeed={3200}
@@ -404,16 +411,16 @@ export default function LandingPage() {
               { breakpoint: 420, settings: { slidesToShow: 1 } },
             ]}
           >
-            {trustedSchools.map(school => (
+            {schoolsQuery.data.map(school => (
               <div className="lp-trusted-slide" key={school.name}>
                 <div className="lp-trusted-card">
-                  <span className="lp-trusted-mark" aria-hidden="true">{school.mark}</span>
+                  <span className="lp-trusted-mark" aria-hidden="true">{school.logo_url ? <img src={school.logo_url} alt="" loading="lazy" decoding="async"/> : school.name.trim().slice(0, 1).toUpperCase()}</span>
                   <strong>{school.name}</strong>
-                  <small>{school.location}</small>
+                  <small>School workspace</small>
                 </div>
               </div>
             ))}
-          </Carousel>
+          </Carousel> : <p className="lp-trusted-empty">Your school could be the first to join Acadex.</p>}
         </section>
 
         <section className="lp-connected" aria-labelledby="lp-connected-title">

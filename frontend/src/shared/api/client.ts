@@ -1,6 +1,5 @@
 import type { LoginResult, SchoolUser, Session } from './types'
-
-const apiBase = import.meta.env.VITE_API_URL ?? ''
+import { API_BASE_URL } from './config'
 
 type SessionRefresher = () => Promise<string | null>
 let sessionRefresher: SessionRefresher | null = null
@@ -26,12 +25,12 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}, acc
   const isFormData = options.body instanceof FormData
   if (options.body && !isFormData && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
-  const response = await fetch(`${apiBase}/api/v1${path}`, { ...options, headers, credentials: 'include' })
+  const response = await fetch(`${API_BASE_URL}/api/v1${path}`, { ...options, headers, credentials: 'include' })
   if (response.status === 401 && accessToken && !path.startsWith('/auth/')) {
     const refreshed = await sessionRefresher?.()
     if (refreshed) {
       headers.set('Authorization', `Bearer ${refreshed}`)
-      const retried = await fetch(`${apiBase}/api/v1${path}`, { ...options, headers, credentials: 'include' })
+      const retried = await fetch(`${API_BASE_URL}/api/v1${path}`, { ...options, headers, credentials: 'include' })
       return parseResponse<T>(retried, path)
     }
   }
@@ -59,7 +58,7 @@ async function parseResponse<T>(response: Response, path: string): Promise<T> {
 }
 
 export async function apiRequestBlob(path: string, accessToken: string): Promise<Blob> {
-  const doFetch = (token: string) => fetch(`${apiBase}/api/v1${path}`, {
+  const doFetch = (token: string) => fetch(`${API_BASE_URL}/api/v1${path}`, {
     headers: { Authorization: `Bearer ${token}` },
     credentials: 'include',
   })
@@ -121,6 +120,7 @@ export function signOutRequest() {
 
 export function registerSchool(payload: {
   school_name: string
+  logo_url?: string
   school_slug: string
   administrator_name: string
   email: string

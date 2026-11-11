@@ -103,7 +103,7 @@ export function useAuth() {
 }
 
 export function createSchool(payload: {
-  school_name: string; school_slug: string; administrator_name: string; email: string; password: string
+  school_name: string; school_slug: string; logo_url?: string; administrator_name: string; email: string; password: string
 }) {
   return apiRequest<{ school_id: string; school_slug: string; status: string; message: string }>(
     '/onboarding/schools', { method: 'POST', body: JSON.stringify(payload) },

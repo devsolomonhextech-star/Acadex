@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import type { ReactNode } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Alert, Button, Input, Modal, Spin } from 'antd'
@@ -83,6 +83,7 @@ export function LoginPage() {
 const registerSchema = z.object({
   school_name: z.string().trim().min(2, 'Enter the school name').max(160),
   school_slug: z.string().trim().toLowerCase().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use lowercase letters, numbers, and hyphens').min(3).max(80),
+  logo_url: z.union([z.literal(''), z.string().trim().url('Enter a valid image URL').max(2048).refine(value => value.startsWith('https://'), 'Use a secure https:// link')]).optional(),
   administrator_name: z.string().trim().min(2, 'Enter your name').max(160),
   email: emailSchema,
   password: z.string().min(12, 'Use at least 12 characters').max(128),
@@ -93,18 +94,20 @@ export function RegisterPage() {
   const navigate = useNavigate()
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const { control, handleSubmit, formState: { errors } } = useForm<RegisterValues>({ resolver: zodResolver(registerSchema) })
+  const { control, handleSubmit, formState: { errors } } = useForm<RegisterValues>({ resolver: zodResolver(registerSchema), defaultValues: { logo_url: '' } })
+  const logoUrl = useWatch({ control, name: 'logo_url' })
+  const schoolName = useWatch({ control, name: 'school_name' })
   const submit = handleSubmit(async values => {
     setError('')
     setSubmitting(true)
     try {
-      await createSchool({ ...values, email: values.email.trim().toLowerCase(), school_slug: values.school_slug.trim().toLowerCase() })
+      await createSchool({ ...values, logo_url: values.logo_url?.trim() || undefined, email: values.email.trim().toLowerCase(), school_slug: values.school_slug.trim().toLowerCase() })
       navigate(`/verify-email?email=${encodeURIComponent(values.email.trim().toLowerCase())}`, { replace: true })
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to set up the school. Try again.') }
     finally { setSubmitting(false) }
   })
   const field = (name: keyof RegisterValues, label: string, placeholder: string, icon: ReactNode, type = 'text', autoComplete?: string) => <div className="register-field"><label>{label}</label><Controller control={control} name={name} render={({ field: input }) => <Input {...input} prefix={icon} placeholder={placeholder} type={type} autoComplete={autoComplete} status={errors[name] ? 'error' : undefined}/>} />{errors[name] && <small className="field-error">{errors[name]?.message}</small>}</div>
-  return <div className="auth-layout"><BrandPanel register/><main className="auth-main register-main"><div className="auth-mobile-brand"><img src="/brand/acadex-logo.png" alt="Acadex" /></div><section className="auth-card register-card"><Link to="/login" className="back-link"><ArrowLeftOutlined/> Back to sign in</Link><div className="auth-card-kicker">GET STARTED</div><h2>Set up your school</h2><p className="auth-intro">Create a private workspace for your school and appoint its first administrator.</p>{error && <Alert className="auth-alert" type="error" showIcon message={error}/>}<form onSubmit={submit} className="auth-form register-form">{field('school_name','School name','e.g. Aburi Academy',<AppstoreOutlined/>)}<div className="register-field"><label>School address</label><Controller control={control} name="school_slug" render={({ field: input }) => <Input {...input} addonBefore="acadex.app/" placeholder="aburi-academy" autoComplete="off" status={errors.school_slug ? 'error' : undefined}/>} />{errors.school_slug && <small className="field-error">{errors.school_slug.message}</small>}<small className="field-hint">Choose a unique address for your school workspace.</small></div>{field('administrator_name','Your name','Full name',<UserOutlined/>)}{field('email','Work email','you@school.edu.gh',<MailOutlined/>,'email','email')}{field('password','Create password','At least 12 characters',<LockOutlined/>,'password','new-password')}<Button htmlType="submit" type="primary" loading={submitting} className="auth-submit">Create school workspace <ArrowRightOutlined/></Button></form><div className="auth-security"><SafetyCertificateOutlined/> Your school’s data is kept in a separate workspace</div></section><footer className="auth-footer"><Link to="/login">Already have a school workspace? Sign in</Link></footer></main></div>
+  return <div className="auth-layout"><BrandPanel register/><main className="auth-main register-main"><div className="auth-mobile-brand"><img src="/brand/acadex-logo.png" alt="Acadex" /></div><section className="auth-card register-card"><Link to="/login" className="back-link"><ArrowLeftOutlined/> Back to sign in</Link><div className="auth-card-kicker">GET STARTED</div><h2>Set up your school</h2><p className="auth-intro">Create a private workspace for your school and appoint its first administrator.</p>{error && <Alert className="auth-alert" type="error" showIcon message={error}/>}<form onSubmit={submit} className="auth-form register-form">{field('school_name','School name','e.g. Aburi Academy',<AppstoreOutlined/>)}<div className="register-field"><label>School address</label><Controller control={control} name="school_slug" render={({ field: input }) => <Input {...input} addonBefore="acadex.app/" placeholder="aburi-academy" autoComplete="off" status={errors.school_slug ? 'error' : undefined}/>} />{errors.school_slug && <small className="field-error">{errors.school_slug.message}</small>}<small className="field-hint">Choose a unique address for your school workspace.</small></div><div className="register-field"><label>School logo link <span className="field-hint-inline">Optional</span></label><Controller control={control} name="logo_url" render={({ field: input }) => <Input {...input} prefix={<AppstoreOutlined/>} placeholder="https://example.com/school-logo.png" inputMode="url" autoComplete="url" status={errors.logo_url ? 'error' : undefined}/>} />{errors.logo_url && <small className="field-error">{errors.logo_url.message}</small>}<small className="field-hint">Paste a direct HTTPS link to your logo. PNG, JPG, SVG, or WebP work best.</small>{logoUrl?.startsWith('https://') && <div className="register-logo-preview"><span className="register-logo-mark">{schoolName?.trim().slice(0, 1).toUpperCase() || 'S'}</span><img src={logoUrl} alt="School logo preview" loading="eager" decoding="async" onError={event => { event.currentTarget.style.display = 'none' }}/><span>Logo preview</span></div>}</div>{field('administrator_name','Your name','Full name',<UserOutlined/>)}{field('email','Work email','you@school.edu.gh',<MailOutlined/>,'email','email')}{field('password','Create password','At least 12 characters',<LockOutlined/>,'password','new-password')}<Button htmlType="submit" type="primary" loading={submitting} className="auth-submit">Create school workspace <ArrowRightOutlined/></Button></form><div className="auth-security"><SafetyCertificateOutlined/> Your school’s data is kept in a separate workspace</div></section><footer className="auth-footer"><Link to="/login">Already have a school workspace? Sign in</Link></footer></main></div>
 }
 
 export function LoadingPage() { return <main className="auth-loading"><Spin size="large"/><span>Checking your school workspace…</span></main> }

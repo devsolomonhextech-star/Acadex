@@ -118,14 +118,14 @@ def _front_link(path: str, token: str) -> str:
 
 def set_refresh_cookies(response: Response, raw_token: str, csrf: str, expires: datetime) -> None:
     settings = get_settings()
-    common = {"secure": settings.cookie_secure, "samesite": "lax", "expires": expires}
+    common = {"secure": settings.cookie_secure, "samesite": "none" if settings.cookie_secure else "lax", "expires": expires}
     response.set_cookie("schoolos_refresh", raw_token, httponly=True, path="/api/v1/auth", **common)
     response.set_cookie("schoolos_csrf", csrf, httponly=False, path="/", **common)
 
 
 def clear_refresh_cookies(response: Response) -> None:
     settings = get_settings()
-    common = {"secure": settings.cookie_secure, "samesite": "lax"}
+    common = {"secure": settings.cookie_secure, "samesite": "none" if settings.cookie_secure else "lax"}
     response.delete_cookie("schoolos_refresh", httponly=True, path="/api/v1/auth", **common)
     response.delete_cookie("schoolos_csrf", httponly=False, path="/", **common)
 
@@ -181,6 +181,7 @@ async def register_school(payload: SchoolRegistration, background: BackgroundTas
     school = School(
         name=payload.school_name.strip(),
         slug=payload.school_slug,
+        logo_url=payload.logo_url,
         trial_ends_at=trial_end_for(datetime.now(UTC)),
     )
     user = User(email=email, display_name=payload.administrator_name.strip(), password_hash=hash_password(payload.password))
@@ -546,4 +547,5 @@ async def me(context: Annotated[TenantContext, Depends(current_tenant)], session
     )
     user, school, membership = result.one()
     return UserContextResponse(user_id=str(user.id), school_id=str(school.id), school_name=school.name,
+        school_logo_url=school.logo_url,
         school_slug=school.slug, display_name=user.display_name, email=user.email, role=membership.role.value)

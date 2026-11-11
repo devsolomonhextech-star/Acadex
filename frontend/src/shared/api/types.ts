@@ -10,6 +10,7 @@ export type SchoolUser = {
   user_id: string
   school_id: string
   school_name: string
+  school_logo_url: string | null
   school_slug: string
   display_name: string
   email: string

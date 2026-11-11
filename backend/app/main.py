@@ -56,7 +56,7 @@ async def lifespan(application: FastAPI):
 app = FastAPI(title="Acadex API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins,
+    allow_origins=list(dict.fromkeys([*settings.allowed_origins, settings.frontend_url.rstrip("/")])),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],

@@ -8,6 +8,7 @@ the password and keeps the existing platform role.
 """
 import argparse
 import asyncio
+import getpass
 import os
 import sys
 from datetime import UTC, datetime
@@ -27,8 +28,10 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--password", default=os.environ.get("SUPERADMIN_PASSWORD"))
     parser.add_argument("--role", default="superadmin", choices=("superadmin", "support"))
     args = parser.parse_args()
-    if not args.email or not args.password:
-        parser.error("Provide --email and --password (or SUPERADMIN_EMAIL / SUPERADMIN_PASSWORD).")
+    if not args.email:
+        parser.error("Provide --email (or SUPERADMIN_EMAIL).")
+    if not args.password:
+        args.password = getpass.getpass("New superadmin password (12+ characters): ")
     if len(args.password) < 12:
         parser.error("Choose a password with at least 12 characters.")
     args.email = args.email.strip().casefold()

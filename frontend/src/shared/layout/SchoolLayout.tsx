@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../features/auth/authHooks'
 import { apiRequest } from '../api/client'
+import { API_BASE_URL } from '../api/config'
 import { useLessonAlerts } from '../../features/academic/useLessonAlerts'
 import {
   AppstoreOutlined, ArrowRightOutlined, BarChartOutlined, BellOutlined, BookOutlined, CalendarOutlined,
@@ -104,7 +105,7 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
       try {
         const { ticket } = await apiRequest<{ ticket: string }>('/realtime/ticket', { method: 'POST' }, accessToken)
         if (!active) return
-        const base = import.meta.env.VITE_API_URL || window.location.origin
+        const base = API_BASE_URL || window.location.origin
         const wsBase = new URL(base, window.location.origin)
         wsBase.protocol = wsBase.protocol === 'https:' ? 'wss:' : 'ws:'
         wsBase.pathname = `${wsBase.pathname.replace(/\/$/, '')}/api/v1/realtime/ws`
@@ -210,7 +211,7 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
     <aside className={`sidebar ${open ? 'sidebar-open' : ''}`}>
       <div className="brand"><img className="brand-logo" src="/brand/acadex-logo.png" alt="Acadex"/><button className="mobile-close" onClick={() => setOpen(false)} aria-label="Close menu">×</button></div>
       <div className="school-switch" aria-label={`Institution: ${user.school_name}`}>
-        <div className="school-emblem" aria-hidden="true">{user.school_name.trim().slice(0, 1).toUpperCase()}</div>
+        <div className={`school-emblem${user.school_logo_url ? ' school-emblem-image' : ''}`} aria-hidden="true"><span>{user.school_name.trim().slice(0, 1).toUpperCase()}</span>{user.school_logo_url && <img src={user.school_logo_url} alt="" loading="eager" decoding="async" fetchPriority="high" onError={event => { event.currentTarget.style.display = 'none' }}/>}</div>
         <div className="school-name">
           <span className="school-name-label">INSTITUTION</span>
           <strong title={user.school_name}>{user.school_name}</strong>

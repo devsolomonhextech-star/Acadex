@@ -100,6 +100,15 @@ class SchoolsPage(BaseModel):
     offset: int
 
 
+class SchoolStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(active|inactive)$")
+
+
+class PublicSchool(BaseModel):
+    name: str
+    logo_url: str | None = None
+
+
 class MonthCount(BaseModel):
     month: str
     count: int
@@ -119,14 +128,14 @@ class PlatformOverview(BaseModel):
 
 def _set_console_cookies(response: Response, raw_refresh: str, csrf: str, expires: datetime) -> None:
     settings = get_settings()
-    common = {"secure": settings.cookie_secure, "samesite": "lax", "expires": expires}
+    common = {"secure": settings.cookie_secure, "samesite": "none" if settings.cookie_secure else "lax", "expires": expires}
     response.set_cookie(REFRESH_COOKIE, raw_refresh, httponly=True, path="/api/v1/platform/auth", **common)
     response.set_cookie(CSRF_COOKIE, csrf, httponly=False, path="/", **common)
 
 
 def _clear_console_cookies(response: Response) -> None:
     settings = get_settings()
-    common = {"secure": settings.cookie_secure, "samesite": "lax"}
+    common = {"secure": settings.cookie_secure, "samesite": "none" if settings.cookie_secure else "lax"}
     response.delete_cookie(REFRESH_COOKIE, httponly=True, path="/api/v1/platform/auth", **common)
     response.delete_cookie(CSRF_COOKIE, httponly=False, path="/", **common)
 
@@ -438,6 +447,31 @@ async def list_schools(
         items=await _summaries(session, list(schools)),
         total=int(total), limit=limit, offset=offset,
     )
+
+
+@router.patch("/schools/{school_id}/status")
+async def update_school_status(
+    school_id: UUID,
+    payload: SchoolStatusUpdate,
+    context: Annotated[PlatformContext, Depends(current_platform_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, str]:
+    if context.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Only superadmins can change school status")
+    school = await session.get(School, school_id)
+    if school is None:
+        raise HTTPException(status_code=404, detail="School not found")
+    school.status = payload.status
+    await session.commit()
+    return {"id": str(school.id), "status": school.status}
+
+
+@router.get("/public/schools", response_model=list[PublicSchool])
+async def public_schools(session: Annotated[AsyncSession, Depends(get_session)]) -> list[PublicSchool]:
+    schools = (await session.execute(
+        select(School).where(School.status == "active").order_by(School.created_at.desc())
+    )).scalars().all()
+    return [PublicSchool(name=school.name, logo_url=school.logo_url) for school in schools]
 
 
 _DUMMY_HASH: str | None = None
