@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=(".env", ".env.example"), extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", ".env.example"), extra="ignore", env_ignore_empty=True)
 
     app_env: str = "development"
     secret_key: str = "development-key-change-before-deploying-0123456789"
@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     smtp_from_email: str | None = None
     smtp_starttls: bool = True
+    smtp_ssl: bool = False
 
     def model_post_init(self, __context: object, /) -> None:
         if self.app_env == "production":
@@ -33,6 +34,8 @@ class Settings(BaseSettings):
                 raise ValueError("SMTP_HOST and SMTP_FROM_EMAIL must be configured in production")
             if self.smtp_host.casefold() in {"mailpit", "localhost", "127.0.0.1"}:
                 raise ValueError("Production must use a real SMTP relay, not a local mail catcher")
+            if self.smtp_ssl and self.smtp_starttls:
+                raise ValueError("Choose either SMTP implicit SSL or STARTTLS, not both")
 
 
 @lru_cache

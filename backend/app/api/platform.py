@@ -120,6 +120,16 @@ class LandingVisibilityUpdate(BaseModel):
     show_on_landing: bool
 
 
+class AdminInvitationUpdate(BaseModel):
+    display_name: str = Field(min_length=2, max_length=160)
+    email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def email_is_normalized(cls, value: EmailStr) -> str:
+        return str(value).strip().casefold()
+
+
 class PlatformSchoolCreate(BaseModel):
     name: str = Field(min_length=2, max_length=160)
     slug: str = Field(min_length=3, max_length=80)
@@ -407,31 +417,38 @@ async def platform_overview(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> PlatformOverview:
     now = datetime.now(UTC)
-    schools_total = await session.scalar(select(func.count(School.id))) or 0
+    schools_total = await session.scalar(select(func.count(School.id)).where(School.status != "deleted")) or 0
     schools_active = await session.scalar(
         select(func.count(School.id)).where(School.status == "active")
     ) or 0
     schools_new = await session.scalar(
-        select(func.count(School.id)).where(School.created_at >= now - timedelta(days=30))
+        select(func.count(School.id)).where(
+            School.created_at >= now - timedelta(days=30), School.status != "deleted",
+        )
     ) or 0
-    students_total = await session.scalar(select(func.count(Student.id))) or 0
+    students_total = await session.scalar(
+        select(func.count(Student.id)).join(School, Student.school_id == School.id)
+        .where(School.status != "deleted")
+    ) or 0
     active_subscriptions, licensed_students = (
         await session.execute(select(
             func.count(SchoolSubscription.id),
             func.coalesce(func.sum(SchoolSubscription.student_limit), 0),
-        ).where(SchoolSubscription.status == "active"))
+        ).join(School, SchoolSubscription.school_id == School.id)
+            .where(SchoolSubscription.status == "active", School.status != "deleted"))
     ).one()
     roles = {
         role: count for role, count in (await session.execute(
             select(SchoolMembership.role, func.count(SchoolMembership.id))
-            .where(SchoolMembership.status == "active")
+            .join(School, SchoolMembership.school_id == School.id)
+            .where(SchoolMembership.status == "active", School.status != "deleted")
             .group_by(SchoolMembership.role)
         )).all()
     }
     members_by_role = {role.value: int(roles.get(role, 0)) for role in MembershipRole}
 
     recent_rows = (await session.execute(
-        select(School).order_by(School.created_at.desc()).limit(5)
+        select(School).where(School.status != "deleted").order_by(School.created_at.desc()).limit(5)
     )).scalars().all()
     recent = await _summaries(session, list(recent_rows))
 
@@ -445,7 +462,7 @@ async def platform_overview(
     month = func.date_trunc("month", School.created_at).label("month")
     signup_rows = (await session.execute(
         select(month, func.count(School.id))
-        .where(School.created_at >= months[0])
+        .where(School.created_at >= months[0], School.status != "deleted")
         .group_by("month")
         .order_by("month")
     )).all()
@@ -497,7 +514,6 @@ async def _summaries(session: AsyncSession, schools: list[School]) -> list[Schoo
             SchoolInvitation.school_id.in_(ids),
             SchoolInvitation.role == MembershipRole.SCHOOL_ADMIN,
             SchoolInvitation.status == "pending",
-            SchoolInvitation.expires_at > datetime.now(UTC),
         ).order_by(SchoolInvitation.created_at)
     )).all():
         pending_admins.setdefault(invitation.school_id, (invitation.display_name, invitation.email))
@@ -535,16 +551,20 @@ async def list_schools(
     _: Annotated[PlatformContext, Depends(current_platform_admin)],
     session: Annotated[AsyncSession, Depends(get_session)],
     search: Annotated[str, Query(max_length=120)] = "",
-    status_filter: Annotated[str, Query(alias="status", pattern="^(all|active|inactive)$")] = "all",
+    status_filter: Annotated[str, Query(alias="status", pattern="^(all|active|inactive|deleted)$")] = "all",
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> SchoolsPage:
     filters = []
+    if status_filter == "all":
+        filters.append(School.status != "deleted")
+    elif status_filter == "deleted":
+        filters.append(School.status == "deleted")
+    else:
+        filters.append(School.status == status_filter)
     term = search.strip()
     if term:
         filters.append(func.lower(School.name).contains(term.lower()) | func.lower(School.slug).contains(term.lower()))
-    if status_filter != "all":
-        filters.append(School.status == status_filter)
     total = await session.scalar(select(func.count(School.id)).where(*filters)) or 0
     schools = (await session.execute(
         select(School).where(*filters).order_by(School.created_at.desc()).limit(limit).offset(offset)
@@ -567,9 +587,43 @@ async def update_school_status(
     school = await session.get(School, school_id)
     if school is None:
         raise HTTPException(status_code=404, detail="School not found")
+    if school.status == "deleted":
+        raise HTTPException(status_code=409, detail="Deleted schools cannot be reactivated")
     school.status = payload.status
     await session.commit()
     return {"id": str(school.id), "status": school.status}
+
+
+@router.delete("/schools/{school_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_platform_school(
+    school_id: UUID,
+    context: Annotated[PlatformContext, Depends(current_platform_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> Response:
+    if context.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Only superadmins can delete schools")
+    school = await session.get(School, school_id)
+    if school is None:
+        raise HTTPException(status_code=404, detail="School not found")
+    if school.status != "deleted":
+        school.status = "deleted"
+        school.show_on_landing = False
+        pending = await session.scalars(select(SchoolInvitation).where(
+            SchoolInvitation.school_id == school_id,
+            SchoolInvitation.status == "pending",
+        ))
+        for invitation in pending:
+            invitation.status = "revoked"
+        session.add(AuditEvent(
+            school_id=school.id,
+            actor_user_id=context.user_id,
+            action="platform.school_deleted",
+            resource_type="school",
+            resource_id=school.id,
+            details={"deletion_type": "soft_delete"},
+        ))
+        await session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/schools", response_model=PlatformSchoolCreated, status_code=status.HTTP_201_CREATED)
@@ -646,6 +700,8 @@ async def set_school_landing_visibility(
     school = await session.get(School, school_id)
     if school is None:
         raise HTTPException(status_code=404, detail="School not found")
+    if school.status == "deleted" and payload.show_on_landing:
+        raise HTTPException(status_code=409, detail="Deleted schools cannot be listed on the landing page")
     school.show_on_landing = payload.show_on_landing
     await session.commit()
     return {"id": str(school.id), "show_on_landing": school.show_on_landing}
@@ -673,7 +729,6 @@ async def get_school_team(
         SchoolInvitation.school_id == school_id,
         SchoolInvitation.role == MembershipRole.SCHOOL_ADMIN,
         SchoolInvitation.status == "pending",
-        SchoolInvitation.expires_at > datetime.now(UTC),
     ).order_by(SchoolInvitation.created_at)))
     members = [PlatformSchoolMember(
         membership_id=membership.id,
@@ -693,6 +748,70 @@ async def get_school_team(
             email=invitation.email,
             expires_at=invitation.expires_at,
         ) for invitation in pending_admins],
+    )
+
+
+@router.patch("/schools/{school_id}/admin-invitation", response_model=PlatformAdminInvitation)
+async def update_school_admin_invitation(
+    school_id: UUID,
+    payload: AdminInvitationUpdate,
+    background: BackgroundTasks,
+    context: Annotated[PlatformContext, Depends(current_platform_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> PlatformAdminInvitation:
+    if context.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Only superadmins can edit or resend school administrator invitations")
+    school = await session.get(School, school_id)
+    if school is None:
+        raise HTTPException(status_code=404, detail="School not found")
+    if school.status != "active":
+        raise HTTPException(status_code=409, detail="Activate the school before resending its administrator invitation")
+    invitations = list(await session.scalars(select(SchoolInvitation).where(
+        SchoolInvitation.school_id == school_id,
+        SchoolInvitation.role == MembershipRole.SCHOOL_ADMIN,
+        SchoolInvitation.status == "pending",
+    ).order_by(SchoolInvitation.created_at).with_for_update()))
+    if not invitations:
+        raise HTTPException(status_code=409, detail="There is no pending administrator invitation to resend")
+
+    existing_user_id = await session.scalar(select(User.id).where(func.lower(User.email) == str(payload.email)))
+    if existing_user_id:
+        existing_membership = await session.scalar(select(SchoolMembership.id).where(
+            SchoolMembership.school_id == school_id,
+            SchoolMembership.user_id == existing_user_id,
+        ))
+        if existing_membership:
+            raise HTTPException(status_code=409, detail="That email already belongs to a member of this school")
+
+    invitation = invitations[0]
+    for duplicate in invitations[1:]:
+        duplicate.status = "revoked"
+    old_email = invitation.email
+    raw_token = secrets.token_urlsafe(36)
+    invitation.email = str(payload.email)
+    invitation.display_name = payload.display_name.strip()
+    invitation.token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    invitation.expires_at = datetime.now(UTC) + timedelta(days=7)
+    session.add(AuditEvent(
+        school_id=school_id,
+        actor_user_id=context.user_id,
+        action="platform.school_admin_invitation_resent",
+        resource_type="school_invitation",
+        resource_id=invitation.id,
+        details={"previous_email": old_email, "new_email": invitation.email},
+    ))
+    await session.commit()
+    link = f"{get_settings().frontend_url.rstrip('/')}/accept-invitation?token={raw_token}"
+    background.add_task(
+        send_email,
+        invitation.email,
+        f"You’re invited to administer {school.name} on Acadex",
+        f"Hello {invitation.display_name},\n\nYour school workspace is ready. Accept the updated invitation and set your password here:\n{link}\n\nThis invitation expires in seven days.",
+    )
+    return PlatformAdminInvitation(
+        display_name=invitation.display_name,
+        email=invitation.email,
+        expires_at=invitation.expires_at,
     )
 
 

@@ -115,7 +115,7 @@ export function fetchPlatformOverview(token: string) {
 }
 
 export function fetchPlatformSchools(token: string, params: {
-  search?: string; status?: 'all' | 'active' | 'inactive'; limit?: number; offset?: number
+  search?: string; status?: 'all' | 'active' | 'inactive' | 'deleted'; limit?: number; offset?: number
 }) {
   const query = new URLSearchParams()
   if (params.search?.trim()) query.set('search', params.search.trim())
@@ -130,6 +130,17 @@ export function setPlatformSchoolStatus(token: string, schoolId: string, status:
   return consoleRequest<{ id: string; status: string }>(`/schools/${encodeURIComponent(schoolId)}/status`, {
     method: 'PATCH', body: JSON.stringify({ status }),
   }, token)
+}
+
+export function deletePlatformSchool(token: string, schoolId: string) {
+  return consoleRequest<void>(`/schools/${encodeURIComponent(schoolId)}`, { method: 'DELETE' }, token)
+}
+
+export function updateSchoolAdminInvitation(token: string, schoolId: string, payload: { display_name: string; email: string }) {
+  return consoleRequest<{ display_name: string; email: string; expires_at: string }>(
+    `/schools/${encodeURIComponent(schoolId)}/admin-invitation`,
+    { method: 'PATCH', body: JSON.stringify(payload) }, token,
+  )
 }
 
 export function createPlatformSchool(token: string, payload: {

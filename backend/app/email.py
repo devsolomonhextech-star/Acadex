@@ -19,9 +19,10 @@ def send_email(recipient: str, subject: str, body: str) -> None:
     message["Subject"] = subject
     message.set_content(body)
     try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as client:
+        smtp_factory = smtplib.SMTP_SSL if settings.smtp_ssl else smtplib.SMTP
+        with smtp_factory(settings.smtp_host, settings.smtp_port, timeout=15) as client:
             client.ehlo()
-            if settings.smtp_starttls:
+            if settings.smtp_starttls and not settings.smtp_ssl:
                 client.starttls()
                 client.ehlo()
             if settings.smtp_username:

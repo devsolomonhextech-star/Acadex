@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { formatApiError } from '../../shared/api/errors'
 import { useSuperAdmin } from './SuperAdminAuth'
-import { createPlatformSchool, fetchPlatformSchoolTeam, fetchPlatformSchools, setPlatformSchoolStatus, type PlatformSchool, type PlatformSchoolTeam } from './superadminApi'
+import { createPlatformSchool, deletePlatformSchool, fetchPlatformSchoolTeam, fetchPlatformSchools, setPlatformSchoolStatus, updateSchoolAdminInvitation, type PlatformSchool, type PlatformSchoolTeam } from './superadminApi'
 
 const PAGE_SIZE = 20
 
@@ -41,8 +41,8 @@ const columns: ColumnsType<PlatformSchool> = [
   { title: 'Trial', key: 'trial', width: 130, render: (_, school) => trialLabel(school) },
   {
     title: 'Status', key: 'status', width: 110,
-    render: (_, school) => <Tag color={school.status === 'active' ? 'green' : 'red'}>
-      {school.status === 'active' ? 'Active' : 'Paused'}
+    render: (_, school) => <Tag color={school.status === 'active' ? 'green' : school.status === 'deleted' ? 'default' : 'red'}>
+      {school.status === 'active' ? 'Active' : school.status === 'deleted' ? 'Deleted' : 'Paused'}
     </Tag>,
   },
   {
@@ -57,11 +57,13 @@ export default function SuperAdminSchoolsPage() {
   const [toast, contextHolder] = message.useMessage()
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all')
+  const [status, setStatus] = useState<'all' | 'active' | 'inactive' | 'deleted'>('all')
   const [page, setPage] = useState(1)
   const [createOpen, setCreateOpen] = useState(false)
   const [selectedSchool, setSelectedSchool] = useState<PlatformSchool | null>(null)
+  const [inviteEdit, setInviteEdit] = useState<{ schoolId: string; display_name: string; email: string } | null>(null)
   const [createForm] = Form.useForm<{ name: string; slug: string; admin_name: string; admin_email: string; logo_url?: string }>()
+  const [inviteForm] = Form.useForm<{ display_name: string; email: string }>()
 
   const schools = useQuery({
     queryKey: ['platform-schools', { search, status, page }],
@@ -79,6 +81,30 @@ export default function SuperAdminSchoolsPage() {
         client.invalidateQueries({ queryKey: ['platform-overview'] }),
       ])
       toast.success(`${school.name} ${nextStatus === 'active' ? 'activated' : 'deactivated'}`)
+    },
+    onError: error => toast.error(formatApiError(error)),
+  })
+  const deleteMutation = useMutation({
+    mutationFn: (school: PlatformSchool) => deletePlatformSchool(token!, school.id),
+    onSuccess: async (_result, school) => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ['platform-schools'] }),
+        client.invalidateQueries({ queryKey: ['platform-overview'] }),
+      ])
+      toast.success(`${school.name} was removed from active schools`)
+    },
+    onError: error => toast.error(formatApiError(error)),
+  })
+  const invitationMutation = useMutation({
+    mutationFn: (values: { display_name: string; email: string }) => updateSchoolAdminInvitation(token!, inviteEdit!.schoolId, values),
+    onSuccess: async invitation => {
+      setInviteEdit(null)
+      inviteForm.resetFields()
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ['platform-school-team', selectedSchool?.id] }),
+        client.invalidateQueries({ queryKey: ['platform-schools'] }),
+      ])
+      toast.success(`Updated invitation sent to ${invitation.email}`)
     },
     onError: error => toast.error(formatApiError(error)),
   })
@@ -115,8 +141,9 @@ export default function SuperAdminSchoolsPage() {
     },
     ...(admin?.role === 'superadmin' ? [
     {
-      title: 'Access', key: 'access', width: 140, fixed: 'right' as const,
-      render: (_: unknown, school: PlatformSchool) => <Popconfirm
+      title: 'Access', key: 'access', width: 230, fixed: 'right' as const,
+      render: (_: unknown, school: PlatformSchool) => <div style={{ display: 'flex', gap: 8 }}>
+        {school.status !== 'deleted' && <Popconfirm
         title={`${school.status === 'active' ? 'Deactivate' : 'Activate'} ${school.name}?`}
         description={school.status === 'active' ? 'School members will no longer be able to sign in.' : 'School members will be able to sign in again.'}
         okText={school.status === 'active' ? 'Deactivate' : 'Activate'}
@@ -124,7 +151,15 @@ export default function SuperAdminSchoolsPage() {
         onConfirm={() => statusMutation.mutate({ school, status: school.status === 'active' ? 'inactive' : 'active' })}
       ><Button size="small" danger={school.status === 'active'} disabled={statusMutation.isPending}>
         {school.status === 'active' ? 'Deactivate' : 'Activate'}
-      </Button></Popconfirm>,
+      </Button></Popconfirm>}
+        {school.status !== 'deleted' && <Popconfirm
+          title={`Delete ${school.name}?`}
+          description="School access will be disabled and it will be hidden from the landing page. Historical records are retained."
+          okText="Delete school" cancelText="Cancel"
+          okButtonProps={{ danger: true, loading: deleteMutation.isPending }}
+          onConfirm={() => deleteMutation.mutate(school)}
+        ><Button size="small" danger disabled={deleteMutation.isPending}>Delete</Button></Popconfirm>}
+      </div>,
     },
     ] : []),
   ]
@@ -164,6 +199,7 @@ export default function SuperAdminSchoolsPage() {
             { label: 'All', value: 'all' },
             { label: 'Active', value: 'active' },
             { label: 'Paused', value: 'inactive' },
+            { label: 'Deleted', value: 'deleted' },
           ]}
         />
         <Button icon={<ReloadOutlined/>} onClick={() => { void schools.refetch() }} loading={schools.isFetching}>
@@ -182,7 +218,7 @@ export default function SuperAdminSchoolsPage() {
         loading={schools.isLoading}
         columns={schoolColumns}
         dataSource={schools.data?.items ?? []}
-        scroll={{ x: 1100 }}
+        scroll={{ x: 1200 }}
         locale={{ emptyText: search || status !== 'all' ? 'No schools match these filters.' : 'No schools yet.' }}
         pagination={{
           current: page, pageSize: PAGE_SIZE, total,
@@ -216,6 +252,22 @@ export default function SuperAdminSchoolsPage() {
         <div className="sa-form-hint">Logo URL is optional and must use HTTPS. The administrator receives a secure, one-time invitation to finish setup.</div>
       </Form>
     </Modal>
+    <Modal
+      title="Correct administrator invitation"
+      open={Boolean(inviteEdit)}
+      onCancel={() => { setInviteEdit(null); inviteForm.resetFields() }}
+      onOk={() => inviteForm.submit()}
+      okText="Save and resend"
+      confirmLoading={invitationMutation.isPending}
+      destroyOnHidden
+      className="sa-modal"
+    >
+      <p className="sa-modal-intro">Update the recipient details. A fresh, seven-day invitation link will be sent to the corrected email address.</p>
+      <Form form={inviteForm} layout="vertical" requiredMark="optional" onFinish={values => invitationMutation.mutate({ display_name: values.display_name.trim(), email: values.email.trim().toLowerCase() })}>
+        <Form.Item name="display_name" label="Full name" rules={[{ required: true, min: 2, max: 160 }]}><Input autoComplete="name"/></Form.Item>
+        <Form.Item name="email" label="Email address" rules={[{ required: true, type: 'email' }]}><Input autoComplete="email"/></Form.Item>
+      </Form>
+    </Modal>
     <Drawer
       title={selectedSchool ? <span className="sa-drawer-title"><Avatar shape="square" src={selectedSchool.logo_url}>{selectedSchool.name.slice(0, 1)}</Avatar><span><strong>{selectedSchool.name}</strong><small>School team</small></span></span> : 'School team'}
       open={Boolean(selectedSchool)}
@@ -224,12 +276,15 @@ export default function SuperAdminSchoolsPage() {
       destroyOnHidden
     >
       {team.isError && <Alert type="error" showIcon message="Could not load this school’s team" description={formatApiError(team.error)}/>}
-      {team.isLoading ? <div className="sa-team-loading">Loading administrators and teachers…</div> : team.data && <SchoolTeamPanel team={team.data}/>}
+      {team.isLoading ? <div className="sa-team-loading">Loading administrators and teachers…</div> : team.data && <SchoolTeamPanel team={team.data} canManage={admin?.role === 'superadmin'} onEditInvitation={invitation => {
+        setInviteEdit({ schoolId: team.data!.school_id, ...invitation })
+        inviteForm.setFieldsValue(invitation)
+      }} />}
     </Drawer>
   </div>
 }
 
-function SchoolTeamPanel({ team }: { team: PlatformSchoolTeam }) {
+function SchoolTeamPanel({ team, canManage, onEditInvitation }: { team: PlatformSchoolTeam; canManage: boolean; onEditInvitation: (invitation: PlatformSchoolTeam['pending_admin_invitations'][number]) => void }) {
   const memberColumns: ColumnsType<PlatformSchoolTeam['administrators'][number]> = [
     { title: 'Name', dataIndex: 'display_name', render: (name: string, member) => <div className="sa-member-cell"><Avatar size={30}>{name.trim().slice(0, 1).toUpperCase()}</Avatar><div><strong>{name}</strong><small>{member.email}</small></div></div> },
     { title: 'Status', dataIndex: 'status', width: 100, render: (value: string) => <Tag color={value === 'active' ? 'green' : 'default'}>{value}</Tag> },
@@ -243,7 +298,7 @@ function SchoolTeamPanel({ team }: { team: PlatformSchoolTeam }) {
       {team.teachers.length ? <Table rowKey="membership_id" size="small" columns={memberColumns} dataSource={team.teachers} pagination={{ pageSize: 8, size: 'small' }}/> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No teachers yet"/>}
     </section>
     {team.pending_admin_invitations.length > 0 && <section><header><div><h3>Administrator invitations</h3><p>Invitations waiting to be accepted</p></div><Tag color="blue">{team.pending_admin_invitations.length} pending</Tag></header>
-      <div className="sa-invitation-list">{team.pending_admin_invitations.map(invitation => <div key={invitation.email}><Avatar size={30}>{invitation.display_name.trim().slice(0, 1).toUpperCase()}</Avatar><span><strong>{invitation.display_name}</strong><small>{invitation.email} · expires {dayjs(invitation.expires_at).format('DD MMM')}</small></span></div>)}</div>
+      <div className="sa-invitation-list">{team.pending_admin_invitations.map(invitation => <div key={invitation.email}><Avatar size={30}>{invitation.display_name.trim().slice(0, 1).toUpperCase()}</Avatar><span><strong>{invitation.display_name}</strong><small>{invitation.email} · expires {dayjs(invitation.expires_at).format('DD MMM')}</small></span>{canManage && <Button size="small" onClick={() => onEditInvitation(invitation)}>Edit &amp; resend</Button>}</div>)}</div>
     </section>}
   </div>
 }
