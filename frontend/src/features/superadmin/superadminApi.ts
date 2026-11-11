@@ -28,6 +28,19 @@ export type PlatformSchool = {
   student_limit: number
   admin_name: string | null
   admin_email: string | null
+  logo_url: string | null
+  show_on_landing: boolean
+  admin_count: number
+  teacher_count: number
+  admin_invitation_pending: boolean
+}
+
+export type PlatformSchoolTeam = {
+  school_id: string
+  school_name: string
+  administrators: { membership_id: string; display_name: string; email: string; role: string; status: string; joined_at: string }[]
+  teachers: { membership_id: string; display_name: string; email: string; role: string; status: string; joined_at: string }[]
+  pending_admin_invitations: { display_name: string; email: string; expires_at: string }[]
 }
 
 export type PlatformSchoolsPage = {
@@ -117,4 +130,23 @@ export function setPlatformSchoolStatus(token: string, schoolId: string, status:
   return consoleRequest<{ id: string; status: string }>(`/schools/${encodeURIComponent(schoolId)}/status`, {
     method: 'PATCH', body: JSON.stringify({ status }),
   }, token)
+}
+
+export function createPlatformSchool(token: string, payload: {
+  name: string; slug: string; admin_name: string; admin_email: string; logo_url?: string
+}) {
+  return consoleRequest<{ id: string; name: string; slug: string; admin_email: string; invitation_email_queued: boolean }>(
+    '/schools', { method: 'POST', body: JSON.stringify(payload) }, token,
+  )
+}
+
+export function setPlatformLandingVisibility(token: string, schoolId: string, show_on_landing: boolean) {
+  return consoleRequest<{ id: string; show_on_landing: boolean }>(
+    `/schools/${encodeURIComponent(schoolId)}/landing-visibility`,
+    { method: 'PATCH', body: JSON.stringify({ show_on_landing }) }, token,
+  )
+}
+
+export function fetchPlatformSchoolTeam(token: string, schoolId: string) {
+  return consoleRequest<PlatformSchoolTeam>(`/schools/${encodeURIComponent(schoolId)}/team`, {}, token)
 }

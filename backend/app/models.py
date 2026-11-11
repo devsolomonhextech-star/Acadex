@@ -54,6 +54,7 @@ class School(Base):
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     slug: Mapped[str] = mapped_column(String(80), nullable=False)
     logo_url: Mapped[str | None] = mapped_column(String(2048))
+    show_on_landing: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     contact_phone: Mapped[str | None] = mapped_column(String(32))
     notification_settings: Mapped[dict | None] = mapped_column(JSON)
     dismissal_settings: Mapped[dict | None] = mapped_column(JSON)

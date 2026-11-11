@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { Alert, Button, Input, message, Popconfirm, Segmented, Table, Tag } from 'antd'
+import { Alert, Avatar, Button, Drawer, Empty, Form, Input, message, Modal, Popconfirm, Segmented, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
+import { PlusOutlined, ReloadOutlined, SearchOutlined, TeamOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { formatApiError } from '../../shared/api/errors'
 import { useSuperAdmin } from './SuperAdminAuth'
-import { fetchPlatformSchools, setPlatformSchoolStatus, type PlatformSchool } from './superadminApi'
+import { createPlatformSchool, fetchPlatformSchoolTeam, fetchPlatformSchools, setPlatformSchoolStatus, type PlatformSchool, type PlatformSchoolTeam } from './superadminApi'
 
 const PAGE_SIZE = 20
 
@@ -28,7 +28,7 @@ const columns: ColumnsType<PlatformSchool> = [
   {
     title: 'Administrator', key: 'admin', width: 230,
     render: (_, school) => school.admin_name
-      ? <div className="sa-school-cell"><span>{school.admin_name}</span><small>{school.admin_email}</small></div>
+      ? <div className="sa-school-cell"><span>{school.admin_name}</span><small>{school.admin_email}</small>{school.admin_invitation_pending && <Tag color="blue">Invitation sent</Tag>}</div>
       : <span className="sa-muted">Not assigned</span>,
   },
   { title: 'Students', dataIndex: 'student_count', key: 'students', align: 'right', width: 100 },
@@ -59,6 +59,9 @@ export default function SuperAdminSchoolsPage() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all')
   const [page, setPage] = useState(1)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [selectedSchool, setSelectedSchool] = useState<PlatformSchool | null>(null)
+  const [createForm] = Form.useForm<{ name: string; slug: string; admin_name: string; admin_email: string; logo_url?: string }>()
 
   const schools = useQuery({
     queryKey: ['platform-schools', { search, status, page }],
@@ -79,11 +82,41 @@ export default function SuperAdminSchoolsPage() {
     },
     onError: error => toast.error(formatApiError(error)),
   })
-  const schoolColumns: ColumnsType<PlatformSchool> = admin?.role === 'superadmin' ? [
+  const createMutation = useMutation({
+    mutationFn: (values: { name: string; slug: string; admin_name: string; admin_email: string; logo_url?: string }) =>
+      createPlatformSchool(token!, { ...values, name: values.name.trim(), slug: values.slug.trim().toLowerCase(), admin_name: values.admin_name.trim(), admin_email: values.admin_email.trim().toLowerCase(), logo_url: values.logo_url?.trim() || undefined }),
+    onSuccess: async school => {
+      setCreateOpen(false)
+      createForm.resetFields()
+      setSearch('')
+      setSearchInput('')
+      setStatus('all')
+      setPage(1)
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ['platform-schools'] }),
+        client.invalidateQueries({ queryKey: ['platform-overview'] }),
+      ])
+      toast.success(`School created. An invitation was queued for ${school.admin_email}.`)
+    },
+    onError: error => toast.error(formatApiError(error)),
+  })
+  const team = useQuery({
+    queryKey: ['platform-school-team', selectedSchool?.id],
+    queryFn: () => fetchPlatformSchoolTeam(token!, selectedSchool!.id),
+    enabled: Boolean(token && selectedSchool),
+  })
+  const schoolColumns: ColumnsType<PlatformSchool> = [
     ...columns,
     {
-      title: 'Access', key: 'access', width: 140, fixed: 'right',
-      render: (_, school) => <Popconfirm
+      title: 'Team', key: 'team', width: 140,
+      render: (_, school) => <Button type="link" icon={<TeamOutlined/>} onClick={() => setSelectedSchool(school)}>
+        {school.admin_count} admins · {school.teacher_count} teachers
+      </Button>,
+    },
+    ...(admin?.role === 'superadmin' ? [
+    {
+      title: 'Access', key: 'access', width: 140, fixed: 'right' as const,
+      render: (_: unknown, school: PlatformSchool) => <Popconfirm
         title={`${school.status === 'active' ? 'Deactivate' : 'Activate'} ${school.name}?`}
         description={school.status === 'active' ? 'School members will no longer be able to sign in.' : 'School members will be able to sign in again.'}
         okText={school.status === 'active' ? 'Deactivate' : 'Activate'}
@@ -93,7 +126,8 @@ export default function SuperAdminSchoolsPage() {
         {school.status === 'active' ? 'Deactivate' : 'Activate'}
       </Button></Popconfirm>,
     },
-  ] : columns
+    ] : []),
+  ]
 
   const total = schools.data?.total ?? 0
   const first = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
@@ -106,6 +140,7 @@ export default function SuperAdminSchoolsPage() {
         <h2>Schools on Acadex</h2>
         <p>Search a workspace, check its administrator, and see how it is licensed.</p>
       </div>
+      {admin?.role === 'superadmin' && <Button type="primary" icon={<PlusOutlined/>} onClick={() => setCreateOpen(true)}>Create school</Button>}
     </div>
 
     <section className="sa-card sa-schools-card">
@@ -156,5 +191,59 @@ export default function SuperAdminSchoolsPage() {
         }}
       />
     </section>
+    <Modal
+      title="Create a school workspace"
+      open={createOpen}
+      onCancel={() => { setCreateOpen(false); createForm.resetFields() }}
+      onOk={() => createForm.submit()}
+      okText="Create school"
+      confirmLoading={createMutation.isPending}
+      destroyOnHidden
+      className="sa-modal"
+    >
+      <p className="sa-modal-intro">Add the school and invite its first administrator to set a password.</p>
+      <Form form={createForm} layout="vertical" requiredMark="optional" onFinish={values => createMutation.mutate(values)}>
+        <Form.Item name="name" label="School name" rules={[{ required: true, min: 2, max: 160 }]}><Input placeholder="e.g. Aburi Academy"/></Form.Item>
+        <Form.Item name="slug" label="School address" rules={[{ required: true, min: 3, max: 80 }, { pattern: /^[a-z0-9]+(?:-[a-z0-9]+)*$/, message: 'Use lowercase letters, numbers, and single hyphens.' }]}><Input addonBefore="acadex.app/" placeholder="aburi-academy"/></Form.Item>
+        <div className="sa-modal-subhead">First administrator</div>
+        <Form.Item name="admin_name" label="Full name" rules={[{ required: true, min: 2, max: 160 }]}><Input placeholder="Administrator name"/></Form.Item>
+        <Form.Item name="admin_email" label="Email address" rules={[{ required: true, type: 'email' }]}><Input placeholder="admin@school.edu.gh"/></Form.Item>
+        <Form.Item name="logo_url" label="School logo URL" rules={[{ validator: (_, value) => {
+          if (!value) return Promise.resolve()
+          try { return new URL(value).protocol === 'https:' ? Promise.resolve() : Promise.reject(new Error('Use a secure https:// link.')) }
+          catch { return Promise.reject(new Error('Enter a valid logo URL.')) }
+        } }]}><Input placeholder="https://example.com/logo.png"/></Form.Item>
+        <div className="sa-form-hint">Logo URL is optional and must use HTTPS. The administrator receives a secure, one-time invitation to finish setup.</div>
+      </Form>
+    </Modal>
+    <Drawer
+      title={selectedSchool ? <span className="sa-drawer-title"><Avatar shape="square" src={selectedSchool.logo_url}>{selectedSchool.name.slice(0, 1)}</Avatar><span><strong>{selectedSchool.name}</strong><small>School team</small></span></span> : 'School team'}
+      open={Boolean(selectedSchool)}
+      onClose={() => setSelectedSchool(null)}
+      width={620}
+      destroyOnHidden
+    >
+      {team.isError && <Alert type="error" showIcon message="Could not load this school’s team" description={formatApiError(team.error)}/>}
+      {team.isLoading ? <div className="sa-team-loading">Loading administrators and teachers…</div> : team.data && <SchoolTeamPanel team={team.data}/>}
+    </Drawer>
+  </div>
+}
+
+function SchoolTeamPanel({ team }: { team: PlatformSchoolTeam }) {
+  const memberColumns: ColumnsType<PlatformSchoolTeam['administrators'][number]> = [
+    { title: 'Name', dataIndex: 'display_name', render: (name: string, member) => <div className="sa-member-cell"><Avatar size={30}>{name.trim().slice(0, 1).toUpperCase()}</Avatar><div><strong>{name}</strong><small>{member.email}</small></div></div> },
+    { title: 'Status', dataIndex: 'status', width: 100, render: (value: string) => <Tag color={value === 'active' ? 'green' : 'default'}>{value}</Tag> },
+    { title: 'Joined', dataIndex: 'joined_at', width: 110, render: (value: string) => <span className="sa-muted">{dayjs(value).format('DD MMM YYYY')}</span> },
+  ]
+  return <div className="sa-team-panel">
+    <section><header><div><h3>Administrators</h3><p>People with school-wide administration access</p></div><Tag>{team.administrators.length}</Tag></header>
+      {team.administrators.length ? <Table rowKey="membership_id" size="small" columns={memberColumns} dataSource={team.administrators} pagination={false}/> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No school administrators yet"/>}
+    </section>
+    <section><header><div><h3>Teachers</h3><p>Teachers attached to this school workspace</p></div><Tag>{team.teachers.length}</Tag></header>
+      {team.teachers.length ? <Table rowKey="membership_id" size="small" columns={memberColumns} dataSource={team.teachers} pagination={{ pageSize: 8, size: 'small' }}/> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No teachers yet"/>}
+    </section>
+    {team.pending_admin_invitations.length > 0 && <section><header><div><h3>Administrator invitations</h3><p>Invitations waiting to be accepted</p></div><Tag color="blue">{team.pending_admin_invitations.length} pending</Tag></header>
+      <div className="sa-invitation-list">{team.pending_admin_invitations.map(invitation => <div key={invitation.email}><Avatar size={30}>{invitation.display_name.trim().slice(0, 1).toUpperCase()}</Avatar><span><strong>{invitation.display_name}</strong><small>{invitation.email} · expires {dayjs(invitation.expires_at).format('DD MMM')}</small></span></div>)}</div>
+    </section>}
   </div>
 }

@@ -3,7 +3,7 @@ import { Link, Navigate, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Avatar, Dropdown, Spin } from 'antd'
 import type { MenuProps } from 'antd'
 import {
-  BankOutlined, DashboardOutlined, LogoutOutlined, MenuOutlined,
+  BankOutlined, DashboardOutlined, GlobalOutlined, LogoutOutlined, MenuOutlined,
   SafetyCertificateOutlined,
 } from '@ant-design/icons'
 import { useSuperAdmin } from './SuperAdminAuth'
@@ -11,11 +11,13 @@ import { useSuperAdmin } from './SuperAdminAuth'
 const TITLES: Record<string, { title: string; subtitle: string }> = {
   '/superadmin': { title: 'Platform overview', subtitle: 'The schools, people and subscriptions running on Acadex.' },
   '/superadmin/schools': { title: 'Schools', subtitle: 'Every workspace on the platform, with its administrator and plan.' },
+  '/superadmin/landing-page': { title: 'Landing page', subtitle: 'Choose which active school names and logos appear publicly.' },
 }
 
 const NAV = [
   { to: '/superadmin', label: 'Overview', icon: <DashboardOutlined/>, end: true },
   { to: '/superadmin/schools', label: 'Schools', icon: <BankOutlined/>, end: false },
+  { to: '/superadmin/landing-page', label: 'Landing page', icon: <GlobalOutlined/>, end: false },
 ]
 
 function initials(name: string) {

@@ -4,6 +4,8 @@ This is a separate identity plane from the school workspace. A platform admin
 logs in with just an email and password, gets a token that carries no school
 scope, and can only reach the endpoints below.
 """
+import hashlib
+import re
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -11,19 +13,24 @@ from typing import Annotated
 from uuid import UUID
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, HttpUrl, TypeAdapter, ValidationError, field_validator
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import LoginResponse
 from app.db import get_session
+from app.domain.subscriptions import trial_end_for
+from app.email import send_email
 from app.models import (
+    AuditEvent,
     MembershipRole,
     PlatformAdmin,
     PlatformSession,
     School,
+    SchoolInvitation,
     SchoolMembership,
     SchoolSubscription,
     Student,
@@ -91,6 +98,11 @@ class SchoolSummary(BaseModel):
     student_limit: int = 0
     admin_name: str | None = None
     admin_email: str | None = None
+    logo_url: str | None = None
+    show_on_landing: bool = False
+    admin_count: int = 0
+    teacher_count: int = 0
+    admin_invitation_pending: bool = False
 
 
 class SchoolsPage(BaseModel):
@@ -102,6 +114,75 @@ class SchoolsPage(BaseModel):
 
 class SchoolStatusUpdate(BaseModel):
     status: str = Field(pattern="^(active|inactive)$")
+
+
+class LandingVisibilityUpdate(BaseModel):
+    show_on_landing: bool
+
+
+class PlatformSchoolCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    slug: str = Field(min_length=3, max_length=80)
+    admin_name: str = Field(min_length=2, max_length=160)
+    admin_email: EmailStr
+    logo_url: str | None = Field(default=None, max_length=2048)
+
+    @field_validator("slug")
+    @classmethod
+    def slug_is_safe(cls, value: str) -> str:
+        value = value.strip().lower()
+        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", value):
+            raise ValueError("Use lowercase letters, numbers, and single hyphens")
+        return value
+
+    @field_validator("admin_email")
+    @classmethod
+    def email_is_normalized(cls, value: EmailStr) -> str:
+        return str(value).strip().casefold()
+
+    @field_validator("logo_url")
+    @classmethod
+    def logo_url_is_safe(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        try:
+            parsed = TypeAdapter(HttpUrl).validate_python(value.strip())
+        except ValidationError as error:
+            raise ValueError("Enter a valid https:// logo link") from error
+        if parsed.scheme != "https":
+            raise ValueError("Enter a valid https:// logo link")
+        return str(parsed)
+
+
+class PlatformSchoolMember(BaseModel):
+    membership_id: UUID
+    display_name: str
+    email: str
+    role: str
+    status: str
+    joined_at: datetime
+
+
+class PlatformAdminInvitation(BaseModel):
+    display_name: str
+    email: str
+    expires_at: datetime
+
+
+class PlatformSchoolTeam(BaseModel):
+    school_id: UUID
+    school_name: str
+    administrators: list[PlatformSchoolMember]
+    teachers: list[PlatformSchoolMember]
+    pending_admin_invitations: list[PlatformAdminInvitation] = Field(default_factory=list)
+
+
+class PlatformSchoolCreated(BaseModel):
+    id: UUID
+    name: str
+    slug: str
+    admin_email: str
+    invitation_email_queued: bool
 
 
 class PublicSchool(BaseModel):
@@ -398,6 +479,8 @@ async def _summaries(session: AsyncSession, schools: list[School]) -> list[Schoo
         )).all()
     }
     admins: dict[UUID, tuple[str, str]] = {}
+    pending_admins: dict[UUID, tuple[str, str]] = {}
+    member_counts: dict[UUID, dict[str, int]] = {}
     for membership, user in (await session.execute(
         select(SchoolMembership, User)
         .join(User, SchoolMembership.user_id == User.id)
@@ -409,10 +492,29 @@ async def _summaries(session: AsyncSession, schools: list[School]) -> list[Schoo
         .order_by(SchoolMembership.created_at)
     )).all():
         admins.setdefault(membership.school_id, (user.display_name, user.email))
+    for invitation in (await session.scalars(
+        select(SchoolInvitation).where(
+            SchoolInvitation.school_id.in_(ids),
+            SchoolInvitation.role == MembershipRole.SCHOOL_ADMIN,
+            SchoolInvitation.status == "pending",
+            SchoolInvitation.expires_at > datetime.now(UTC),
+        ).order_by(SchoolInvitation.created_at)
+    )).all():
+        pending_admins.setdefault(invitation.school_id, (invitation.display_name, invitation.email))
+    for school_id, role, count in (await session.execute(
+        select(SchoolMembership.school_id, SchoolMembership.role, func.count(SchoolMembership.id))
+        .where(
+            SchoolMembership.school_id.in_(ids),
+            SchoolMembership.status == "active",
+            SchoolMembership.role.in_([MembershipRole.SCHOOL_ADMIN, MembershipRole.TEACHER]),
+        )
+        .group_by(SchoolMembership.school_id, SchoolMembership.role)
+    )).all():
+        member_counts.setdefault(school_id, {})[role.value] = int(count)
     summaries = []
     for school in schools:
         subscription = subscriptions.get(school.id)
-        admin_name, admin_email = admins.get(school.id, (None, None))
+        admin_name, admin_email = admins.get(school.id, pending_admins.get(school.id, (None, None)))
         summaries.append(SchoolSummary(
             id=school.id, name=school.name, slug=school.slug, status=school.status,
             created_at=school.created_at, trial_ends_at=school.trial_ends_at,
@@ -420,6 +522,10 @@ async def _summaries(session: AsyncSession, schools: list[School]) -> list[Schoo
             subscription_status=subscription.status if subscription else "inactive",
             student_limit=subscription.student_limit if subscription else 0,
             admin_name=admin_name, admin_email=admin_email,
+            logo_url=school.logo_url, show_on_landing=school.show_on_landing,
+            admin_count=member_counts.get(school.id, {}).get(MembershipRole.SCHOOL_ADMIN.value, 0),
+            teacher_count=member_counts.get(school.id, {}).get(MembershipRole.TEACHER.value, 0),
+            admin_invitation_pending=school.id in pending_admins and school.id not in admins,
         ))
     return summaries
 
@@ -466,10 +572,136 @@ async def update_school_status(
     return {"id": str(school.id), "status": school.status}
 
 
+@router.post("/schools", response_model=PlatformSchoolCreated, status_code=status.HTTP_201_CREATED)
+async def create_platform_school(
+    payload: PlatformSchoolCreate,
+    background: BackgroundTasks,
+    context: Annotated[PlatformContext, Depends(current_platform_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> PlatformSchoolCreated:
+    if context.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Only superadmins can create schools")
+    if await session.scalar(select(School.id).where(School.slug == payload.slug)):
+        raise HTTPException(status_code=409, detail="That school address is already registered")
+
+    now = datetime.now(UTC)
+    school = School(
+        name=payload.name.strip(), slug=payload.slug, logo_url=payload.logo_url,
+        trial_ends_at=trial_end_for(now),
+    )
+    session.add(school)
+    await session.flush()
+    session.add(SchoolSubscription(school_id=school.id, student_limit=0, status="inactive"))
+
+    raw_token = secrets.token_urlsafe(36)
+    invitation = SchoolInvitation(
+        school_id=school.id,
+        email=str(payload.admin_email),
+        display_name=payload.admin_name.strip(),
+        role=MembershipRole.SCHOOL_ADMIN,
+        token_hash=hashlib.sha256(raw_token.encode()).hexdigest(),
+        expires_at=now + timedelta(days=7),
+        created_by_user_id=context.user_id,
+    )
+    session.add(invitation)
+    session.add(AuditEvent(
+        school_id=school.id,
+        actor_user_id=context.user_id,
+        action="platform.school_created",
+        resource_type="school",
+        resource_id=school.id,
+        details={"admin_email": str(payload.admin_email), "invitation_email_queued": True},
+    ))
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="That school address is already registered") from None
+
+    link = f"{get_settings().frontend_url.rstrip('/')}/accept-invitation?token={raw_token}"
+    background.add_task(
+        send_email,
+        str(payload.admin_email),
+        f"You’re invited to administer {school.name} on Acadex",
+        f"Hello {payload.admin_name.strip()},\n\nYour school workspace has been created. Accept this invitation and set your password here:\n{link}\n\nThis invitation expires in seven days.",
+    )
+    return PlatformSchoolCreated(
+        id=school.id,
+        name=school.name,
+        slug=school.slug,
+        admin_email=str(payload.admin_email),
+        invitation_email_queued=True,
+    )
+
+
+@router.patch("/schools/{school_id}/landing-visibility")
+async def set_school_landing_visibility(
+    school_id: UUID,
+    payload: LandingVisibilityUpdate,
+    context: Annotated[PlatformContext, Depends(current_platform_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, bool | str]:
+    if context.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Only superadmins can manage landing page listings")
+    school = await session.get(School, school_id)
+    if school is None:
+        raise HTTPException(status_code=404, detail="School not found")
+    school.show_on_landing = payload.show_on_landing
+    await session.commit()
+    return {"id": str(school.id), "show_on_landing": school.show_on_landing}
+
+
+@router.get("/schools/{school_id}/team", response_model=PlatformSchoolTeam)
+async def get_school_team(
+    school_id: UUID,
+    _: Annotated[PlatformContext, Depends(current_platform_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> PlatformSchoolTeam:
+    school = await session.get(School, school_id)
+    if school is None:
+        raise HTTPException(status_code=404, detail="School not found")
+    records = (await session.execute(
+        select(SchoolMembership, User)
+        .join(User, SchoolMembership.user_id == User.id)
+        .where(
+            SchoolMembership.school_id == school_id,
+            SchoolMembership.role.in_([MembershipRole.SCHOOL_ADMIN, MembershipRole.TEACHER]),
+        )
+        .order_by(SchoolMembership.role, User.display_name)
+    )).all()
+    pending_admins = list(await session.scalars(select(SchoolInvitation).where(
+        SchoolInvitation.school_id == school_id,
+        SchoolInvitation.role == MembershipRole.SCHOOL_ADMIN,
+        SchoolInvitation.status == "pending",
+        SchoolInvitation.expires_at > datetime.now(UTC),
+    ).order_by(SchoolInvitation.created_at)))
+    members = [PlatformSchoolMember(
+        membership_id=membership.id,
+        display_name=user.display_name,
+        email=user.email,
+        role=membership.role.value,
+        status=membership.status,
+        joined_at=membership.created_at,
+    ) for membership, user in records]
+    return PlatformSchoolTeam(
+        school_id=school.id,
+        school_name=school.name,
+        administrators=[member for member in members if member.role == MembershipRole.SCHOOL_ADMIN.value],
+        teachers=[member for member in members if member.role == MembershipRole.TEACHER.value],
+        pending_admin_invitations=[PlatformAdminInvitation(
+            display_name=invitation.display_name,
+            email=invitation.email,
+            expires_at=invitation.expires_at,
+        ) for invitation in pending_admins],
+    )
+
+
 @router.get("/public/schools", response_model=list[PublicSchool])
 async def public_schools(session: Annotated[AsyncSession, Depends(get_session)]) -> list[PublicSchool]:
     schools = (await session.execute(
-        select(School).where(School.status == "active").order_by(School.created_at.desc())
+        select(School).where(
+            School.status == "active", School.show_on_landing.is_(True),
+        ).order_by(School.created_at.desc())
     )).scalars().all()
     return [PublicSchool(name=school.name, logo_url=school.logo_url) for school in schools]
 

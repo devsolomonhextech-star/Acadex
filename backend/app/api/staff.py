@@ -177,6 +177,7 @@ async def accept_invitation(payload: InvitationAccept, session: Annotated[AsyncS
     invitation.status = "accepted"
     invitation.accepted_at = now
     joined_action = {
+        MembershipRole.SCHOOL_ADMIN: "school.admin_joined",
         MembershipRole.STAFF: "staff.support_staff_joined",
         MembershipRole.PARENT: "parent.account_joined",
     }.get(invitation.role, "staff.teacher_joined")
@@ -198,7 +199,11 @@ async def accept_invitation(payload: InvitationAccept, session: Annotated[AsyncS
     except IntegrityError:
         await session.rollback()
         raise HTTPException(status_code=409, detail="This invitation has already been used") from None
-    role_label = {MembershipRole.STAFF: "support staff", MembershipRole.PARENT: "parent"}.get(invitation.role, "teacher")
+    role_label = {
+        MembershipRole.SCHOOL_ADMIN: "school administrator",
+        MembershipRole.STAFF: "support staff",
+        MembershipRole.PARENT: "parent",
+    }.get(invitation.role, "teacher")
     return InvitationAccepted(email=user.email, school_name=school.name, school_slug=school.slug,
                               role=invitation.role.value,
                               message=f"Your {role_label} account is ready. Sign in with your email and password.")

@@ -41,6 +41,7 @@ const SuperAdminLoginPage = lazy(() => import('../features/superadmin/SuperAdmin
 const SuperAdminLayout = lazy(() => import('../features/superadmin/SuperAdminLayout'))
 const SuperAdminOverviewPage = lazy(() => import('../features/superadmin/SuperAdminOverviewPage'))
 const SuperAdminSchoolsPage = lazy(() => import('../features/superadmin/SuperAdminSchoolsPage'))
+const SuperAdminLandingPage = lazy(() => import('../features/superadmin/SuperAdminLandingPage'))
 
 function LoadingPage() {
   return <main className="auth-loading"><Spin size="large"/><span>Checking your school workspace…</span></main>
@@ -84,6 +85,7 @@ function AppRoutes() {
     <Route path="/superadmin" element={<Suspense fallback={<LoadingPage />}><SuperAdminLayout /></Suspense>}>
       <Route index element={<Suspense fallback={<LoadingPage />}><SuperAdminOverviewPage /></Suspense>} />
       <Route path="schools" element={<Suspense fallback={<LoadingPage />}><SuperAdminSchoolsPage /></Suspense>} />
+      <Route path="landing-page" element={<Suspense fallback={<LoadingPage />}><SuperAdminLandingPage /></Suspense>} />
     </Route>
     <Route element={<AuthenticatedLayout />}>
       <Route path="/students" element={user && ['school_admin', 'principal', 'registrar'].includes(user.role) ? <Suspense fallback={<LoadingPage />}><StudentsPage /></Suspense> : <Navigate to="/" replace />} />
