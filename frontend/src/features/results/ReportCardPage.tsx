@@ -42,7 +42,7 @@ export default function ReportCardPage() {
       <Button type="primary" icon={<PrinterOutlined/>} disabled={!card} onClick={() => window.print()}>
         Print report card
       </Button>
-      <Button icon={<DownloadOutlined/>} disabled={!card} onClick={() => card && downloadReportCardPdf(card)}>
+      <Button icon={<DownloadOutlined/>} disabled={!card} onClick={() => card && void downloadReportCardPdf(card, user?.school_logo_url)}>
         Download PDF
       </Button>
     </div>
@@ -53,7 +53,7 @@ export default function ReportCardPage() {
 
     {card && <article className="rc-sheet">
       <header className="rc-header">
-        <div className="rc-school">{user?.school_logo_url && <img src={user.school_logo_url} alt="" loading="eager" decoding="async"/>}{card.school_name}</div>
+        <div className="rc-school"><span className="rc-school-mark">{card.school_name.trim().slice(0, 1).toUpperCase()}</span>{user?.school_logo_url && <img src={user.school_logo_url} alt="" loading="eager" decoding="async" onError={event => { event.currentTarget.style.display = 'none' }}/>}<strong>{card.school_name}</strong></div>
         <div className="rc-title">
           <strong>Term Report Card</strong>
           <span>{card.academic_year_name} · {card.term_name}</span>

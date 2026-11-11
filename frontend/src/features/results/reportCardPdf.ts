@@ -6,24 +6,68 @@ function money(value: string | number) {
   return Number(value).toLocaleString('en-GH', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
 
-export function downloadReportCardPdf(card: ReportCard) {
+async function loadLogoData(logoUrl?: string | null): Promise<string | null> {
+  if (!logoUrl) return null
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), 7000)
+  let objectUrl: string | undefined
+  try {
+    const response = await fetch(logoUrl, { mode: 'cors', credentials: 'omit', signal: controller.signal })
+    if (!response.ok || !response.headers.get('Content-Type')?.toLowerCase().startsWith('image/')) return null
+    const blob = await response.blob()
+    if (blob.size > 5 * 1024 * 1024) return null
+    objectUrl = URL.createObjectURL(blob)
+    const image = new Image()
+    image.src = objectUrl
+    await image.decode()
+    if (!image.naturalWidth || !image.naturalHeight || image.naturalWidth * image.naturalHeight > 16_000_000) return null
+    const scale = Math.min(1, 1000 / Math.max(image.naturalWidth, image.naturalHeight))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
+    const context = canvas.getContext('2d')
+    if (!context) return null
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL('image/png')
+  } catch {
+    // The PDF still downloads with the school's initial when the image host blocks CORS.
+    return null
+  } finally {
+    window.clearTimeout(timeout)
+    if (objectUrl) URL.revokeObjectURL(objectUrl)
+  }
+}
+
+export async function downloadReportCardPdf(card: ReportCard, logoUrl?: string | null) {
+  const logoData = await loadLogoData(logoUrl)
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const width = pdf.internal.pageSize.getWidth()
   const margin = 16
   pdf.setFillColor(29, 63, 144)
-  pdf.rect(0, 0, width, 48, 'F')
+  pdf.rect(0, 0, width, 49, 'F')
   pdf.setFillColor(53, 121, 255)
-  pdf.rect(0, 45, width, 3, 'F')
+  pdf.rect(0, 46, width, 3, 'F')
+  pdf.setTextColor(255, 255, 255)
+  pdf.setFillColor(255, 255, 255)
+  pdf.roundedRect(margin, 8, 23, 23, 3, 3, 'F')
+  if (logoData) {
+    pdf.addImage(logoData, 'PNG', margin + 2, 10, 19, 19, undefined, 'FAST')
+  } else {
+    pdf.setTextColor(43, 69, 143)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(15)
+    pdf.text(card.school_name.trim().slice(0, 1).toUpperCase() || 'S', margin + 11.5, 23.5, { align: 'center' })
+  }
   pdf.setTextColor(255, 255, 255)
   pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(20)
-  pdf.text(card.school_name || 'School report', margin, 19, { maxWidth: width - margin * 2 })
+  pdf.setFontSize(17)
+  pdf.text(card.school_name || 'School report', margin + 31, 17, { maxWidth: width - margin * 2 - 31 })
   pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(10)
-  pdf.text('ACADEMIC REPORT CARD', margin, 29)
+  pdf.setFontSize(8)
+  pdf.text('OFFICIAL ACADEMIC REPORT CARD', margin + 31, 24)
   pdf.setFontSize(9)
-  pdf.text(`${card.academic_year_name}  ·  ${card.term_name}`, margin, 36)
-  pdf.text(`${new Date(card.term_starts_on).toLocaleDateString('en-GB')} – ${new Date(card.term_ends_on).toLocaleDateString('en-GB')}`, width - margin, 36, { align: 'right' })
+  pdf.text(`${card.academic_year_name}  ·  ${card.term_name}`, margin, 40)
+  pdf.text(`${new Date(card.term_starts_on).toLocaleDateString('en-GB')} – ${new Date(card.term_ends_on).toLocaleDateString('en-GB')}`, width - margin, 40, { align: 'right' })
 
   let y = 60
   const studentWidth = (width - margin * 2 - 8) / 2
