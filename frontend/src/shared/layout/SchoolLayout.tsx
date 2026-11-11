@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../features/auth/authHooks'
 import { apiRequest } from '../api/client'
-import { API_BASE_URL } from '../api/config'
+import { API_ORIGIN } from '../api/config'
 import { useLessonAlerts } from '../../features/academic/useLessonAlerts'
 import {
   AppstoreOutlined, ArrowRightOutlined, BarChartOutlined, BellOutlined, BookOutlined, CalendarOutlined,
@@ -105,7 +105,7 @@ export function SchoolLayout({ children, user, onLogout }: { children: ReactNode
       try {
         const { ticket } = await apiRequest<{ ticket: string }>('/realtime/ticket', { method: 'POST' }, accessToken)
         if (!active) return
-        const base = API_BASE_URL || window.location.origin
+        const base = API_ORIGIN || window.location.origin
         const wsBase = new URL(base, window.location.origin)
         wsBase.protocol = wsBase.protocol === 'https:' ? 'wss:' : 'ws:'
         wsBase.pathname = `${wsBase.pathname.replace(/\/$/, '')}/api/v1/realtime/ws`

@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://acadex.174.138.191.32.nip.io/api/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/"
     }
