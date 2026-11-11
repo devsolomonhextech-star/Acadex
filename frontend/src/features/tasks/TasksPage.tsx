@@ -304,6 +304,7 @@ function TaskCard({ task, canManage, userId, onStatus, onDelete, isUpdating }: T
           />
         )}
 
+
         {/* Delete */}
         {canManage && (
           <button
